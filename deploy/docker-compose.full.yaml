@@ -1,0 +1,31 @@
+# AIR Blackbox — Full Stack Deployment
+#
+# Extends the root docker-compose.yaml with additional observability services.
+# Use this for production-like evaluations.
+#
+# Usage:
+#   cd deploy/
+#   make up        # Start everything
+#   make down      # Stop everything
+#   make status    # Check service health
+#
+# Or directly:
+#   docker compose -f ../docker-compose.yaml -f docker-compose.full.yaml up
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    depends_on:
+      - collector
+
+volumes:
+  prometheus-data:
