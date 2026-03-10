@@ -1,296 +1,285 @@
-# AIR Blackbox Gateway
+# AIR Blackbox
 
-> **Project Status: Alpha (launched February 2026)**
-> AIR Blackbox is an early-stage project actively seeking feedback and contributors.
-> The architecture is stable, the APIs may evolve. If you're deploying AI agents
-> and care about audit trails, we'd love your input — [open an issue](https://github.com/airblackbox/gateway/issues) or start a [discussion](https://github.com/airblackbox/gateway/discussions).
+**AI governance control plane — compliance, inventory, incident response, and audit for AI agents.**
 
-
-> **Project Status: Alpha (launched February 2026)**
-> AIR Blackbox is an early-stage project actively seeking feedback and contributors.
-> The architecture is stable, the APIs may evolve. If you're deploying AI agents
-> and care about audit trails, we'd love your input — [open an issue](https://github.com/airblackbox/gateway/issues) or start a [discussion](https://github.com/airblackbox/gateway/discussions).
-
-
+[![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
 [![CI](https://github.com/airblackbox/gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/airblackbox/gateway/actions/workflows/ci.yml)
-[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blueviolet?logo=opentelemetry)](https://opentelemetry.io)
-[![Python SDK](https://img.shields.io/badge/SDK-Python-3776AB?logo=python&logoColor=white)](https://github.com/airblackbox/python-sdk)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://pypi.org/project/air-blackbox/)
+[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 
-> **[View Interactive Demo](https://htmlpreview.github.io/?https://github.com/airblackbox/gateway/blob/main/demo.html)** — Walk through every feature with animated examples.
-
-**Your AI agent just sent an email, moved money, or changed production data. Someone asks: *"Show me exactly what it saw and why it made that decision."***
-
-**Can you answer that today?**
-
-AIR Blackbox Gateway is a flight recorder for AI systems. Drop it in front of any OpenAI-compatible provider and every LLM call produces a tamper-evident, replayable audit record — without exposing sensitive content to your observability stack.
-
-```python
-# Add one line. Every AI decision is now recorded.
-from openai import OpenAI
-import air
-
-client = air.air_wrap(OpenAI())
+```
+pip install air-blackbox
 ```
 
-15 repos. 200+ tests. CI on every push. Apache-2.0.
+**Four commands. One product. 90% automated compliance.**
 
-> **See it live:** [Interactive Demo](https://airblackbox.github.io/gateway/air-demo.html) — watch an agent run, inspect the audit chain, tamper with a record, and see the chain break.
->
-> Also: [Test Suite](https://airblackbox.github.io/gateway/test-suite-demo.html) — 30 tests across 8 LLM providers.
+```bash
+air-blackbox comply      # EU AI Act compliance from live traffic
+air-blackbox discover    # Shadow AI inventory + AI-BOM generation
+air-blackbox replay      # Incident reconstruction from audit chain
+air-blackbox export      # Signed evidence bundle for auditors
+```
+
+> **August 2, 2026** — EU AI Act high-risk enforcement deadline. Penalties up to €35M or 7% of global turnover.
 
 ---
 
-## Get Started in 5 Minutes
+## 30-Second Demo
 
-**1. Start the stack**
-
-```bash
-git clone https://github.com/airblackbox/gateway.git
-cd gateway
-cp .env.example .env   # add your OPENAI_API_KEY
-docker compose up --build
-```
-
-**2. Install the SDK**
+No Docker. No config. No API keys.
 
 ```bash
-pip install air-blackbox-sdk
+pip install air-blackbox
+air-blackbox demo
 ```
 
-**3. Record everything**
+You'll see:
+- 10 sample AI agent records generated (4 models, 3 providers)
+- EU AI Act compliance check across Articles 9-15
+- RISK_ASSESSMENT.md and DATA_GOVERNANCE.md templates created
 
-```python
-from openai import OpenAI
-import air
-
-client = air.air_wrap(OpenAI())
-
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": "What is a flight recorder?"}],
-)
-# x-run-id header = your audit trail
-# Prompts vaulted in your MinIO, not a third-party cloud
-# HMAC-SHA256 chain = tamper-proof record
-```
-
-**Works with your framework:**
-
-```python
-# LangChain
-from air.integrations.langchain import air_langchain_llm
-llm = air_langchain_llm("gpt-4o-mini")
-
-# CrewAI
-from air.integrations.crewai import air_crewai_llm
-llm = air_crewai_llm("gpt-4o-mini")
-```
-
-**4. View traces** → [localhost:16686](http://localhost:16686) (Jaeger)
-
-**5. Replay any run**
+Then explore:
 
 ```bash
-go run ./cmd/replayctl replay runs/<run_id>.air.json
+air-blackbox comply -v                          # Full compliance with fix hints
+air-blackbox discover                           # Models, providers, tools detected
+air-blackbox discover --format=cyclonedx -o aibom.json  # CycloneDX AI-BOM
+air-blackbox replay                             # Audit trail timeline
+air-blackbox replay --verify                    # HMAC chain integrity check
+air-blackbox export                             # Signed evidence bundle
 ```
 
 ---
 
-## Why This Exists
+## What It Does
 
-Langfuse, Helicone, and Datadog answer *"how is the system performing?"*
-
-AIR answers **"what exactly happened, and can we prove it?"**
-
-| | Observability Tools | AIR Blackbox Gateway |
-|---|---|---|
-| Dashboards & latency | ✅ | ❌ (use Jaeger/Grafana) |
-| Where data lives | Their cloud | **Your** vault (S3/MinIO) |
-| PII in traces | ❌ Raw content exposed | ✅ Vault references only |
-| Tamper-evident records | ❌ | ✅ SHA-256 + HMAC chain |
-| Deterministic replay | ❌ | ✅ `replayctl` |
-| Compliance reporting | ❌ | ✅ 22 controls (SOC 2 + ISO 27001) |
-| Signed evidence export | ❌ | ✅ HMAC-attested packages |
-| Agent guardrails | ❌ | ✅ Cost, loop, tool, PII |
-
-AIR Blackbox provides tamper-evident audit chains for AI systems — an approach inspired by certificate transparency logs, applied to agent infrastructure. Not Langfuse (6k+ stars), not Helicone, not LangSmith. They're observability. This is accountability.
-
----
-
-## Who This Is For
-
-**Platform engineers** deploying agents that call LLMs. You need every request recorded without leaking PII into your observability stack. Drop this in front of your provider — zero code changes.
-
-**Compliance teams** whose regulators are asking *"show me what the AI did."* AIR records give you structured reconstruction with SHA-256 checksums and signed evidence packages.
-
-**Startup CTOs** who know *"we can't prove what our AI did"* will block enterprise deals, SOC 2, or insurance. Install this now so you're not scrambling later.
-
-**Agent builders** moving beyond chatbots toward systems that operate across hours, call tools, and interact with production data. You need decision provenance, replay, and the ability to prove your agent did the right thing — or a clear record of where it didn't.
+| Command | What You Get |
+|---------|-------------|
+| `comply` | 20 checks across EU AI Act Articles 9-15. 90% auto-detected from gateway traffic. Per-article status with fix hints. |
+| `discover` | AI Bill of Materials (CycloneDX 1.6) from observed traffic. Shadow AI detection against approved model registry. Tool and provider inventory. |
+| `replay` | Full incident reconstruction from tamper-proof audit chain. HMAC-SHA256 verification. Filter by time, model, status. Detail view per run. |
+| `export` | Signed evidence bundle: compliance scan + AI-BOM + audit trail + HMAC attestation. One JSON file for your auditor or insurer. |
 
 ---
 
 ## How It Works
 
-<p align="center">
-  <img src="docs/architecture.svg" alt="AIR Blackbox Gateway Architecture" width="900"/>
-</p>
-
-1. Your agent sends an OpenAI-compatible request to the gateway (just change the base URL)
-2. The gateway assigns a `run_id`, forwards the request, captures the response
-3. Prompts and completions are vaulted in MinIO (S3-compatible) — traces contain **references**, not content
-4. An `.air.json` record captures the full run: vault refs, model, tokens, timing, tool calls
-5. OTel spans flow through the collector pipeline (normalize → vault → redact → export)
-6. Later: `replayctl` replays the run and reports behavioral drift
-
----
-
-## The Trust Layer
-
-This is the part nobody else has.
-
-**Audit Chain** — Every proxied request is appended to an HMAC-SHA256 chain. Each entry links to the previous entry's hash. Modify any record and the chain breaks from that point forward. Same integrity model as certificate transparency logs, without the blockchain overhead.
-
-**Compliance Reporting** — The gateway evaluates your live configuration against 22 controls across SOC 2 (12 controls) and ISO 27001 (10 controls). Controls pass or fail based on what's actually enabled — vault, guardrails, analytics, audit chain. No self-assessment forms. The gateway evaluates itself.
-
-**Evidence Export** — `GET /v1/audit/export` generates a signed evidence package: full audit chain, compliance report, time range, HMAC attestation. Hand it to your auditor as a single JSON document. The attestation can be independently verified against your signing key.
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/v1/audit` | GET | Chain integrity + live compliance evaluation |
-| `/v1/audit/export` | GET | Signed evidence package for regulators |
-
----
-
-## Operational Guarantees
-
-AIR is a **witness, not a gatekeeper**. It cannot cause your AI system to fail.
-
-**Non-blocking** — Vault unreachable? Gateway still proxies. Your AI never stops because recording failed.
-
-**Lossy-safe** — A dropped record is acceptable. A dropped request is not. Recording is best-effort; proxying is guaranteed.
-
-**Self-degrading** — OTel Collector down? Spans dropped silently. Filesystem full? AIR records fail gracefully. Warnings logged, never errors returned.
-
-> Same contract as Datadog agents, OTel collectors, and every other production observability tool. Companies won't insert infrastructure that can break their pipeline.
-
----
-
-## Privacy & Data Boundaries
-
-You control all data. You choose what gets recorded.
-
-| Mode | What's Stored | Use Case |
-|---|---|---|
-| **Full vault** (default) | Prompts + completions in your MinIO | Complete reconstruction |
-| **Metadata only** | Model, tokens, timing, run_id | Lightweight audit, no content |
-| **Hash only** | SHA-256 of request/response | Prove a call happened without storing what was said |
-| **Selective redaction** | Content with PII/PHI stripped | Healthcare, fintech, enterprise |
-
-*"We can prove what happened without exposing the data."* That's what makes this viable for regulated industries.
-
----
-
-## The Ecosystem
-
-15 repos, all tested, all with CI/CD, all Apache-2.0.
-
-| Layer | Repos | What It Does |
-|---|---|---|
-| **Gateway** | `gateway` (this repo) | Proxy + vault + AIR records + guardrails + trust |
-| **SDK** | [`python-sdk`](https://github.com/airblackbox/python-sdk) | Python integrations — OpenAI, LangChain, CrewAI |
-| **Episode Ledger** | [`agent-episode-store`](https://github.com/airblackbox/agent-episode-store) | Groups AIR records into replayable task-level episodes |
-| **Eval Harness** | [`eval-harness`](https://github.com/airblackbox/eval-harness) | Replays episodes, scores results, detects regressions |
-| **Policy Engine** | [`agent-policy-engine`](https://github.com/airblackbox/agent-policy-engine) | Risk-tiered autonomy, runtime enforcement |
-| **Collector** | [`genai-semantic-normalizer`](https://github.com/airblackbox/genai-semantic-normalizer), [`prompt-vault-processor`](https://github.com/airblackbox/prompt-vault-processor), [`otel-processor-genai`](https://github.com/airblackbox/opentelemetry-collector-processor-genai) | Normalize → vault → redact → metrics |
-| **Platform** | [`air-platform`](https://github.com/airblackbox/air-platform) | Docker Compose orchestration + integration tests |
-| **Replay** | [`agent-vcr`](https://github.com/airblackbox/agent-vcr), [`trace-regression-harness`](https://github.com/airblackbox/trace-regression-harness) | Record/replay agent runs, policy assertions on traces |
-| **Governance** | [`mcp-policy-gateway`](https://github.com/airblackbox/mcp-policy-gateway), [`mcp-security-scanner`](https://github.com/airblackbox/mcp-security-scanner), [`agent-tool-sandbox`](https://github.com/airblackbox/agent-tool-sandbox), [`aibom-policy-engine`](https://github.com/airblackbox/aibom-policy-engine), [`runtime-aibom-emitter`](https://github.com/airblackbox/runtime-aibom-emitter) | Tool firewall, security scanning, sandboxing, AI bill of materials |
-| **Trust** | `pkg/trust` (this repo) | HMAC audit chain, SOC 2 + ISO 27001 compliance, evidence export |
-
----
-
-## The Value Ladder
+AIR Blackbox is a reverse proxy + Python SDK. Route your AI traffic through it and every call is recorded, analyzed, and compliance-checked automatically.
 
 ```
-Visibility (what happened)
-  → Detection (something is wrong)
-    → Prevention (stop it automatically)
-      → Optimization (make it better)
-        → Trust (prove it to regulators)
-          → Autonomy (let the agent act, safely)
+Your AI Agent → AIR Blackbox Gateway → LLM Provider
+                      │
+                      ├── HMAC-signed audit record (.air.json)
+                      ├── PII detection + prompt injection scanning
+                      ├── AI-BOM generation (models, tools, providers)
+                      ├── EU AI Act compliance mapping (Articles 9-15)
+                      └── Evidence export for auditors
 ```
 
-Each layer builds on the one below. You can't detect what you can't see. You can't prevent what you can't detect. You can't trust what you can't prove. And you can't grant autonomy without trust.
+**The gateway is a witness, not a gatekeeper.** It cannot cause your AI system to fail. Recording is best-effort; proxying is guaranteed.
 
 ---
 
-## What's Shipped
+## Quick Start
 
-| Version | Capability | Status |
-|---|---|---|
-| v0.1 | Recording, replay, vault, OTel pipeline, 8 providers | ✅ |
-| v0.1 | Non-blocking proxy with streaming, auth, timeout safety | ✅ |
-| v0.4 | Runaway agent kill-switch, cost guardrails, loop detection | ✅ |
-| v0.5 | Policy enforcement, PII blocking, tool allowlists, HITL approval | ✅ |
-| v0.6 | Cross-agent analytics, model routing, failure taxonomy | ✅ |
-| v0.7 | HMAC-SHA256 audit chain, SOC 2 + ISO 27001 reporting, evidence export | ✅ |
-| v0.8 | Python SDK (OpenAI, LangChain, CrewAI), CI/CD across all repos | ✅ |
+### Option 1: Python SDK (fastest)
 
-## What's Next
+```bash
+pip install air-blackbox
+air-blackbox demo        # See it work immediately
+```
 
-| Phase | Timeline | Focus |
-|---|---|---|
-| Foundation | Q1–Q2 2026 | Episode model, durable state, pause/resume |
-| Risk-Tiered Autonomy | Q3–Q4 2026 | Cost-of-error gating, approval workflows, sandbox replay |
-| Multi-Agent Orchestration | Q1–Q2 2027 | Planner/executor/critic, escalation policies, shared state |
-| External Trust Wedge | Q3–Q4 2027 | Trust layer as add-on, onboarding templates, incident runbooks |
-| Enterprise Scale | 2028–2029 | Multi-tenant isolation, provenance search, SCIM provisioning |
+### Option 2: With your code
+
+```python
+from air_blackbox import AirBlackbox
+
+air = AirBlackbox()
+client = air.wrap(openai.OpenAI())
+# Every LLM call is now HMAC-logged through the gateway
+```
+
+### Option 3: Framework auto-detection
+
+```python
+from air_blackbox import AirTrust
+
+trust = AirTrust()
+trust.attach(your_langchain_agent)
+# Framework auto-detected. Audit trails active.
+```
+
+### Option 4: LangChain trust layer
+
+```python
+from air_blackbox.trust.langchain import AirLangChainHandler
+
+chain.invoke(input, config={"callbacks": [AirLangChainHandler()]})
+# Every LLM call + tool invocation logged with PII scanning + injection detection
+```
+
+### Option 5: Full gateway stack (Docker)
+
+```bash
+git clone https://github.com/airblackbox/gateway.git
+cd gateway
+cp .env.example .env   # add your OPENAI_API_KEY
+docker compose up
+```
+
+Then point any OpenAI-compatible client at `http://localhost:8080/v1`.
+
+---
+
+## Install
+
+```bash
+pip install air-blackbox                    # Core SDK + compliance + AI-BOM
+pip install "air-blackbox[langchain]"       # + LangChain trust layer
+pip install "air-blackbox[openai]"          # + OpenAI client wrapper
+pip install "air-blackbox[all]"             # Everything
+```
+
+---
+
+## EU AI Act Compliance Coverage
+
+`air-blackbox comply -v` checks 20 controls across 6 articles:
+
+| Article | What It Covers | Detection |
+|---------|---------------|-----------|
+| **Art. 9** — Risk Management | Risk assessment docs, active mitigations | HYBRID |
+| **Art. 10** — Data Governance | PII in prompts, data vault, governance docs | AUTO + HYBRID |
+| **Art. 11** — Technical Documentation | README, AI-BOM inventory, model cards, doc currency | AUTO + HYBRID |
+| **Art. 12** — Record-Keeping | Event logging, HMAC audit chain, traceability, retention | **100% AUTO** |
+| **Art. 14** — Human Oversight | Human-in-the-loop, kill switch, operator docs | AUTO + MANUAL |
+| **Art. 15** — Robustness & Security | Injection protection, error resilience, access control, red team | AUTO + MANUAL |
+
+**Detection types:**
+- **AUTO** — Gateway detects from live traffic. No action needed.
+- **HYBRID** — Gateway detects partially. Code scan fills the gap.
+- **MANUAL** — Requires human documentation. Gateway provides templates.
+
+---
+
+## Shadow AI Detection
+
+Discover unapproved AI models and services in your environment:
+
+```bash
+# See everything your agents are using
+air-blackbox discover
+
+# Lock down what's approved
+air-blackbox discover --init-registry
+
+# Flag anything not on the list
+air-blackbox discover --approved=approved-models.json
+```
+
+Detects models, providers, and tools from observed gateway traffic. Generates CycloneDX 1.6 AI-BOM for supply chain transparency.
+
+---
+
+## Trust Layers
+
+Non-blocking callback handlers that observe and log — never control or block.
+
+| Framework | Install | Status |
+|-----------|---------|--------|
+| **LangChain / LangGraph** | `pip install "air-blackbox[langchain]"` | ✅ Full |
+| **OpenAI SDK** | `pip install "air-blackbox[openai]"` | ✅ Full |
+| **CrewAI** | `pip install "air-blackbox[crewai]"` | 🔧 Scaffold |
+| **AutoGen** | `pip install "air-blackbox[autogen]"` | 🔧 Scaffold |
+| **Google ADK** | `pip install "air-blackbox[adk]"` | 🔧 Scaffold |
+
+Trust layers include:
+- **PII detection** — emails, SSNs, phone numbers, credit cards in prompts
+- **Prompt injection scanning** — 7 patterns (instruction override, role hijack, etc.)
+- **Audit logging** — every LLM call + tool invocation as `.air.json`
+- **Non-blocking** — if logging fails, your agent keeps running
+
+---
+
+## Why Not Langfuse / Helicone / Datadog?
+
+They answer *"how is the system performing?"*
+
+AIR answers **"what exactly happened, and can we prove it?"**
+
+|  | Observability Tools | AIR Blackbox |
+|--|---|---|
+| Where data lives | Their cloud | **Your** vault (S3/MinIO/local) |
+| PII in traces | Raw content exposed | Vault references only |
+| Tamper-evident | ❌ | ✅ HMAC-SHA256 chain |
+| Compliance checks | ❌ | ✅ 20 checks, EU AI Act Art. 9-15 |
+| AI-BOM generation | ❌ | ✅ CycloneDX 1.6 |
+| Shadow AI detection | ❌ | ✅ Approved model registry |
+| Evidence export | ❌ | ✅ Signed bundles for auditors |
+| Incident replay | ❌ | ✅ Full reconstruction + chain verify |
+
+---
+
+## Architecture
+
+```
+gateway/
+├── cmd/              # Go proxy binary + replayctl CLI
+├── collector/        # Go gateway core
+├── pkg/              # Go shared packages (trust, audit chain)
+├── sdk/              # Python SDK (pip install air-blackbox)
+│   └── air_blackbox/
+│       ├── cli.py            # The 4 commands
+│       ├── gateway_client.py # Connects to running gateway
+│       ├── compliance/       # EU AI Act compliance engine
+│       ├── aibom/            # AI-BOM generator + shadow AI
+│       ├── replay/           # Incident replay + HMAC verify
+│       ├── export/           # Signed evidence bundles
+│       └── trust/            # Framework trust layers
+│           ├── langchain/
+│           ├── openai_agents/
+│           ├── crewai/
+│           ├── autogen/
+│           └── adk/
+├── deploy/           # Docker Compose + Prometheus + Makefile
+├── docs/             # Documentation + quickstart
+└── examples/         # Demo apps
+```
 
 ---
 
 ## Configuration
 
 | Variable | Default | Description |
-|---|---|---|
+|----------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Gateway listen address |
 | `PROVIDER_URL` | `https://api.openai.com` | Upstream LLM provider |
 | `VAULT_ENDPOINT` | `localhost:9000` | MinIO/S3 endpoint |
 | `VAULT_ACCESS_KEY` | `minioadmin` | S3 access key |
 | `VAULT_SECRET_KEY` | `minioadmin` | S3 secret key |
 | `VAULT_BUCKET` | `air-runs` | S3 bucket name |
-| `VAULT_USE_SSL` | `false` | TLS for S3 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | OTel collector gRPC |
 | `RUNS_DIR` | `./runs` | AIR record directory |
 | `TRUST_SIGNING_KEY` | *(none)* | HMAC-SHA256 signing key |
 
-## AIR Record Format
+---
 
-Each run produces a `.air.json` file:
+## Contributing
 
-```json
-{
-  "version": "1.0.0",
-  "run_id": "550e8400-e29b-41d4-a716-446655440000",
-  "trace_id": "abc123...",
-  "timestamp": "2025-02-14T10:30:00Z",
-  "model": "gpt-4o-mini",
-  "provider": "openai",
-  "request_vault_ref": "vault://air-runs/550e8400.../request.json",
-  "response_vault_ref": "vault://air-runs/550e8400.../response.json",
-  "request_checksum": "sha256:a1b2c3...",
-  "response_checksum": "sha256:d4e5f6...",
-  "tokens": { "prompt": 25, "completion": 142, "total": 167 },
-  "duration_ms": 1230,
-  "status": "success"
-}
-```
+We're looking for contributors interested in AI governance, compliance tooling, and agent safety.
+
+**Current priorities:**
+- Trust layers for CrewAI, AutoGen, Google ADK
+- CycloneDX AI-BOM enrichment (training data provenance, model weights origin)
+- Latency benchmarks for trust layer overhead
+- Documentation and integration examples
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
 
 ## License
 
-Apache-2.0. The open-source protocol layer will always be Apache-2.0.
-
-The path to adoption: **Open protocol → common dependency → operational expectation → compliance requirement.**
-
-See [LICENSE](LICENSE) for details. See [Commercial Addendum](docs/COMMERCIAL_ADDENDUM.md) for future commercial governance services.
+Apache-2.0. See [LICENSE](LICENSE) for details.
