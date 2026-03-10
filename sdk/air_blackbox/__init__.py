@@ -85,7 +85,7 @@ class AirTrust:
         elif framework == "crewai":
             from air_blackbox.trust.crewai import attach_trust
             return attach_trust(agent, self.gateway_url)
-        elif framework == "openai_agents":
+        elif framework == "openai":
             from air_blackbox.trust.openai_agents import attach_trust
             return attach_trust(agent, self.gateway_url)
         elif framework == "autogen":
@@ -103,8 +103,8 @@ class AirTrust:
             return "langchain"
         elif "crewai" in agent_type:
             return "crewai"
-        elif "openai" in agent_type and "agents" in agent_type:
-            return "openai_agents"
+        elif "openai" in agent_type:
+            return "openai"
         elif "autogen" in agent_type:
             return "autogen"
         elif "google" in agent_type and "adk" in agent_type:
