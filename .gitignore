@@ -20,3 +20,7 @@
 # OS
 .DS_Store
 Thumbs.db
+
+__pycache__/
+*.egg-info/
+*.pyc
