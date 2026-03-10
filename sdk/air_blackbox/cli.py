@@ -96,9 +96,14 @@ def comply(gateway, scan, runs_dir, fmt, verbose):
 @click.option("--approved", default=None, help="Path to approved models YAML")
 @click.option("--format", "fmt", type=click.Choice(["table", "cyclonedx", "json"]), default="table")
 @click.option("--output", "-o", default=None, help="Output file path")
-def discover(gateway, runs_dir, approved, fmt, output):
+@click.option("--init-registry", is_flag=True, help="Generate approved-models.yaml from current traffic")
+def discover(gateway, runs_dir, approved, fmt, output, init_registry):
     """Discover AI models, tools, and services in your environment."""
     from air_blackbox.gateway_client import GatewayClient
+    from air_blackbox.aibom.generator import generate_aibom
+    from air_blackbox.aibom.shadow import detect_shadow_ai, generate_approved_registry
+    import json as jsonlib
+
     console.print("\n[bold blue]AIR Blackbox[/] — AI Discovery & Inventory\n")
     with console.status("[bold green]Scanning environment..."):
         client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir)
@@ -106,17 +111,48 @@ def discover(gateway, runs_dir, approved, fmt, output):
     if status.total_runs == 0 and not status.reachable:
         console.print("[yellow]No traffic data found.[/] Start gateway and route AI traffic through it.\n")
         return
+
+    # Generate approved registry if requested
+    if init_registry:
+        registry = generate_approved_registry(status)
+        reg_path = "approved-models.json"
+        with open(reg_path, "w") as f:
+            jsonlib.dump(registry, f, indent=2)
+        console.print(f"  [green]✓[/] Generated [bold]{reg_path}[/] with {len(registry['models'])} models, {len(registry['providers'])} providers")
+        console.print(f"  [dim]Future runs of discover will flag anything not in this list.[/]\n")
+        return
+
+    # CycloneDX output
+    if fmt == "cyclonedx" or fmt == "json":
+        bom = generate_aibom(status)
+        bom_json = jsonlib.dumps(bom, indent=2)
+        if output:
+            with open(output, "w") as f:
+                f.write(bom_json)
+            console.print(f"  [green]✓[/] AI-BOM written to [bold]{output}[/]")
+            console.print(f"  [dim]{len(bom['components'])} components, CycloneDX 1.6[/]\n")
+        else:
+            click.echo(bom_json)
+        return
+
+    # Table output (default)
     console.print(f"  Total logged events: [bold]{status.total_runs:,}[/]")
     console.print(f"  Period: {status.date_range_start or 'N/A'} → {status.date_range_end or 'N/A'}")
     console.print(f"  Total tokens: [bold]{status.total_tokens:,}[/]\n")
+
+    # Models table
     if status.models_observed:
         t = Table(title="Models Detected", show_header=True, header_style="bold white on dark_blue")
-        t.add_column("Model", style="bold")
-        t.add_column("Status", justify="center")
+        t.add_column("Model", style="bold", width=25)
+        t.add_column("Provider", width=12)
+        t.add_column("Status", justify="center", width=14)
         for m in status.models_observed:
-            t.add_row(m, "[green]✅ Observed[/]")
+            from air_blackbox.aibom.generator import _guess_provider
+            t.add_row(m, _guess_provider(m), "[green]✅ Observed[/]")
         console.print(t)
         console.print()
+
+    # Providers table
     if status.providers_observed:
         t = Table(title="API Providers", show_header=True, header_style="bold white on dark_blue")
         t.add_column("Provider", style="bold")
@@ -125,7 +161,45 @@ def discover(gateway, runs_dir, approved, fmt, output):
             t.add_row(p, "[green]✅ Active[/]")
         console.print(t)
         console.print()
-    console.print("[dim]Full AI-BOM export (CycloneDX) coming in next release.[/]\n")
+
+    # Tools table
+    tools = set()
+    for r in status.recent_runs:
+        for tc in r.get("tool_calls", []):
+            if tc: tools.add(tc)
+    if tools:
+        t = Table(title="Agent Tools Detected", show_header=True, header_style="bold white on dark_blue")
+        t.add_column("Tool", style="bold")
+        t.add_column("Status", justify="center")
+        for tool in sorted(tools):
+            t.add_row(tool, "[green]✅ Observed[/]")
+        console.print(t)
+        console.print()
+
+    # Shadow AI alerts
+    alerts = detect_shadow_ai(status, approved)
+    if alerts:
+        t = Table(title="Shadow AI Alerts", show_header=True, header_style="bold white on red")
+        t.add_column("Model", style="bold", width=20)
+        t.add_column("Severity", justify="center", width=10)
+        t.add_column("Reason", width=50)
+        for a in alerts:
+            sev_color = {"high": "red", "medium": "yellow", "low": "dim"}.get(a.severity, "white")
+            t.add_row(a.model, f"[{sev_color}]{a.severity.upper()}[/{sev_color}]", a.reason)
+        console.print(t)
+        console.print()
+
+    # Summary
+    bom = generate_aibom(status)
+    console.print(Panel(
+        f"[bold]{len(bom['components'])}[/] components inventoried: "
+        f"{len(status.models_observed)} models, {len(status.providers_observed)} providers, {len(tools)} tools\n\n"
+        f"[green]air-blackbox discover --format=cyclonedx -o aibom.json[/]  Export full AI-BOM\n"
+        f"[green]air-blackbox discover --init-registry[/]                    Create approved models list\n"
+        f"[green]air-blackbox discover --approved=approved-models.json[/]    Check against approved list",
+        title="[bold blue]AI-BOM Summary[/]",
+        border_style="blue",
+    ))
 
 
 @main.command()

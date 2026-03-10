@@ -119,6 +119,7 @@ class GatewayClient:
                 "model": model, "provider": provider,
                 "tokens": tokens.get("total", 0),
                 "timestamp": ts, "status": rec_status,
+                "tool_calls": record.get("tool_calls", []),
             })
         recent_runs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         recent_runs = recent_runs[:10]
