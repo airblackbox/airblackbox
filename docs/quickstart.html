@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIR Blackbox — Quickstart</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0e1a;color:#e0e0e0;line-height:1.7}
+.hero{text-align:center;padding:80px 20px 60px;background:linear-gradient(135deg,#0a0e1a 0%,#1a1f3a 100%)}
+.hero h1{font-size:3rem;color:#fff;margin-bottom:12px}
+.hero .sub{font-size:1.3rem;color:#8892b0;margin-bottom:30px}
+.hero .badge{display:inline-block;background:#1e3a5f;color:#64ffda;padding:6px 16px;border-radius:20px;font-size:0.9rem;margin:4px}
+.container{max-width:800px;margin:0 auto;padding:0 24px}
+.section{padding:60px 0}
+.section h2{font-size:2rem;color:#fff;margin-bottom:24px;border-left:4px solid #64ffda;padding-left:16px}
+.step{background:#111827;border:1px solid #1e293b;border-radius:12px;padding:28px;margin-bottom:24px;position:relative}
+.step-num{position:absolute;top:-14px;left:20px;background:#64ffda;color:#0a0e1a;font-weight:800;font-size:0.85rem;padding:4px 12px;border-radius:12px}
+.step h3{color:#fff;font-size:1.2rem;margin-bottom:8px;margin-top:4px}
+.step p{color:#8892b0;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="hero">
+<h1>AIR Blackbox</h1>
+<p class="sub">EU AI Act compliance for your AI agents in 5 minutes</p>
+<span class="badge">pip install air-blackbox</span>
+<span class="badge">4 commands</span>
+<span class="badge">89% automated</span>
+</div>
+<div class="container">
+<div class="section">
+<h2>Quickstart</h2>
+
+<div class="step">
+<span class="step-num">STEP 1</span>
+<h3>Install</h3>
+<pre style="background:#0d1117;padding:16px;border-radius:8px;overflow-x:auto;color:#64ffda;font-size:0.95rem">pip install air-blackbox</pre>
+</div>
+
+<div class="step">
+<span class="step-num">STEP 2</span>
+<h3>Run the demo</h3>
+<p>Generates sample AI agent records and runs a compliance check. No Docker, no config.</p>
+<pre style="background:#0d1117;padding:16px;border-radius:8px;overflow-x:auto;color:#64ffda;font-size:0.95rem">air-blackbox demo</pre>
+<p style="margin-top:12px;color:#64ffda;font-size:0.9rem">→ Creates 10 sample .air.json records (4 models, 3 providers)<br>
+→ Generates RISK_ASSESSMENT.md + DATA_GOVERNANCE.md templates<br>
+→ Runs EU AI Act compliance check: Articles 9-15</p>
+</div>
+
+<div class="step">
+<span class="step-num">STEP 3</span>
+<h3>See your compliance status</h3>
+<pre style="background:#0d1117;padding:16px;border-radius:8px;overflow-x:auto;color:#64ffda;font-size:0.95rem">air-blackbox comply -v</pre>
+<p style="margin-top:12px">Shows per-article status with detection type (AUTO/HYBRID/MANUAL) and fix hints for every failing check.</p>
+</div>
+
+<div class="step">
+<span class="step-num">STEP 4</span>
+<h3>Discover what's in your environment</h3>
+<pre style="background:#0d1117;padding:16px;border-radius:8px;overflow-x:auto;color:#64ffda;font-size:0.95rem">air-blackbox discover</pre>
+<p style="margin-top:12px">Shows every model, provider, and API endpoint your agents are using. Shadow AI detection built in.</p>
+</div>
+
+<div class="step">
+<span class="step-num">STEP 5</span>
+<h3>Start the full gateway (optional)</h3>
+<p>For live traffic analysis with HMAC audit chains, tamper-proof logging, and real-time compliance:</p>
+<pre style="background:#0d1117;padding:16px;border-radius:8px;overflow-x:auto;color:#64ffda;font-size:0.95rem">git clone https://github.com/airblackbox/gateway.git
+cd gateway
+cp .env.example .env   # add your OPENAI_API_KEY
+docker compose up</pre>
+<p style="margin-top:12px">Then point your LLM client at the gateway:</p>
+<pre style="background:#0d1117;padding:16px;border-radius:8px;overflow-x:auto;color:#c9d1d9;font-size:0.95rem"><span style="color:#ff7b72">from</span> openai <span style="color:#ff7b72">import</span> OpenAI
+<span style="color:#ff7b72">from</span> air_blackbox <span style="color:#ff7b72">import</span> AirBlackbox
+
+air = AirBlackbox()
+client = air.wrap(OpenAI())
+<span style="color:#8b949e"># Every LLM call is now HMAC-logged through the gateway</span></pre>
+</div>
+</div>
+
+<div class="container">
+<div class="section">
+<h2>The Four Commands</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div style="background:#111827;border:1px solid #1e293b;border-radius:12px;padding:24px">
+<h3 style="color:#64ffda;font-size:1rem;margin-bottom:8px">comply</h3>
+<p style="color:#8892b0;font-size:0.9rem">EU AI Act compliance from live gateway traffic. 18 checks across Articles 9-15.</p>
+</div>
+<div style="background:#111827;border:1px solid #1e293b;border-radius:12px;padding:24px">
+<h3 style="color:#64ffda;font-size:1rem;margin-bottom:8px">discover</h3>
+<p style="color:#8892b0;font-size:0.9rem">Shadow AI inventory + AI-BOM generation. Every model, tool, and provider cataloged.</p>
+</div>
+<div style="background:#111827;border:1px solid #1e293b;border-radius:12px;padding:24px">
+<h3 style="color:#64ffda;font-size:1rem;margin-bottom:8px">replay</h3>
+<p style="color:#8892b0;font-size:0.9rem">Incident reconstruction from tamper-proof audit chain. Full agent timeline.</p>
+</div>
+<div style="background:#111827;border:1px solid #1e293b;border-radius:12px;padding:24px">
+<h3 style="color:#64ffda;font-size:1rem;margin-bottom:8px">export</h3>
+<p style="color:#8892b0;font-size:0.9rem">Signed evidence bundles for auditors and insurers. One command, one document.</p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="container">
+<div class="section" style="text-align:center;padding-bottom:80px">
+<h2 style="border:none;padding:0;text-align:center">August 2, 2026</h2>
+<p style="color:#8892b0;font-size:1.1rem;margin-bottom:20px">EU AI Act high-risk enforcement deadline.<br>Penalties up to €35M or 7% of global turnover.</p>
+<p style="color:#64ffda;font-size:1.2rem;font-weight:600">Get compliant before they come asking.</p>
+<div style="margin-top:30px">
+<a href="https://github.com/airblackbox/gateway" style="background:#64ffda;color:#0a0e1a;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:1.1rem;display:inline-block">View on GitHub →</a>
+</div>
+</div>
+</div>
+</body>
+</html>
