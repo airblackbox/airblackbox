@@ -4,6 +4,7 @@ pyproject.toml
 sdk/README.md
 sdk/air_blackbox/__init__.py
 sdk/air_blackbox/cli.py
+sdk/air_blackbox/demo_generator.py
 sdk/air_blackbox/gateway_client.py
 sdk/air_blackbox.egg-info/PKG-INFO
 sdk/air_blackbox.egg-info/SOURCES.txt
