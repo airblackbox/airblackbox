@@ -3,7 +3,7 @@ Name: air-blackbox
 Version: 1.0.0
 Summary: AI governance control plane — compliance, inventory, incident response, and audit for AI agents
 Author-email: Jason Shotwell <jason.j.shotwell@gmail.com>
-License: Apache-2.0
+License-Expression: Apache-2.0
 Project-URL: Homepage, https://airblackbox.ai
 Project-URL: Repository, https://github.com/airblackbox/gateway
 Project-URL: Documentation, https://github.com/airblackbox/gateway/tree/main/docs
@@ -11,7 +11,6 @@ Project-URL: Issues, https://github.com/airblackbox/gateway/issues
 Keywords: ai,governance,compliance,eu-ai-act,audit,opentelemetry,llm,ai-agents,aibom,shadow-ai
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11

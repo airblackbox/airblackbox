@@ -23,7 +23,7 @@ rm -rf dist/ build/ sdk/*.egg-info
 
 # Build
 echo ">> Building package..."
-python -m build
+python3 -m build
 
 echo ""
 echo ">> Package contents:"
@@ -32,14 +32,14 @@ ls -lh dist/
 if [ "$1" = "test" ]; then
     echo ""
     echo ">> Uploading to TEST PyPI..."
-    python -m twine upload --repository testpypi dist/*
+    python3 -m twine upload --repository testpypi dist/*
     echo ""
     echo ">> Test install:"
     echo "   pip install --index-url https://test.pypi.org/simple/ air-blackbox"
 else
     echo ""
     echo ">> Uploading to PyPI..."
-    python -m twine upload dist/*
+    python3 -m twine upload dist/*
     echo ""
     echo ">> Verify install:"
     echo "   pip install air-blackbox"
