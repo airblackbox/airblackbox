@@ -8,6 +8,7 @@ AIR Blackbox CLI — the four commands.
 """
 
 import click
+from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -210,41 +211,123 @@ def discover(gateway, runs_dir, approved, fmt, output, init_registry):
 @click.option("--verify", is_flag=True, help="Verify HMAC audit chain")
 def replay(gateway, runs_dir, episode, last, verify):
     """Reconstruct AI incidents from the audit chain."""
-    from air_blackbox.gateway_client import GatewayClient
+    from air_blackbox.replay.engine import ReplayEngine
+
     console.print("\n[bold blue]AIR Blackbox[/] — Incident Replay\n")
+
     with console.status("[bold green]Loading audit records..."):
-        client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir)
-        status = client.get_status()
-    if status.total_runs == 0:
-        console.print("[yellow]No audit records found.[/] Route AI traffic through the gateway first.\n")
+        engine = ReplayEngine(runs_dir=runs_dir or "./runs")
+        count = engine.load()
+
+    if count == 0:
+        console.print("[yellow]No audit records found.[/] Run 'air-blackbox demo' or route traffic through gateway.\n")
         return
-    console.print(f"  [bold]{status.total_runs:,}[/] total records")
-    console.print(f"  Period: {status.date_range_start} → {status.date_range_end}\n")
-    if status.recent_runs:
-        t = Table(title=f"Last {min(last, len(status.recent_runs))} Runs", show_header=True, header_style="bold white on dark_blue")
-        t.add_column("Run ID", width=20)
-        t.add_column("Model", width=15)
-        t.add_column("Tokens", justify="right", width=8)
-        t.add_column("Status", justify="center", width=10)
-        t.add_column("Timestamp", width=22)
-        for run in status.recent_runs[:last]:
-            st = "[green]✅[/]" if run["status"] == "success" else "[red]❌[/]"
-            t.add_row(run["run_id"][:20], run["model"], str(run["tokens"]), st, (run["timestamp"] or "")[:22])
-        console.print(t)
+
+    # Verify chain if requested
+    if verify:
+        console.print("[bold]Verifying HMAC audit chain...[/]\n")
+        result = engine.verify_chain()
+        if result.intact:
+            console.print(f"  [green]✅ CHAIN INTACT[/] — {result.verified_records:,} records verified. No tampering detected.\n")
+        else:
+            console.print(f"  [red]❌ CHAIN BROKEN[/] at record {result.first_break_at} (run: {result.first_break_run_id})")
+            console.print(f"  [red]  {result.verified_records} of {result.total_records} records verified before break.[/]\n")
+        return
+
+    # Detail view for single episode
+    if episode:
+        rec = engine.get_run(episode)
+        if not rec:
+            console.print(f"[red]Run '{episode}' not found.[/] Use 'air-blackbox replay' to see all runs.\n")
+            return
+        console.print(f"  [bold]Run Detail: {rec.run_id}[/]\n")
+        console.print(f"  Model:     {rec.model}")
+        console.print(f"  Provider:  {rec.provider}")
+        console.print(f"  Timestamp: {rec.timestamp}")
+        console.print(f"  Duration:  {rec.duration_ms}ms")
+        console.print(f"  Tokens:    {rec.tokens}")
+        console.print(f"  Status:    {'[green]success[/]' if rec.status == 'success' else '[red]' + rec.status + '[/]'}")
+        if rec.tool_calls:
+            console.print(f"  Tools:     {', '.join(rec.tool_calls)}")
+        if rec.pii_alerts:
+            console.print(f"  [yellow]PII Alerts:  {len(rec.pii_alerts)} detected[/]")
+        if rec.injection_alerts:
+            console.print(f"  [red]Injection:   {len(rec.injection_alerts)} detected[/]")
+        if rec.error:
+            console.print(f"  [red]Error:       {rec.error}[/]")
         console.print()
-    console.print("[dim]Full episode reconstruction and HMAC verification coming in next release.[/]\n")
+        return
+
+    # Stats summary
+    stats = engine.get_stats()
+    console.print(f"  [bold]{stats['total_records']:,}[/] total records")
+    if stats.get("date_range"):
+        console.print(f"  Period: {stats['date_range'][0]} → {stats['date_range'][1]}")
+    console.print(f"  Total tokens: {stats['total_tokens']:,} | Avg latency: {stats['avg_duration_ms']}ms")
+    if stats["pii_alerts"] > 0:
+        console.print(f"  [yellow]PII alerts: {stats['pii_alerts']}[/]")
+    if stats["injection_alerts"] > 0:
+        console.print(f"  [red]Injection attempts: {stats['injection_alerts']}[/]")
+    console.print()
+
+    # Runs table
+    records = engine.records[-last:]
+    records.reverse()
+    t = Table(title=f"Last {len(records)} Runs", show_header=True, header_style="bold white on dark_blue")
+    t.add_column("Run ID", width=20)
+    t.add_column("Model", width=15)
+    t.add_column("Tokens", justify="right", width=8)
+    t.add_column("Latency", justify="right", width=8)
+    t.add_column("Status", justify="center", width=10)
+    t.add_column("Timestamp", width=22)
+    for rec in records:
+        st = "[green]✅[/]" if rec.status == "success" else "[red]❌[/]"
+        t.add_row(rec.run_id[:20], rec.model, str(rec.tokens.get("total", 0)),
+                  f"{rec.duration_ms}ms", st, rec.timestamp[:22])
+    console.print(t)
+    console.print()
+    console.print("[dim]Detail view: air-blackbox replay --episode=<run_id>[/]")
+    console.print("[dim]Verify chain: air-blackbox replay --verify[/]\n")
 
 
 @main.command()
 @click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--runs-dir", default=None, help="Path to .air.json records")
 @click.option("--range", "time_range", default="30d", help="Time range")
 @click.option("--format", "fmt", type=click.Choice(["json", "pdf"]), default="json")
 @click.option("--output", "-o", default=None, help="Output file path")
-def export(gateway, time_range, fmt, output):
+def export(gateway, runs_dir, time_range, fmt, output):
     """Generate signed evidence bundles for auditors and insurers."""
+    from air_blackbox.export.bundle import generate_evidence_bundle
+    import json as jsonlib
+
     console.print("\n[bold blue]AIR Blackbox[/] — Evidence Export\n")
-    console.print("[yellow]Coming in Phase 4 (Week 12)[/]\n")
-    console.print("This command will:\n  • Bundle: compliance + AI-BOM + audit chain + policy config\n  • Sign with HMAC attestation\n  • Export as JSON or PDF\n")
+
+    with console.status("[bold green]Generating evidence bundle..."):
+        bundle = generate_evidence_bundle(gateway_url=gateway, runs_dir=runs_dir, scan_path=".")
+
+    summary = bundle.get("compliance", {}).get("summary", {})
+    trail = bundle.get("audit_trail", {})
+    chain = trail.get("chain_verification", {})
+
+    console.print(f"  [bold]Compliance:[/] {summary.get('passing', 0)} passing, {summary.get('warnings', 0)} warnings, {summary.get('failing', 0)} failing")
+    console.print(f"  [bold]AI-BOM:[/] {len(bundle.get('aibom', {}).get('components', []))} components")
+    console.print(f"  [bold]Audit trail:[/] {trail.get('total_records', 0)} records")
+    console.print(f"  [bold]Chain:[/] {'[green]INTACT[/]' if chain.get('intact') else '[red]BROKEN[/]'}")
+    console.print(f"  [bold]Signed:[/] HMAC-SHA256")
+    console.print()
+
+    out_path = output or f"air-blackbox-evidence-{datetime.utcnow().strftime('%Y%m%d')}.json"
+    with open(out_path, "w") as f:
+        jsonlib.dump(bundle, f, indent=2)
+
+    console.print(Panel(
+        f"Evidence bundle written to [bold]{out_path}[/]\n\n"
+        f"Contains: compliance scan + AI-BOM (CycloneDX) + audit trail + HMAC attestation\n"
+        f"Hand this file to your auditor or insurer as a single verifiable document.",
+        title="[bold green]Export Complete[/]",
+        border_style="green",
+    ))
 
 
 @main.command()

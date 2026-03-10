@@ -17,6 +17,10 @@ sdk/air_blackbox/aibom/generator.py
 sdk/air_blackbox/aibom/shadow.py
 sdk/air_blackbox/compliance/__init__.py
 sdk/air_blackbox/compliance/engine.py
+sdk/air_blackbox/export/__init__.py
+sdk/air_blackbox/export/bundle.py
+sdk/air_blackbox/replay/__init__.py
+sdk/air_blackbox/replay/engine.py
 sdk/air_blackbox/trust/__init__.py
 sdk/air_blackbox/trust/adk/__init__.py
 sdk/air_blackbox/trust/autogen/__init__.py
