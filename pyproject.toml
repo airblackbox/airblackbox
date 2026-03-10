@@ -7,7 +7,7 @@ name = "air-blackbox"
 version = "1.0.0"
 description = "AI governance control plane — compliance, inventory, incident response, and audit for AI agents"
 readme = "sdk/README.md"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
     {name = "Jason Shotwell", email = "jason.j.shotwell@gmail.com"},
