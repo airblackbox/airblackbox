@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "air-blackbox"
+version = "1.0.0"
+description = "AI governance control plane — compliance, inventory, incident response, and audit for AI agents"
+readme = "sdk/README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Jason Shotwell", email = "jason.j.shotwell@gmail.com"},
+]
+keywords = [
+    "ai", "governance", "compliance", "eu-ai-act", "audit",
+    "opentelemetry", "llm", "ai-agents", "aibom", "shadow-ai",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+langchain = ["langchain-core>=0.2.0"]
+crewai = ["crewai>=0.50.0"]
+openai = ["openai>=1.0"]
+autogen = ["autogen-agentchat>=0.4.0"]
+adk = ["google-adk>=0.1.0"]
+all = [
+    "air-blackbox[langchain]",
+    "air-blackbox[crewai]",
+    "air-blackbox[openai]",
+    "air-blackbox[autogen]",
+]
+
+[project.scripts]
+air-blackbox = "air_blackbox.cli:main"
+
+[project.urls]
+Homepage = "https://airblackbox.ai"
+Repository = "https://github.com/airblackbox/gateway"
+Documentation = "https://github.com/airblackbox/gateway/tree/main/docs"
+Issues = "https://github.com/airblackbox/gateway/issues"
+
+[tool.setuptools.packages.find]
+where = ["sdk"]
+
+[tool.setuptools.package-dir]
+"" = "sdk"
