@@ -174,33 +174,114 @@ def export(gateway, time_range, fmt, output):
 
 
 @main.command()
-def demo():
-    """Run a self-contained demo showing AIR Blackbox in action."""
+@click.option("--output", "-o", default=".", help="Directory to create demo data in")
+def demo(output):
+    """Run a zero-config demo — generates sample data and shows compliance.
+
+    Creates sample .air.json records and compliance doc templates so you
+    can experience the full tool without Docker or a running gateway.
+
+    \b
+    Try it:
+        air-blackbox demo
+        air-blackbox comply -v
+        air-blackbox discover
+        air-blackbox replay
+    """
+    from air_blackbox.demo_generator import generate_demo_data
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
-    console.print("\n[bold blue]AIR Blackbox[/] — Interactive Demo\n")
-    client = GatewayClient()
+    import time
+
+    console.print("\n[bold blue]AIR Blackbox[/] — Zero-Config Demo\n")
+    console.print("[dim]Generating sample AI agent traffic...[/]\n")
+    time.sleep(0.5)
+
+    # Generate sample data
+    result = generate_demo_data(output)
+
+    console.print(f"  [green]✓[/] Created [bold]{result['runs_created']}[/] sample .air.json records in [bold]{result['runs_dir']}[/]")
+    console.print(f"  [green]✓[/] Models: {', '.join(result['models'])}")
+    console.print(f"  [green]✓[/] Providers: {', '.join(result['providers'])}")
+    console.print(f"  [green]✓[/] Total tokens: {result['total_tokens']:,}")
+    console.print(f"  [green]✓[/] Generated RISK_ASSESSMENT.md template")
+    console.print(f"  [green]✓[/] Generated DATA_GOVERNANCE.md template")
+    console.print()
+
+    time.sleep(0.3)
+    console.print("[dim]Running compliance check against demo data...[/]\n")
+
+    # Now run compliance against the generated data
+    client = GatewayClient(runs_dir=result["runs_dir"])
     status = client.get_status()
+
     if status.reachable:
         console.print(f"  [green]●[/] Gateway detected at {status.url}")
     else:
-        console.print(f"  [yellow]●[/] No gateway running")
-    if status.total_runs > 0:
-        console.print(f"  [green]●[/] Found {status.total_runs:,} logged events")
+        console.print(f"  [yellow]●[/] No gateway running (offline mode — using .air.json records)")
+
+    console.print(f"  [green]●[/] [bold]{status.total_runs}[/] events loaded")
     console.print()
-    articles = run_all_checks(status, ".")
+
+    articles = run_all_checks(status, output)
+
     for article in articles:
         for check in article["checks"]:
             icon = {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}.get(check["status"], "?")
             det = {"auto": "[green]AUTO[/]", "hybrid": "[yellow]HYBR[/]", "manual": "[red]MANU[/]"}.get(check.get("detection", ""), "")
             console.print(f"  {icon} Art. {article['number']:>2} {det} {check['name']}")
+
     total = sum(len(a["checks"]) for a in articles)
     passing = sum(1 for a in articles for c in a["checks"] if c["status"] == "pass")
-    console.print(f"\n  [bold]{passing}/{total}[/] checks passing\n")
-    if not status.reachable:
-        console.print("  [dim]Start gateway: docker compose up[/]\n")
-    console.print("  [dim]Full check: air-blackbox comply -v[/]\n")
+
+    console.print(f"\n  [bold]{passing}/{total}[/] checks passing")
+    console.print()
+    console.print(Panel(
+        "[bold]What just happened:[/]\n\n"
+        "1. Generated 10 sample AI agent records (like a real agent would create)\n"
+        "2. Created EU AI Act compliance doc templates (Articles 9 + 10)\n"
+        "3. Ran compliance check against the sample data\n\n"
+        "[bold]Try these next:[/]\n\n"
+        "  [green]air-blackbox comply -v[/]     Full compliance with fix hints\n"
+        "  [green]air-blackbox discover[/]      See models and providers detected\n"
+        "  [green]air-blackbox replay[/]        See the audit trail timeline\n"
+        "  [green]docker compose up[/]          Start full gateway for live traffic",
+        title="[bold blue]Demo Complete[/]",
+        border_style="blue",
+    ))
 
 
 if __name__ == "__main__":
     main()
+
+
+@main.command()
+@click.option("--output", "-o", default=".", help="Directory to initialize")
+def init(output):
+    """Initialize a project for AIR Blackbox compliance.
+
+    Creates compliance doc templates and a .air-blackbox.yaml config file.
+    """
+    from air_blackbox.demo_generator import _RISK_TEMPLATE, _DATA_GOV_TEMPLATE
+    import os
+
+    console.print("\n[bold blue]AIR Blackbox[/] — Project Init\n")
+
+    files_created = []
+    for fname, content in [
+        ("RISK_ASSESSMENT.md", _RISK_TEMPLATE),
+        ("DATA_GOVERNANCE.md", _DATA_GOV_TEMPLATE),
+    ]:
+        fpath = os.path.join(output, fname)
+        if not os.path.exists(fpath):
+            with open(fpath, "w") as f:
+                f.write(content)
+            files_created.append(fname)
+            console.print(f"  [green]✓[/] Created {fname}")
+        else:
+            console.print(f"  [dim]⏭  {fname} already exists[/]")
+
+    if files_created:
+        console.print(f"\n  [bold]{len(files_created)}[/] files created. Run [green]air-blackbox comply -v[/] to check status.\n")
+    else:
+        console.print("\n  All files already exist. Run [green]air-blackbox comply -v[/] to check status.\n")
