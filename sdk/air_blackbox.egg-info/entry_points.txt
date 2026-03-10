@@ -1,0 +1,2 @@
+[console_scripts]
+air-blackbox = air_blackbox.cli:main
