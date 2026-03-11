@@ -182,6 +182,92 @@ They answer *"how is the system performing?"*  AIR answers *"what exactly happen
 
 ## Architecture
 
+![AIR Blackbox System Architecture](docs/architecture-diagram.png)
+
+```mermaid
+flowchart TD
+    A[Agents / SDKs / Apps\nAI Agents · LangChain · SaaS · Internal Tools] --> B
+
+    subgraph B[AIR Blackbox Gateway]
+        B1[Policy Engine]
+        B2[Prompt Vault]
+        B3[Security Scanner]
+        B4[Compliance Checker]
+    end
+
+    B --> C
+
+    subgraph C[Execution Layer]
+        C1[LLM Providers\nOpenAI · Anthropic · Local Models]
+        C2[Agent Tools]
+        C3[External APIs]
+    end
+
+    C --> D
+
+    subgraph D[Observability Fabric]
+        D1[Trace Regression]
+        D2[Agent Episode Store]
+        D3[Runtime AI-BOM]
+        D4[OpenTelemetry]
+    end
+
+    D --> E[Developer Tools\nDebug · Audit · Replay]
+```
+
+### How It Works
+
+Think of AIR Blackbox as the control tower for AI agents. Instead of agents calling LLMs and tools directly, everything flows through the gateway.
+
+**1 — Entry Layer**
+Agents, SDKs, or applications send requests through the gateway. Supports AI agents, LangChain apps, internal tools, and SaaS platforms.
+
+**2 — Safety + Governance Layer**
+Before anything executes, the gateway checks:
+
+| Module | Purpose |
+|---|---|
+| Policy Engine | Rules for agent behavior |
+| Prompt Vault | Versioned prompt templates |
+| Security Scanner | Prevents prompt injection |
+| Compliance Checker | EU AI Act regulatory signals |
+
+**3 — Execution Layer**
+Once validated, the gateway orchestrates LLM calls, tools, external APIs, and data access.
+
+**4 — Observability Fabric**
+Every action is recorded. This is where AIR Blackbox shines:
+- Trace regression harness
+- Agent episode store
+- Runtime AI-BOM emitter
+- OpenTelemetry traces
+
+Enables debugging, replaying failures, compliance logs, and model governance.
+
+**5 — Developer Interface**
+Replay agent decisions, inspect prompt chains, audit policy decisions, and analyze traces.
+
+```
+Agents / Apps
+      │
+      ▼
+AIR Blackbox Gateway
+      │
+ ┌─────────────┐
+ │ Governance  │
+ │ Security    │
+ │ Compliance  │
+ └─────────────┘
+      │
+      ▼
+ Agent Runtime (LLMs + Tools)
+      │
+      ▼
+ Observability + Replay
+```
+
+### File Structure
+
 ```
 gateway/
 ├── cmd/                        # Go proxy binary + replayctl CLI
