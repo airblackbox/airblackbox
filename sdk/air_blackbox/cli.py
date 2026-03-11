@@ -442,3 +442,65 @@ def init(output):
         console.print(f"\n  [bold]{len(files_created)}[/] files created. Run [green]air-blackbox comply -v[/] to check status.\n")
     else:
         console.print("\n  All files already exist. Run [green]air-blackbox comply -v[/] to check status.\n")
+
+
+@main.command()
+@click.option("--tool", default=None, help="Tool name to validate")
+@click.option("--args", "arguments", default=None, help="Tool arguments as JSON")
+@click.option("--content", default=None, help="LLM output content to validate")
+@click.option("--allowlist", default=None, help="Comma-separated list of approved tools")
+def validate(tool, arguments, content, allowlist):
+    """Validate an agent action BEFORE execution.
+
+    Pre-execution runtime certification — proves the output was
+    checked against rules before it was acted on.
+
+    \b
+    Examples:
+        air-blackbox validate --tool=db_query --args='{"query":"SELECT * FROM users"}'
+        air-blackbox validate --content="Here is the result..."
+        air-blackbox validate --tool=web_search --allowlist=web_search,calculator
+    """
+    from air_blackbox.validate import RuntimeValidator, ToolAllowlistRule
+    import json as jsonlib
+
+    console.print("\n[bold blue]AIR Blackbox[/] — Runtime Validation\n")
+
+    validator = RuntimeValidator()
+
+    if allowlist:
+        validator.add_rule(ToolAllowlistRule(allowlist.split(",")))
+
+    action = {}
+    action_type = "tool_call"
+    if tool:
+        action["tool_name"] = tool
+    if arguments:
+        try:
+            action["arguments"] = jsonlib.loads(arguments)
+        except jsonlib.JSONDecodeError:
+            action["arguments"] = {"raw": arguments}
+    if content:
+        action["content"] = content
+        action_type = "llm_response"
+
+    report = validator.validate(action, action_type=action_type)
+
+    t = Table(title="Validation Results", show_header=True, header_style="bold white on dark_blue")
+    t.add_column("Rule", style="bold", width=22)
+    t.add_column("Result", justify="center", width=10)
+    t.add_column("Severity", justify="center", width=10)
+    t.add_column("Message", width=45)
+
+    for r in report.results:
+        icon = "[green]✅ PASS[/]" if r.passed else "[red]❌ FAIL[/]"
+        sev = {"block": "[red]BLOCK[/]", "warn": "[yellow]WARN[/]", "info": "[dim]INFO[/]"}.get(r.severity, r.severity)
+        t.add_row(r.rule_name, icon, sev, r.message)
+    console.print(t)
+    console.print()
+
+    if report.passed:
+        console.print(f"  [green]✅ VALIDATED[/] — action approved for execution ({report.validated_in_ms}ms)")
+    else:
+        console.print(f"  [red]❌ BLOCKED[/] — action failed validation ({report.validated_in_ms}ms)")
+    console.print(f"  [dim]Validation record: {report.action_id}.air.json[/]\n")
