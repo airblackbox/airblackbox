@@ -29,6 +29,38 @@
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
   }
+  /* ── CLI DEMO ── */
+  .cli-demo { border-top: 1px solid var(--border); }
+  .demo-gif-wrap {
+    border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--border);
+    background: #000;
+    margin-bottom: 3rem;
+    box-shadow: 0 0 60px rgba(0,212,170,0.08);
+  }
+  .demo-gif {
+    width: 100%; display: block;
+    border-radius: 12px;
+  }
+  .demo-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+  .demo-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.5rem;
+    transition: border-color 0.3s;
+  }
+  .demo-step:hover { border-color: var(--accent); }
+  .demo-step-cmd {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85rem; color: var(--accent);
+    margin-bottom: 0.75rem; font-weight: 600;
+  }
+  .demo-step-desc { color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; }
+
   /* ── NAV ── */
   nav {
     position: fixed; top: 0; width: 100%; z-index: 100;
@@ -623,6 +655,40 @@ client = OpenAI(
       <h3>82</h3>
       <p>Tests passing across 5 layers</p>
     </div>
+  </div>
+</section>
+
+<!-- CLI DEMO SECTION -->
+<section class="cli-demo" id="demo">
+  <div class="section-label">See It In Action</div>
+  <h2 class="section-title">Four commands. Full coverage.</h2>
+  <p class="section-subtitle">
+    Run this on any Python AI project and get a compliance report, shadow AI scan,
+    replayable audit trail, and signed evidence package — in under 60 seconds.
+  </p>
+  <div class="demo-gif-wrap">
+    <img src="airblackbox_demo.gif" alt="AIR Blackbox CLI demo" class="demo-gif" />
+  </div>
+  <div class="demo-steps">
+    <div class="demo-step">
+      <div class="demo-step-cmd">air-blackbox comply</div>
+      <div class="demo-step-desc">Scans your project against 6 EU AI Act articles. Flags HIGH and MEDIUM severity gaps with exact file references.</div>
+    </div>
+    <div class="demo-step">
+      <div class="demo-step-cmd">air-blackbox discover</div>
+      <div class="demo-step-desc">Finds undeclared model calls hiding in utility functions and helpers — your shadow AI inventory.</div>
+    </div>
+    <div class="demo-step">
+      <div class="demo-step-cmd">air-blackbox replay</div>
+      <div class="demo-step-desc">Loads any past episode from the audit chain, verifies the HMAC-SHA256 signature, and replays every step with timestamps.</div>
+    </div>
+    <div class="demo-step">
+      <div class="demo-step-cmd">air-blackbox export</div>
+      <div class="demo-step-desc">Generates a cryptographically signed evidence package with AI-BOM, compliance report, and audit chain — ready for regulators.</div>
+    </div>
+  </div>
+  <div style="text-align:center; margin-top: 3rem;">
+    <a href="https://github.com/air-blackbox/gateway" class="btn-primary">Try It Yourself &rarr;</a>
   </div>
 </section>
 
