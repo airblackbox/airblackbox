@@ -27,3 +27,5 @@ sdk/air_blackbox/trust/autogen/__init__.py
 sdk/air_blackbox/trust/crewai/__init__.py
 sdk/air_blackbox/trust/langchain/__init__.py
 sdk/air_blackbox/trust/openai_agents/__init__.py
+sdk/air_blackbox/validate/__init__.py
+sdk/air_blackbox/validate/engine.py
