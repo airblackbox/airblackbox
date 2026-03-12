@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It | AIR Blackbox</title>
+<meta name="description" content="We scanned OpenAI Agents SDK, LangChain, Haystack, CrewAI, and 3 other AI agent frameworks for EU AI Act compliance. Most have zero OAuth delegation accountability.">
+<meta name="keywords" content="EU AI Act compliance, AI agent OAuth, agent delegation, AI governance, LangChain compliance, OpenAI agents security">
+<meta property="og:title" content="OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It">
+<meta property="og:description" content="We scanned 7 AI agent frameworks for OAuth delegation tracking. Most have zero accountability.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://airblackbox.ai/blog/oauth-ai-agents-delegation-scan">
+<link rel="canonical" href="https://airblackbox.ai/blog/oauth-ai-agents-delegation-scan">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.7; color: #1a1a1a; background: #fff; }
+  .container { max-width: 720px; margin: 0 auto; padding: 40px 20px; }
+  nav { padding: 16px 20px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; max-width: 720px; margin: 0 auto; }
+  nav a { color: #1a1a1a; text-decoration: none; font-weight: 600; }
+  nav .links a { color: #666; font-weight: 400; margin-left: 20px; font-size: 14px; }
+  nav .links a:hover { color: #1a1a1a; }
+  h1 { font-size: 2.2em; line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.4em; margin-top: 48px; margin-bottom: 16px; }
+  p { margin-bottom: 20px; color: #333; }
+  .meta { color: #888; font-size: 14px; margin-bottom: 40px; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #1a1a1a; color: #e5e5e5; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-size: 14px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e5e5; }
+  th { font-weight: 600; background: #f8f8f8; }
+  blockquote { border-left: 3px solid #1a1a1a; padding-left: 16px; margin: 24px 0; font-style: italic; color: #555; }
+  .cta { background: #1a1a1a; color: #fff; padding: 24px; border-radius: 8px; margin: 40px 0; text-align: center; }
+  .cta code { background: #333; color: #fff; }
+  .cta a { color: #4da6ff; }
+  footer { border-top: 1px solid #e5e5e5; padding-top: 20px; margin-top: 60px; color: #888; font-size: 13px; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="/">AIR Blackbox</a>
+  <span class="links">
+    <a href="/blog/">Blog</a>
+    <a href="https://github.com/airblackbox/gateway">GitHub</a>
+    <a href="https://pypi.org/project/air-blackbox/">PyPI</a>
+  </span>
+</nav>
+
+<div class="container">
+
+<h1>OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It</h1>
+<p class="meta">March 12, 2026 · Jason Shotwell · 6 min read</p>
+
+<p>OAuth was built for humans clicking login buttons. AI agents are a completely different trust model.</p>
+
+<p>We ran AIR Blackbox v1.2.0, an open-source EU AI Act compliance scanner, against seven major AI agent frameworks: OpenAI Agents SDK, LangChain, CrewAI, Phidata, GPT Researcher, LlamaIndex, and Mem0. We checked five specific patterns that determine whether an agent system tracks who authorized what and what the agent actually did with that authorization.</p>
+
+<p>The results were worse than expected.</p>
+
+<h2>The Problem Nobody Is Talking About</h2>
+
+<p>A user connects their Google account to an AI assistant. Two weeks later, the agent has sent 47 emails, created 12 calendar events, shared 3 documents, and booked a flight. OAuth says all of this is fine. The token is valid. The permissions were granted.</p>
+
+<p>But the system cannot answer basic questions. Which agent performed these actions? Did the actions match the original intent? Would the user still approve them right now? And if something went wrong, can anyone reconstruct the decision chain?</p>
+
+<p>OAuth solved identity for humans logging into apps. Agents introduce delegation, and delegation is where things break down.</p>
+
+<h2>What We Checked</h2>
+
+<p>We built five new checks into AIR Blackbox v1.2.0 targeting the OAuth delegation gap. Each maps to EU AI Act Article 14 (Human Oversight) or Article 12 (Record-Keeping):</p>
+
+<p><strong>Agent-to-user identity binding.</strong> Does the code track which user authorized each agent action? If an agent sends an email, is there a <code>user_id</code> attached to that action?</p>
+
+<p><strong>Token scope and permission validation.</strong> Before the agent acts, does it verify that the action falls within granted permissions?</p>
+
+<p><strong>Token expiry and revocation handling.</strong> Can you kill a rogue agent instantly? If an agent starts behaving unexpectedly at 3am, is there a mechanism to revoke its credentials in real time?</p>
+
+<p><strong>Agent action audit trail.</strong> Most frameworks log LLM calls. Almost none log the actions the agent takes as a result — the emails sent, the APIs called, the data modified.</p>
+
+<p><strong>Agent action boundaries.</strong> Is there a defined set of tools and actions the agent is allowed to use?</p>
+
+<h2>The Results</h2>
+
+<table>
+<tr><th>Framework</th><th>Pass</th><th>Warn</th><th>Fail</th><th>Total</th></tr>
+<tr><td><strong>Haystack (deepset)</strong></td><td>24</td><td>10</td><td>5</td><td>39</td></tr>
+<tr><td>OpenAI Agents SDK</td><td>23</td><td>12</td><td>4</td><td>39</td></tr>
+<tr><td>Semantic Kernel (Microsoft)</td><td>15</td><td>4</td><td>0</td><td>19</td></tr>
+<tr><td>GPT Researcher</td><td>15</td><td>3</td><td>0</td><td>18</td></tr>
+<tr><td>Mem0</td><td>13</td><td>6</td><td>0</td><td>19</td></tr>
+<tr><td>DSPy (Stanford)</td><td>12</td><td>6</td><td>1</td><td>19</td></tr>
+</table>
+
+<h2>OAuth Delegation: The Detailed Breakdown</h2>
+
+<table>
+<tr><th>Check</th><th>Haystack</th><th>OpenAI SDK</th><th>GPT Researcher</th><th>Semantic Kernel</th></tr>
+<tr><td>Identity binding</td><td>✅ 3 files</td><td>✅ 7 files</td><td>❌ Missing</td><td>✅ 3 files</td></tr>
+<tr><td>Scope validation</td><td>✅ 8 files</td><td>✅ 32 files</td><td>✅ 4 files</td><td>✅ 44 files</td></tr>
+<tr><td>Token expiry</td><td>✅ 12 files</td><td>✅ 18 files</td><td>✅ 4 files</td><td>✅ 32 files</td></tr>
+<tr><td>Action audit trail</td><td>✅ 2 files</td><td>❌ Missing</td><td>✅ 4 files</td><td>✅ 6 files</td></tr>
+<tr><td>Action boundaries</td><td>✅ 1 file</td><td>✅ 7 files</td><td>❌ Missing</td><td>✅ 2 files</td></tr>
+</table>
+
+<p>The pattern is consistent. LLM call logging exists. Action-level logging does not. Token scoping exists in some. User identity binding is rare. Action boundaries are almost nonexistent.</p>
+
+<blockquote>OAuth says the agent is allowed. Nobody tracks what it does. That is how you get 1,000 emails sent overnight — technically authorized, zero accountability.</blockquote>
+
+<h2>Why This Matters Now</h2>
+
+<p>The EU AI Act high-risk system rules take effect August 2, 2026. Article 14 requires human oversight mechanisms. Article 12 requires automatic logging of events during operation. If your agent acts on behalf of a user and you cannot reconstruct who authorized it, what it did, and why — you have a compliance gap.</p>
+
+<h2>Scan Your Own Code</h2>
+
+<pre><code>pip install air-blackbox
+air-blackbox comply --scan . -v</code></pre>
+
+<p>18 code-level checks. 5 OAuth delegation checks. Runs entirely on your machine. Apache 2.0.</p>
+
+<div class="cta">
+  <p><strong>The EU AI Act deadline is 5 months away.</strong></p>
+  <p><code>pip install air-blackbox</code></p>
+  <p><a href="https://github.com/airblackbox/gateway">GitHub</a> · <a href="https://pypi.org/project/air-blackbox/">PyPI</a></p>
+</div>
+
+
+<footer>
+  <p>AIR Blackbox — The flight recorder for AI agents. Open source. Apache 2.0.</p>
+  <p><a href="/">Home</a> · <a href="/blog/">Blog</a> · <a href="https://github.com/airblackbox/gateway">GitHub</a></p>
+</footer>
+
+</div>
+</body>
+</html>
