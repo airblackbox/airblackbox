@@ -1,5 +1,5 @@
 """
-Compliance engine — maps gateway traffic data to EU AI Act articles.
+Compliance engine — maps gateway traffic + code analysis to EU AI Act articles.
 Detection types: AUTO, HYBRID, MANUAL
 """
 import os
@@ -43,7 +43,7 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
     for f in code_findings:
         code_by_article.setdefault(f.article, []).append(f)
 
-    return [
+    articles = [
         _check_article_9(status, scan_path, code_by_article.get(9, [])),
         _check_article_10(status, scan_path, code_by_article.get(10, [])),
         _check_article_11(status, scan_path, code_by_article.get(11, [])),
@@ -51,9 +51,10 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
         _check_article_14(status, scan_path, code_by_article.get(14, [])),
         _check_article_15(status, scan_path, code_by_article.get(15, [])),
     ]
+    return articles
 
 
-def _check_article_9(status, scan_path, code_findings=None):
+def _check_article_9(status, scan_path, code_findings):
     checks = []
     risk_files = ["RISK_ASSESSMENT.md", "risk_assessment.md", "risk_register.json", "RISK_MANAGEMENT.md"]
     has_risk = any(os.path.exists(os.path.join(scan_path, f)) for f in risk_files)
@@ -72,12 +73,13 @@ def _check_article_9(status, scan_path, code_findings=None):
         evidence=f"{mc}/4 mitigations active: {', '.join(mits) or 'none detected'}",
         fix_hint="Enable guardrails.yaml, set TRUST_SIGNING_KEY, configure vault and OTel endpoints"))
     result = {"number": 9, "title": "Risk Management", "checks": [_c2d(c) for c in checks]}
-    for f in (code_findings or []):
+    # Add code-level findings
+    for f in code_findings:
         result["checks"].append(_finding_to_dict(f))
     return result
 
 
-def _check_article_10(status, scan_path, code_findings=None):
+def _check_article_10(status, scan_path, code_findings):
     checks = []
     if status.reachable:
         if status.pii_detected_count > 0:
@@ -102,12 +104,12 @@ def _check_article_10(status, scan_path, code_findings=None):
         evidence="Vault enabled. Data stored in your controlled S3/MinIO." if status.vault_enabled else "No vault configured.",
         fix_hint="Set VAULT_ENDPOINT, VAULT_ACCESS_KEY, VAULT_SECRET_KEY in .env"))
     result = {"number": 10, "title": "Data Governance", "checks": [_c2d(c) for c in checks]}
-    for f in (code_findings or []):
+    for f in code_findings:
         result["checks"].append(_finding_to_dict(f))
     return result
 
 
-def _check_article_11(status, scan_path, code_findings=None):
+def _check_article_11(status, scan_path, code_findings):
     checks = []
     readme = os.path.exists(os.path.join(scan_path, "README.md"))
     checks.append(ComplianceCheck(name="System description (README)", article=11, detection="hybrid",
@@ -132,12 +134,12 @@ def _check_article_11(status, scan_path, code_findings=None):
         checks.append(ComplianceCheck(name="Documentation currency", article=11, detection="auto", status="pass",
             evidence=f"Traffic data current through {status.date_range_end}. {len(status.models_observed)} model(s) active."))
     result = {"number": 11, "title": "Technical Documentation", "checks": [_c2d(c) for c in checks]}
-    for f in (code_findings or []):
+    for f in code_findings:
         result["checks"].append(_finding_to_dict(f))
     return result
 
 
-def _check_article_12(status, scan_path, code_findings=None):
+def _check_article_12(status, scan_path, code_findings):
     checks = []
     if status.reachable and status.total_runs > 0:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="pass",
@@ -174,12 +176,12 @@ def _check_article_12(status, scan_path, code_findings=None):
         checks.append(ComplianceCheck(name="Log retention", article=12, detection="auto", status="pass",
             evidence=f"Records retained from {status.date_range_start}. Storage: {'vault' if status.vault_enabled else 'local'}."))
     result = {"number": 12, "title": "Record-Keeping", "checks": [_c2d(c) for c in checks]}
-    for f in (code_findings or []):
+    for f in code_findings:
         result["checks"].append(_finding_to_dict(f))
     return result
 
 
-def _check_article_14(status, scan_path, code_findings=None):
+def _check_article_14(status, scan_path, code_findings):
     checks = []
     if status.total_runs > 0:
         checks.append(ComplianceCheck(name="Human-in-the-loop mechanism", article=14, detection="auto", status="warn",
@@ -204,12 +206,12 @@ def _check_article_14(status, scan_path, code_findings=None):
         evidence="Operator guide found" if has_ops else "No operator documentation found.",
         fix_hint="Create OPERATOR_GUIDE.md: capabilities, limitations, when to intervene"))
     result = {"number": 14, "title": "Human Oversight", "checks": [_c2d(c) for c in checks]}
-    for f in (code_findings or []):
+    for f in code_findings:
         result["checks"].append(_finding_to_dict(f))
     return result
 
 
-def _check_article_15(status, scan_path, code_findings=None):
+def _check_article_15(status, scan_path, code_findings):
     checks = []
     if status.reachable:
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="pass",
@@ -238,6 +240,6 @@ def _check_article_15(status, scan_path, code_findings=None):
         evidence="Adversarial testing documentation found" if has_rt else "No red team / adversarial testing evidence.",
         fix_hint="Conduct adversarial testing. Export: air-blackbox export --tag=redteam"))
     result = {"number": 15, "title": "Accuracy, Robustness & Cybersecurity", "checks": [_c2d(c) for c in checks]}
-    for f in (code_findings or []):
+    for f in code_findings:
         result["checks"].append(_finding_to_dict(f))
     return result

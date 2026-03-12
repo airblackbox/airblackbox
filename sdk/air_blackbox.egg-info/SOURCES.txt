@@ -16,6 +16,7 @@ sdk/air_blackbox/aibom/__init__.py
 sdk/air_blackbox/aibom/generator.py
 sdk/air_blackbox/aibom/shadow.py
 sdk/air_blackbox/compliance/__init__.py
+sdk/air_blackbox/compliance/code_scanner.py
 sdk/air_blackbox/compliance/engine.py
 sdk/air_blackbox/export/__init__.py
 sdk/air_blackbox/export/bundle.py
