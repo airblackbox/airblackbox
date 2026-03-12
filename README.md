@@ -2,12 +2,12 @@
 
 **See exactly what your AI agent did — every prompt, every tool call, every decision — in one trace.**
 
+![AIR Blackbox v1.2.0 Demo — EU AI Act + OAuth Delegation Scan](docs/airblackbox-v1.2-demo.gif)
+
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
+[![EU AI Act](https://img.shields.io/badge/EU_AI_Act-audit--ready-blue)](https://github.com/airblackbox)
 [![CI](https://github.com/airblackbox/gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/airblackbox/gateway/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blueviolet?logo=opentelemetry)](https://opentelemetry.io)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://pypi.org/project/air-blackbox/)
-[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 
 ```
 pip install air-blackbox
@@ -327,3 +327,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) for details.
+
+---
+
+⭐ **If this helps you prepare for August 2026, star the repo** — it helps other teams find it too.
+
+[Star on GitHub](https://github.com/airblackbox/gateway) · [Try the Demo](https://airblackbox.ai/demo) · [PyPI](https://pypi.org/project/air-blackbox/)
