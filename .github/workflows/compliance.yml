@@ -1,0 +1,28 @@
+# Scan AIR Blackbox itself for EU AI Act compliance
+# Dogfooding: we use our own tool on our own code
+name: EU AI Act Compliance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compliance-scan:
+    runs-on: ubuntu-latest
+    name: AIR Blackbox Compliance Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run EU AI Act compliance scan
+        id: compliance
+        uses: airblackbox/compliance-action@v1
+
+      - name: Print results
+        run: |
+          echo "✅ ${{ steps.compliance.outputs.passing }} passing"
+          echo "⚠️  ${{ steps.compliance.outputs.warnings }} warnings"
+          echo "❌ ${{ steps.compliance.outputs.failing }} failing"
+          echo "Total: ${{ steps.compliance.outputs.total }} checks"
