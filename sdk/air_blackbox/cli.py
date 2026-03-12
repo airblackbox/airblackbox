@@ -17,7 +17,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.2.0", prog_name="air-blackbox")
+@click.version_option(version="1.2.1", prog_name="air-blackbox")
 def main():
     """AIR Blackbox — AI governance control plane.
 
@@ -363,6 +363,7 @@ def demo(output):
     console.print(f"  [green]✓[/] Total tokens: {result['total_tokens']:,}")
     console.print(f"  [green]✓[/] Generated RISK_ASSESSMENT.md template")
     console.print(f"  [green]✓[/] Generated DATA_GOVERNANCE.md template")
+    console.print(f"  [green]✓[/] Generated sample_agent.py (with good + bad patterns)")
     console.print()
 
     time.sleep(0.3)
