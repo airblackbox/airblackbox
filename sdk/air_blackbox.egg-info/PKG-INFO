@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: air-blackbox
-Version: 1.1.0
+Version: 1.2.0
 Summary: AI governance control plane — compliance, inventory, incident response, and audit for AI agents
 Author-email: Jason Shotwell <jason.j.shotwell@gmail.com>
 License-Expression: Apache-2.0
