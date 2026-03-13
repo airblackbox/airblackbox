@@ -1,0 +1,37 @@
+# AIR Blackbox pre-commit hook for EU AI Act compliance scanning
+# https://github.com/airblackbox/gateway
+#
+# Usage in your .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/airblackbox/gateway
+#       rev: v1.2.5
+#       hooks:
+#         - id: air-blackbox-comply
+#
+#         # Or with strict mode (fail on any findings):
+#         - id: air-blackbox-comply-strict
+
+- id: air-blackbox-comply
+  name: EU AI Act Compliance (AIR Blackbox)
+  entry: air-blackbox comply --scan
+  language: python
+  types: [python]
+  pass_filenames: false
+  additional_dependencies: ['air-blackbox>=1.2.5']
+  description: >
+    Scan Python AI code for EU AI Act compliance (Articles 9-15).
+    Reports findings but does not block commits.
+  stages: [pre-commit]
+
+- id: air-blackbox-comply-strict
+  name: EU AI Act Compliance — Strict (AIR Blackbox)
+  entry: air-blackbox-comply-strict
+  language: python
+  types: [python]
+  pass_filenames: false
+  additional_dependencies: ['air-blackbox>=1.2.5']
+  description: >
+    Scan Python AI code for EU AI Act compliance and fail if any checks fail.
+    Use this to enforce compliance in CI and pre-commit.
+  stages: [pre-commit]

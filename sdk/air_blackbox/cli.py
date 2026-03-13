@@ -21,7 +21,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.2.4", prog_name="air-blackbox")
+@click.version_option(version="1.2.5", prog_name="air-blackbox")
 def main():
     """AIR Blackbox — AI governance control plane.
 
@@ -37,7 +37,10 @@ def main():
 @click.option("--runs-dir", default=None, help="Path to .air.json records directory")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
 @click.option("--verbose", "-v", is_flag=True, help="Show detection type and fix hints")
-def comply(gateway, scan, runs_dir, fmt, verbose):
+@click.option("--deep", is_flag=True, help="Run LLM deep analysis via Ollama (requires air-compliance-v2)")
+@click.option("--model", default="air-compliance-v2", help="Ollama model for deep scan")
+@click.option("--no-save", is_flag=True, help="Don't save results to compliance history")
+def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
     """Check EU AI Act compliance from live gateway traffic."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
@@ -55,9 +58,71 @@ def comply(gateway, scan, runs_dir, fmt, verbose):
         console.print(f"  [yellow]●[/] No traffic data found")
     console.print(f"  [dim]Scanning: {scan}[/]\n")
     articles = run_all_checks(status, scan)
+
+    # Deep scan with LLM if requested
+    deep_findings = []
+    if deep:
+        from air_blackbox.compliance.deep_scan import deep_scan
+        import os
+        console.print("[bold]Running deep LLM analysis...[/]\n")
+        # Read all Python files for deep analysis
+        py_files = []
+        for root, dirs, files in os.walk(scan):
+            dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}]
+            for f in files:
+                if f.endswith(".py"):
+                    py_files.append(os.path.join(root, f))
+        # Concatenate (up to limit) for a single deep scan
+        code_parts = []
+        total_chars = 0
+        for fp in py_files[:30]:
+            try:
+                with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read()
+                code_parts.append(f"# File: {os.path.relpath(fp, scan)}\n{content}")
+                total_chars += len(content)
+                if total_chars > 10000:
+                    break
+            except Exception:
+                continue
+        merged_code = "\n\n".join(code_parts)
+        result = deep_scan(merged_code, model=model)
+        if result.get("available") and not result.get("error"):
+            deep_findings = result.get("findings", [])
+            console.print(f"  [green]●[/] LLM analysis found [bold]{len(deep_findings)}[/] additional finding(s) using {model}\n")
+        elif result.get("error"):
+            console.print(f"  [yellow]●[/] Deep scan: {result['error']}\n")
+
+    # Save to compliance history
+    if not no_save:
+        try:
+            from air_blackbox.compliance.history import save_scan
+            scan_id = save_scan(articles, scan_path=scan, version="1.2.5",
+                                deep_findings=deep_findings if deep_findings else None)
+            if verbose:
+                console.print(f"  [dim]Saved to compliance history (scan #{scan_id})[/]\n")
+        except Exception:
+            pass  # Don't break the scan if history fails
+
     if fmt == "json":
         import json
-        click.echo(json.dumps(articles, indent=2))
+        output_data = articles
+        if deep_findings:
+            output_data = list(articles)  # shallow copy
+            output_data.append({
+                "number": 0,
+                "title": "LLM Deep Analysis",
+                "checks": [{
+                    "name": f.get("name", ""),
+                    "status": f.get("status", "warn"),
+                    "evidence": f.get("evidence", ""),
+                    "fix_hint": f.get("fix_hint", ""),
+                    "tier": "static",
+                    "detection": "auto",
+                    "source": "llm",
+                } for f in deep_findings],
+            })
+        click.echo(json.dumps(output_data, indent=2))
         return
     for article in articles:
         table = Table(title=f"Article {article['number']} — {article['title']}",
@@ -83,6 +148,24 @@ def comply(gateway, scan, runs_dir, fmt, verbose):
             table.add_row(*row)
         console.print(table)
         console.print()
+
+    # Display deep findings if any
+    if deep_findings:
+        deep_table = Table(title="LLM Deep Analysis Findings",
+            show_header=True, header_style="bold white on dark_blue", title_style="bold magenta")
+        deep_table.add_column("Article", width=10, justify="center")
+        deep_table.add_column("Finding", style="bold", width=30)
+        deep_table.add_column("Status", width=10, justify="center")
+        deep_table.add_column("Evidence", width=40)
+        for f in deep_findings:
+            si = {"pass": "[bold green]✅ PASS[/]", "warn": "[bold yellow]⚠️  WARN[/]", "fail": "[bold red]❌ FAIL[/]"}.get(f.get("status", "warn"))
+            ev = f.get("evidence", "")
+            if verbose and f.get("fix_hint"):
+                ev += f"\n[dim italic]Fix: {f['fix_hint']}[/]"
+            deep_table.add_row(f"Art {f.get('article', '?')}", f.get("name", ""), si, ev)
+        console.print(deep_table)
+        console.print()
+
     total = sum(len(a["checks"]) for a in articles)
     passing = sum(1 for a in articles for c in a["checks"] if c["status"] == "pass")
     warning = sum(1 for a in articles for c in a["checks"] if c["status"] == "warn")
@@ -97,6 +180,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose):
     parts = f"[bold green]{passing}[/] passing  [bold yellow]{warning}[/] warnings  [bold red]{failing}[/] failing  out of [bold]{total}[/] checks"
     parts += f"\n\n  [green]Static analysis[/]:  [bold]{s_pass}/{s_total}[/] passing  (code patterns, docs, config)"
     parts += f"\n  [blue]Runtime checks[/]:   [bold]{r_pass}/{r_total}[/] passing  (requires gateway or trust layer)"
+    if deep_findings:
+        deep_fail = sum(1 for f in deep_findings if f.get("status") == "fail")
+        deep_warn = sum(1 for f in deep_findings if f.get("status") == "warn")
+        parts += f"\n  [magenta]LLM deep analysis[/]: [bold]{len(deep_findings)}[/] finding(s) ({deep_fail} fail, {deep_warn} warn)"
     if r_total > 0 and r_pass < r_total:
         parts += f"\n\n  [dim]Unlock runtime checks: pip install air-langchain-trust[/]"
     if verbose:
@@ -528,6 +615,138 @@ def validate(tool, arguments, content, allowlist):
 
 
 @main.command()
+@click.option("--path", default=None, help="Filter by scan path")
+@click.option("--compare", is_flag=True, help="Compare last two scans and show diff")
+@click.option("--export", "export_path", default=None, help="Export history to JSON file")
+@click.option("--limit", default=20, help="Max number of scans to show")
+def history(path, compare, export_path, limit):
+    """View compliance scan history and trends.
+
+    Tracks every scan in a local SQLite database (~/.air-blackbox/compliance.db).
+    Shows score trends over time, diffs between scans, and exports for reporting.
+
+    \b
+    Examples:
+        air-blackbox history                    # Show recent scans
+        air-blackbox history --compare          # Diff last two scans
+        air-blackbox history --export report.json
+        air-blackbox history --path ./my-project
+    """
+    from air_blackbox.compliance.history import (
+        get_history, get_last_scan, get_scan_findings,
+        compare_scans, export_history,
+    )
+    import json as jsonlib
+
+    console.print("\n[bold blue]AIR Blackbox[/] — Compliance History\n")
+
+    # Export mode
+    if export_path:
+        data = export_history(scan_path=path, limit=limit)
+        with open(export_path, "w") as f:
+            jsonlib.dump(data, f, indent=2)
+        console.print(f"  [green]✓[/] Exported {data['scan_count']} scan(s) to [bold]{export_path}[/]\n")
+        return
+
+    # Compare mode
+    if compare:
+        scans = get_history(scan_path=path, limit=2)
+        if len(scans) < 2:
+            console.print("  [yellow]Need at least 2 scans to compare.[/] Run `air-blackbox comply` first.\n")
+            return
+        newer = scans[0]
+        older = scans[1]
+        diff = compare_scans(older["id"], newer["id"])
+
+        console.print(f"  Comparing scan #{older['id']} → #{newer['id']}\n")
+        console.print(f"  Score: [bold]{older['score_percent']}%[/] → [bold]{newer['score_percent']}%[/]", end="")
+        delta = newer["score_percent"] - older["score_percent"]
+        if delta > 0:
+            console.print(f"  [bold green](+{delta}%)[/]")
+        elif delta < 0:
+            console.print(f"  [bold red]({delta}%)[/]")
+        else:
+            console.print(f"  [dim](no change)[/]")
+        console.print()
+
+        if diff["improved"]:
+            console.print(f"  [bold green]Improved ({len(diff['improved'])}):[/]")
+            for item in diff["improved"]:
+                console.print(f"    [green]↑[/] Art {item['article']}: {item['name']} ({item['was']} → {item['now']})")
+        if diff["regressed"]:
+            console.print(f"\n  [bold red]Regressed ({len(diff['regressed'])}):[/]")
+            for item in diff["regressed"]:
+                console.print(f"    [red]↓[/] Art {item['article']}: {item['name']} ({item['was']} → {item['now']})")
+        if diff["new_checks"]:
+            console.print(f"\n  [bold blue]New checks ({len(diff['new_checks'])}):[/]")
+            for item in diff["new_checks"]:
+                si = {"pass": "[green]pass[/]", "warn": "[yellow]warn[/]", "fail": "[red]fail[/]"}.get(item["status"], item["status"])
+                console.print(f"    [blue]●[/] Art {item['article']}: {item['name']} ({si})")
+        if not diff["improved"] and not diff["regressed"] and not diff["new_checks"]:
+            console.print("  [dim]No changes between scans.[/]")
+        console.print()
+        return
+
+    # Default: show history trend
+    scans = get_history(scan_path=path, limit=limit)
+    if not scans:
+        console.print("  [yellow]No scan history found.[/] Run `air-blackbox comply` to start tracking.\n")
+        return
+
+    table = Table(title="Compliance Scan History", show_header=True,
+                  header_style="bold white on dark_blue", title_style="bold")
+    table.add_column("#", width=4, justify="right")
+    table.add_column("Date", width=20)
+    table.add_column("Path", width=20)
+    table.add_column("Score", width=10, justify="center")
+    table.add_column("Pass", width=6, justify="center")
+    table.add_column("Warn", width=6, justify="center")
+    table.add_column("Fail", width=6, justify="center")
+    table.add_column("Static", width=10, justify="center")
+    table.add_column("Runtime", width=10, justify="center")
+    table.add_column("Deep", width=5, justify="center")
+
+    for s in scans:
+        score_pct = s["score_percent"]
+        score_color = "green" if score_pct >= 70 else "yellow" if score_pct >= 40 else "red"
+        ts = s["timestamp"][:16].replace("T", " ")
+        scan_path_short = s["scan_path"]
+        if len(scan_path_short) > 20:
+            scan_path_short = "..." + scan_path_short[-17:]
+        deep_icon = "✓" if s["deep_scan"] else ""
+        table.add_row(
+            str(s["id"]),
+            ts,
+            scan_path_short,
+            f"[{score_color}]{score_pct}%[/{score_color}]",
+            f"[green]{s['passing']}[/]",
+            f"[yellow]{s['warnings']}[/]",
+            f"[red]{s['failing']}[/]",
+            f"{s['static_passing']}/{s['static_total']}",
+            f"{s['runtime_passing']}/{s['runtime_total']}",
+            deep_icon,
+        )
+
+    console.print(table)
+
+    # Trend line (last 5 scans)
+    if len(scans) >= 2:
+        trend = scans[:5][::-1]  # oldest first
+        trend_str = " → ".join(f"{s['score_percent']}%" for s in trend)
+        latest = scans[0]["score_percent"]
+        oldest = trend[0]["score_percent"]
+        delta = latest - oldest
+        if delta > 0:
+            console.print(f"\n  [bold]Trend:[/] {trend_str}  [bold green](+{delta}% overall)[/]")
+        elif delta < 0:
+            console.print(f"\n  [bold]Trend:[/] {trend_str}  [bold red]({delta}% overall)[/]")
+        else:
+            console.print(f"\n  [bold]Trend:[/] {trend_str}  [dim](flat)[/]")
+
+    console.print(f"\n  [dim]Run with --compare to diff last two scans, or --export to save as JSON[/]\n")
+
+
+@main.command()
 @click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed output for each test")
 def test(gateway, verbose):
@@ -927,7 +1146,7 @@ def test(gateway, verbose):
     def test_version_consistency():
         """Verify version is consistent across pyproject.toml, __init__.py, and cli."""
         import air_blackbox
-        cli_version = "1.2.4"  # from @click.version_option
+        cli_version = "1.2.5"  # from @click.version_option
         init_version = air_blackbox.__version__
         assert init_version == cli_version, f"__init__ ({init_version}) != cli ({cli_version})"
         return True, f"Version {init_version} consistent across modules"

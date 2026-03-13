@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "air-blackbox"
-version = "1.2.4"
+version = "1.2.5"
 description = "AI governance control plane — compliance, inventory, incident response, and audit for AI agents"
 readme = "sdk/README.md"
 license = "Apache-2.0"
@@ -50,6 +50,7 @@ all = [
 
 [project.scripts]
 air-blackbox = "air_blackbox.cli:main"
+air-blackbox-comply-strict = "air_blackbox.precommit:main"
 
 [project.urls]
 Homepage = "https://airblackbox.ai"
