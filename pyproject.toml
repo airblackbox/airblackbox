@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "air-blackbox"
-version = "1.2.5"
+version = "1.2.6"
 description = "AI governance control plane — compliance, inventory, incident response, and audit for AI agents"
 readme = "sdk/README.md"
 license = "Apache-2.0"
@@ -41,11 +41,13 @@ crewai = ["crewai>=0.50.0"]
 openai = ["openai>=1.0"]
 autogen = ["autogen-agentchat>=0.4.0"]
 adk = ["google-adk>=0.1.0"]
+claude = ["claude-agent-sdk>=0.1.0"]
 all = [
     "air-blackbox[langchain]",
     "air-blackbox[crewai]",
     "air-blackbox[openai]",
     "air-blackbox[autogen]",
+    "air-blackbox[claude]",
 ]
 
 [project.scripts]
