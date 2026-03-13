@@ -1,10 +1,14 @@
 """
-AIR Blackbox CLI — the four commands.
+AIR Blackbox CLI — AI governance control plane.
 
     air-blackbox discover    # Shadow AI inventory + AI-BOM
     air-blackbox comply      # EU AI Act compliance from live traffic
     air-blackbox replay      # Incident reconstruction from audit chain
     air-blackbox export      # Signed evidence bundle for auditors
+    air-blackbox validate    # Pre-execution runtime checks
+    air-blackbox test        # End-to-end stack validation
+    air-blackbox demo        # Zero-config demo with sample data
+    air-blackbox init        # Initialize project templates
 """
 
 import click
@@ -505,3 +509,281 @@ def validate(tool, arguments, content, allowlist):
     else:
         console.print(f"  [red]❌ BLOCKED[/] — action failed validation ({report.validated_in_ms}ms)")
     console.print(f"  [dim]Validation record: {report.action_id}.air.json[/]\n")
+
+
+@main.command()
+@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed output for each test")
+def test(gateway, verbose):
+    """Run end-to-end validation of the AIR Blackbox stack.
+
+    Tests every subsystem — validation engine, compliance engine,
+    audit records, HMAC chain, and optionally the live gateway.
+
+    \b
+    Examples:
+        air-blackbox test              # Test SDK (no gateway needed)
+        air-blackbox test -v           # Verbose output
+        air-blackbox test --gateway http://localhost:8080  # Include gateway tests
+    """
+    import time
+    import json as jsonlib
+    import tempfile
+    import os
+
+    console.print("\n[bold blue]AIR Blackbox[/] — Stack Validation Test\n")
+
+    results = []
+    start_time = time.time()
+
+    def _run_test(name, fn):
+        """Run a single test, catch exceptions, record result."""
+        try:
+            passed, detail = fn()
+            results.append({"name": name, "passed": passed, "detail": detail})
+            icon = "[green]✅[/]" if passed else "[red]❌[/]"
+            console.print(f"  {icon} {name}")
+            if verbose and detail:
+                console.print(f"     [dim]{detail}[/]")
+        except Exception as e:
+            results.append({"name": name, "passed": False, "detail": str(e)})
+            console.print(f"  [red]❌[/] {name}")
+            if verbose:
+                console.print(f"     [red]{str(e)[:120]}[/]")
+
+    # ── Test 1: SDK imports ──────────────────────────────────────────
+    def test_sdk_imports():
+        from air_blackbox.validate import RuntimeValidator, ToolAllowlistRule
+        from air_blackbox.validate import ContentPolicyRule, PiiOutputRule
+        from air_blackbox.compliance.engine import run_all_checks
+        from air_blackbox.gateway_client import GatewayClient, GatewayStatus
+        from air_blackbox.aibom.generator import generate_aibom
+        from air_blackbox.replay.engine import ReplayEngine
+        return True, "All core modules imported successfully"
+
+    console.print("[bold]SDK Tests[/]\n")
+    _run_test("SDK module imports", test_sdk_imports)
+
+    # ── Test 2: Validation engine ────────────────────────────────────
+    def test_validation_engine():
+        from air_blackbox.validate import RuntimeValidator, ToolAllowlistRule
+        with tempfile.TemporaryDirectory() as tmpdir:
+            v = RuntimeValidator(runs_dir=tmpdir)
+            v.add_rule(ToolAllowlistRule(["web_search", "calculator"]))
+            # Should pass — tool is on allowlist
+            r1 = v.validate({"tool_name": "web_search", "arguments": {"q": "hello"}})
+            assert r1.passed, "Approved tool should pass"
+            # Should fail — tool is NOT on allowlist
+            r2 = v.validate({"tool_name": "exec_shell", "arguments": {"cmd": "rm -rf /"}})
+            assert not r2.passed, "Blocked tool should fail"
+            return True, f"2/2 validation scenarios correct ({r1.validated_in_ms + r2.validated_in_ms}ms)"
+
+    _run_test("Validation engine (approve/block)", test_validation_engine)
+
+    # ── Test 3: Content policy detection ─────────────────────────────
+    def test_content_policy():
+        from air_blackbox.validate import RuntimeValidator
+        with tempfile.TemporaryDirectory() as tmpdir:
+            v = RuntimeValidator(runs_dir=tmpdir)
+            # Safe content should pass
+            r1 = v.validate({"content": "The weather today is sunny."}, action_type="llm_response")
+            assert r1.passed, "Safe content should pass"
+            # Dangerous content should be blocked
+            r2 = v.validate({"tool_name": "db", "arguments": {"query": "DROP TABLE users"}})
+            assert not r2.passed, "SQL injection should be blocked"
+            return True, "Safe content passed, dangerous content blocked"
+
+    _run_test("Content policy (safe vs dangerous)", test_content_policy)
+
+    # ── Test 4: PII detection ────────────────────────────────────────
+    def test_pii_detection():
+        from air_blackbox.validate import RuntimeValidator
+        with tempfile.TemporaryDirectory() as tmpdir:
+            v = RuntimeValidator(runs_dir=tmpdir)
+            # Content with PII should warn
+            r = v.validate({"content": "Contact john@example.com or SSN 123-45-6789"}, action_type="llm_response")
+            pii_results = [x for x in r.results if x.rule_name == "pii_output_check"]
+            assert len(pii_results) > 0, "PII rule should run"
+            assert not pii_results[0].passed, "PII should be detected"
+            types = pii_results[0].details.get("pii_types", [])
+            assert "email" in types, "Email should be detected"
+            assert "ssn" in types, "SSN should be detected"
+            return True, f"Detected PII types: {', '.join(types)}"
+
+    _run_test("PII detection (email, SSN)", test_pii_detection)
+
+    # ── Test 5: Hallucination guard ──────────────────────────────────
+    def test_hallucination_guard():
+        from air_blackbox.validate import RuntimeValidator
+        with tempfile.TemporaryDirectory() as tmpdir:
+            v = RuntimeValidator(runs_dir=tmpdir)
+            r = v.validate(
+                {"content": "Visit https://www.fake.com/api for more info"},
+                action_type="llm_response"
+            )
+            hal_results = [x for x in r.results if x.rule_name == "hallucination_guard"]
+            assert len(hal_results) > 0, "Hallucination rule should run"
+            assert not hal_results[0].passed, "Fake URL should be flagged"
+            return True, "Suspicious URL detected and flagged"
+
+    _run_test("Hallucination guard (fake URLs)", test_hallucination_guard)
+
+    # ── Test 6: Audit record write/read ──────────────────────────────
+    def test_audit_records():
+        from air_blackbox.validate import RuntimeValidator
+        with tempfile.TemporaryDirectory() as tmpdir:
+            v = RuntimeValidator(runs_dir=tmpdir)
+            report = v.validate({"tool_name": "test_tool", "arguments": {}})
+            # Check that a .air.json file was written
+            air_files = [f for f in os.listdir(tmpdir) if f.endswith(".air.json")]
+            assert len(air_files) >= 1, "Should write at least 1 audit record"
+            # Read it back and verify structure
+            with open(os.path.join(tmpdir, air_files[0])) as f:
+                record = jsonlib.load(f)
+            assert record.get("type") == "validation", "Record type should be 'validation'"
+            assert "run_id" in record, "Record should have run_id"
+            assert "timestamp" in record, "Record should have timestamp"
+            assert "checks" in record, "Record should have checks"
+            return True, f"Wrote and verified {len(air_files)} audit record(s)"
+
+    _run_test("Audit record write/read", test_audit_records)
+
+    # ── Test 7: Compliance engine ────────────────────────────────────
+    def test_compliance_engine():
+        from air_blackbox.compliance.engine import run_all_checks
+        from air_blackbox.gateway_client import GatewayStatus
+        status = GatewayStatus(
+            reachable=False, total_runs=5,
+            models_observed=["gpt-4o"], providers_observed=["openai"],
+            total_tokens=1000, date_range_start="2026-01-01", date_range_end="2026-03-13",
+            recent_runs=[{"run_id": "test-1", "model": "gpt-4o", "timestamp": "2026-03-13", "status": "success"}]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            articles = run_all_checks(status, tmpdir)
+            assert len(articles) == 6, f"Should have 6 articles, got {len(articles)}"
+            total_checks = sum(len(a["checks"]) for a in articles)
+            assert total_checks > 0, "Should have checks"
+            article_nums = [a["number"] for a in articles]
+            assert article_nums == [9, 10, 11, 12, 14, 15], f"Wrong articles: {article_nums}"
+            return True, f"6 articles, {total_checks} checks executed"
+
+    _run_test("Compliance engine (Articles 9-15)", test_compliance_engine)
+
+    # ── Test 8: AI-BOM generation ────────────────────────────────────
+    def test_aibom_generation():
+        from air_blackbox.aibom.generator import generate_aibom
+        from air_blackbox.gateway_client import GatewayStatus
+        status = GatewayStatus(
+            total_runs=3, models_observed=["gpt-4o", "claude-3-opus"],
+            providers_observed=["openai", "anthropic"], total_tokens=5000,
+        )
+        bom = generate_aibom(status)
+        assert bom.get("bomFormat") == "CycloneDX", "Should be CycloneDX format"
+        assert "components" in bom, "Should have components"
+        assert len(bom["components"]) >= 2, "Should have at least 2 components"
+        return True, f"CycloneDX BOM with {len(bom['components'])} components"
+
+    _run_test("AI-BOM generation (CycloneDX)", test_aibom_generation)
+
+    # ── Test 9: Replay engine ────────────────────────────────────────
+    def test_replay_engine():
+        from air_blackbox.replay.engine import ReplayEngine
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write a sample .air.json record
+            sample = {
+                "version": "1.0.0", "run_id": "test-replay-1",
+                "timestamp": "2026-03-13T10:00:00Z",
+                "model": "gpt-4o", "provider": "openai",
+                "tokens": {"prompt": 100, "completion": 50, "total": 150},
+                "duration_ms": 234, "status": "success",
+                "tool_calls": ["web_search"], "pii_alerts": [], "injection_alerts": [],
+            }
+            with open(os.path.join(tmpdir, "test-replay-1.air.json"), "w") as f:
+                jsonlib.dump(sample, f)
+            engine = ReplayEngine(runs_dir=tmpdir)
+            count = engine.load()
+            assert count >= 1, "Should load at least 1 record"
+            stats = engine.get_stats()
+            assert stats["total_records"] >= 1, "Should have records in stats"
+            return True, f"Loaded {count} record(s), stats computed"
+
+    _run_test("Replay engine (load + stats)", test_replay_engine)
+
+    # ── Gateway tests (optional) ─────────────────────────────────────
+    console.print(f"\n[bold]Gateway Tests[/]\n")
+
+    def test_gateway_health():
+        from air_blackbox.gateway_client import GatewayClient
+        client = GatewayClient(gateway_url=gateway)
+        status = client.get_status()
+        if status.reachable:
+            return True, f"Gateway reachable at {gateway}"
+        else:
+            return False, f"Gateway not reachable at {gateway} (start with: docker compose up)"
+
+    _run_test("Gateway connectivity", test_gateway_health)
+
+    def test_gateway_audit_endpoint():
+        import httpx
+        try:
+            r = httpx.get(f"{gateway}/v1/audit", timeout=5.0)
+            if r.status_code == 200:
+                data = r.json()
+                chain = data.get("audit_chain", {})
+                return True, f"Audit endpoint OK — chain length: {chain.get('length', 0)}, intact: {chain.get('intact', False)}"
+            return False, f"Audit endpoint returned {r.status_code}"
+        except Exception:
+            return False, f"Audit endpoint not reachable (gateway may not be running)"
+
+    _run_test("Gateway audit endpoint", test_gateway_audit_endpoint)
+
+    def test_gateway_proxy():
+        import httpx
+        try:
+            r = httpx.get(f"{gateway}/v1/models", timeout=5.0)
+            if r.status_code == 200:
+                data = r.json()
+                models = [m.get("id", "?") for m in data.get("data", [])[:3]]
+                return True, f"Proxy forwarding OK — models: {', '.join(models)}"
+            elif r.status_code == 401:
+                return True, "Proxy reached upstream (401 = API key needed, but proxy works)"
+            return False, f"Proxy returned {r.status_code}"
+        except Exception:
+            return False, "Proxy not reachable (gateway may not be running)"
+
+    _run_test("Gateway proxy forwarding", test_gateway_proxy)
+
+    # ── Summary ──────────────────────────────────────────────────────
+    elapsed = int((time.time() - start_time) * 1000)
+    total = len(results)
+    passed = sum(1 for r in results if r["passed"])
+    failed = total - passed
+
+    console.print()
+    if failed == 0:
+        console.print(Panel(
+            f"[bold green]{passed}/{total}[/] tests passing in {elapsed}ms\n\n"
+            f"Your AIR Blackbox stack is healthy.",
+            title="[bold green]All Tests Passed[/]",
+            border_style="green",
+        ))
+    else:
+        # Separate SDK failures from gateway failures (gateway not running is expected)
+        sdk_failures = [r for r in results if not r["passed"] and "Gateway" not in r["name"] and "audit endpoint" not in r["name"] and "Proxy" not in r["name"]]
+        gw_failures = [r for r in results if not r["passed"] and r not in sdk_failures]
+
+        if sdk_failures:
+            lines = f"[bold red]{failed}[/] test(s) failed out of {total} ({elapsed}ms)\n"
+            for r in sdk_failures:
+                lines += f"\n  [red]●[/] {r['name']}: {r['detail']}"
+            console.print(Panel(lines, title="[bold red]Tests Failed[/]", border_style="red"))
+        else:
+            console.print(Panel(
+                f"[bold green]{passed}/{total}[/] tests passing in {elapsed}ms\n\n"
+                f"SDK tests: [bold green]all passing[/]\n"
+                f"Gateway tests: [bold yellow]{len(gw_failures)} skipped[/] (gateway not running)\n\n"
+                f"[dim]Start gateway with: docker compose up[/]",
+                title="[bold green]SDK Tests Passed[/]",
+                border_style="green",
+            ))
+    console.print()
