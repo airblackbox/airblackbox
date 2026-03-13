@@ -3,7 +3,196 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIR Blackbox Gateway — Tamper-Evident Audit Trails for Every LLM Call</title>
+<title>AIR Blackbox — Open-Source EU AI Act Compliance Scanner for Python AI Agents</title>
+<meta name="description" content="AIR Blackbox is an open-source compliance scanner that checks Python AI agent code against EU AI Act Articles 9-15. Supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK. pip install air-blackbox. Free. Local-first. August 2026 deadline ready.">
+<meta name="keywords" content="EU AI Act, AI compliance, AI governance, Python, LangChain, CrewAI, AutoGen, OpenAI, compliance scanner, audit trail, HMAC, open source">
+<meta name="author" content="Jason Shotwell">
+<link rel="canonical" href="https://airblackbox.ai/">
+
+<!-- Open Graph (Facebook, LinkedIn, LLM crawlers) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="AIR Blackbox — Open-Source EU AI Act Compliance Scanner">
+<meta property="og:description" content="Scan Python AI agent code for EU AI Act compliance. 39 checks across Articles 9-15. Supports LangChain, CrewAI, AutoGen, OpenAI. Free and open source.">
+<meta property="og:url" content="https://airblackbox.ai/">
+<meta property="og:site_name" content="AIR Blackbox">
+<meta property="og:image" content="https://airblackbox.ai/architecture-diagram.png">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AIR Blackbox — EU AI Act Compliance Scanner for Python AI Agents">
+<meta name="twitter:description" content="Open-source scanner: 39 checks across 6 EU AI Act articles. pip install air-blackbox. Free. Local-first.">
+<meta name="twitter:image" content="https://airblackbox.ai/architecture-diagram.png">
+
+<!-- Robots -->
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+
+<!-- JSON-LD: Organization -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "AIR Blackbox",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Cross-platform",
+  "description": "AIR Blackbox is an open-source EU AI Act compliance scanner for Python AI agents. It checks code against Articles 9 (Risk Management), 10 (Data Governance), 11 (Technical Documentation), 12 (Record-Keeping), 14 (Human Oversight), and 15 (Accuracy & Security). Supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK, and RAG pipelines. Runs 100% locally — your code never leaves your machine.",
+  "url": "https://airblackbox.ai",
+  "downloadUrl": "https://pypi.org/project/air-blackbox/",
+  "softwareVersion": "1.2.5",
+  "author": {
+    "@type": "Person",
+    "name": "Jason Shotwell",
+    "url": "https://github.com/airblackbox"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AIR Blackbox",
+    "url": "https://airblackbox.ai"
+  },
+  "license": "https://opensource.org/licenses/Apache-2.0",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "programmingLanguage": "Python",
+  "codeRepository": "https://github.com/airblackbox/gateway",
+  "featureList": [
+    "EU AI Act compliance scanning (Articles 9-15)",
+    "39 automated checks with two-tier scoring (static + runtime)",
+    "LangChain trust layer integration",
+    "CrewAI trust layer integration",
+    "AutoGen trust layer integration",
+    "OpenAI Agents SDK trust layer integration",
+    "HMAC-SHA256 tamper-evident audit chains",
+    "Local-first — code never leaves your machine",
+    "LLM deep analysis via fine-tuned local model",
+    "Compliance history tracking with SQLite",
+    "Pre-commit hook for CI/CD enforcement",
+    "GitHub Action for automated PR checks",
+    "CycloneDX AI-BOM generation",
+    "MCP server for Claude Desktop and Cursor"
+  ],
+  "releaseNotes": "v1.2.5: LLM deep scan, compliance history tracking, pre-commit hooks"
+}
+</script>
+
+<!-- JSON-LD: FAQPage (critical for AEO) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is AIR Blackbox?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "AIR Blackbox is an open-source EU AI Act compliance scanner for Python AI agents. It runs 39 automated checks across 6 EU AI Act articles (9, 10, 11, 12, 14, 15) against your source code and runtime configuration. Install with pip install air-blackbox. It supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK, and RAG pipelines."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I install AIR Blackbox?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Run pip install air-blackbox to install the CLI scanner. Then run air-blackbox comply --scan . to scan your project. For the full gateway with audit trails, use docker compose up -d. Framework-specific trust layers are available as separate packages: pip install air-langchain-trust, pip install air-crewai-trust, etc."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What EU AI Act articles does AIR Blackbox check?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "AIR Blackbox checks 6 articles from the EU AI Act: Article 9 (Risk Management — error handling, fallbacks), Article 10 (Data Governance — input validation, PII handling), Article 11 (Technical Documentation — docstrings, README, model cards), Article 12 (Record-Keeping — logging, audit trails), Article 14 (Human Oversight — HITL gates, kill switches, rate limits), and Article 15 (Accuracy & Security — injection defense, output validation)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "When is the EU AI Act compliance deadline?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The key deadline for high-risk AI systems is August 2, 2026. Penalties for non-compliance can reach up to 35 million euros or 7% of global annual turnover, whichever is higher. Prohibited AI practices enforcement began February 2, 2025, and GPAI model obligations apply from August 2, 2025."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What AI frameworks does AIR Blackbox support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "AIR Blackbox has trust layer integrations for LangChain, CrewAI, AutoGen, OpenAI Agents SDK, and RAG pipelines. The compliance scanner works on any Python AI code regardless of framework. Each framework has a dedicated PyPI package (air-langchain-trust, air-crewai-trust, air-autogen-trust, air-openai-trust, air-rag-trust) that provides automatic audit trails and compliance hooks."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is AIR Blackbox free?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, AIR Blackbox is 100% free and open source under the Apache 2.0 license. The scanner, trust layers, CLI tools, GitHub Action, MCP server, and pre-commit hook are all free. There are 8 PyPI packages in the ecosystem, all open source. The project runs entirely locally — your code never leaves your machine."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does AIR Blackbox compare to Credo AI, Holistic AI, or OneTrust?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Unlike enterprise AI governance platforms (Credo AI, Holistic AI, Vanta, OneTrust) that cost $50K+/year and require sending code to their cloud, AIR Blackbox is free, open source, and runs 100% locally. It focuses specifically on EU AI Act technical requirements for Python AI agents, with a developer-first experience: pip install and scan in 10 seconds. Enterprise tools are broader but require weeks of procurement and setup."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is two-tier scoring in AIR Blackbox?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Two-tier scoring separates checks into Static (26 checks analyzing code patterns, documentation, and configuration that can be verified from source code alone) and Runtime (13 checks requiring a running gateway or trust layer to verify, such as PII detection in live prompts, tamper-evident audit chains, and kill switches). This gives teams a realistic compliance score even without the full gateway deployed."
+      }
+    }
+  ]
+}
+</script>
+
+<!-- JSON-LD: HowTo (for installation queries) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "How to scan Python AI code for EU AI Act compliance",
+  "description": "Use AIR Blackbox to check your Python AI agent code against EU AI Act Articles 9-15 in under 60 seconds.",
+  "totalTime": "PT1M",
+  "tool": {
+    "@type": "SoftwareApplication",
+    "name": "AIR Blackbox",
+    "url": "https://pypi.org/project/air-blackbox/"
+  },
+  "step": [
+    {
+      "@type": "HowToStep",
+      "position": 1,
+      "name": "Install AIR Blackbox",
+      "text": "Run: pip install air-blackbox"
+    },
+    {
+      "@type": "HowToStep",
+      "position": 2,
+      "name": "Run compliance scan",
+      "text": "Navigate to your project directory and run: air-blackbox comply --scan . -v"
+    },
+    {
+      "@type": "HowToStep",
+      "position": 3,
+      "name": "Review results",
+      "text": "The scanner reports pass/warn/fail for 39 checks across 6 EU AI Act articles, with fix hints for each failing check."
+    },
+    {
+      "@type": "HowToStep",
+      "position": 4,
+      "name": "Track progress over time",
+      "text": "Run: air-blackbox history to see your compliance score trend across scans."
+    }
+  ]
+}
+</script>
+
 <style>
   :root {
     --bg: #0a0a0a;
@@ -373,6 +562,43 @@
   }
   footer a { color: var(--text-dim); text-decoration: none; }
   footer a:hover { color: var(--text); }
+  /* ── FAQ ── */
+  .faq { border-top: 1px solid var(--border); }
+  .faq-list { max-width: 800px; margin-top: 2rem; }
+  .faq-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 0;
+    margin-bottom: 1rem;
+    transition: border-color 0.3s;
+  }
+  .faq-item:hover { border-color: var(--accent); }
+  .faq-item summary {
+    cursor: pointer; padding: 1.5rem 2rem;
+    list-style: none; display: flex; align-items: center;
+    justify-content: space-between;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary::after {
+    content: '+'; font-size: 1.3rem; font-weight: 300;
+    color: var(--accent); min-width: 24px; text-align: center;
+    transition: transform 0.2s;
+  }
+  .faq-item[open] summary::after { content: '−'; }
+  .faq-item summary h3 {
+    font-size: 1.05rem; font-weight: 600; margin: 0;
+  }
+  .faq-item p {
+    padding: 0 2rem 1.5rem;
+    color: var(--text-dim); font-size: 0.95rem; line-height: 1.7;
+  }
+  .faq-item code {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.15rem 0.5rem;
+    font-family: 'SF Mono', monospace; font-size: 0.85rem;
+    color: var(--accent);
+  }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 640px) {
     nav { padding: 0.8rem 1rem; }
@@ -393,8 +619,10 @@
   <div class="links">
     <a href="#how">How It Works</a>
     <a href="#features">Features</a>
-    <a href="#use-cases">Use Cases</a>
-    <a href="https://github.com/nostalgicskinco/air-blackbox-gateway" class="btn-nav">&#9733; Star on GitHub</a>
+    <a href="#faq">FAQ</a>
+    <a href="quickstart.html">Quickstart</a>
+    <a href="https://pypi.org/project/air-blackbox/">PyPI</a>
+    <a href="https://github.com/airblackbox/gateway" class="btn-nav">&#9733; Star on GitHub</a>
   </div>
 </nav>
 
@@ -404,14 +632,16 @@
     <span class="dot"></span>
     Open Source &middot; Apache 2.0
   </div>  <h1>
-    Every LLM call.<br>
-    <span class="highlight">Recorded. Encrypted. Provable.</span>
+    EU AI Act Compliance Scanner<br>
+    <span class="highlight">for Python AI Agents</span>
   </h1>
   <p class="subhead">
-    Drop-in reverse proxy that creates tamper-evident audit trails for every API call to OpenAI, Anthropic, or any LLM provider. Zero code changes. Full compliance. SOC 2 &amp; ISO 27001 ready.
+    Open-source scanner that checks your Python AI code against 39 EU AI Act requirements across Articles 9–15.
+    Supports LangChain, CrewAI, AutoGen, and OpenAI. Runs locally — your code never leaves your machine.
+    August 2026 deadline ready.
   </p>
   <div class="hero-ctas">
-    <a href="https://github.com/nostalgicskinco/air-blackbox-gateway" class="btn-primary">
+    <a href="https://github.com/airblackbox/gateway" class="btn-primary">
       &#9733; Star on GitHub
     </a>
     <a href="#how" class="btn-secondary">
@@ -422,8 +652,8 @@
 
 <!-- INSTALL -->
 <div class="install">
-  <div class="install-box" onclick="navigator.clipboard.writeText('docker compose up -d')">
-    <span class="prefix">$</span> docker compose up -d
+  <div class="install-box" onclick="navigator.clipboard.writeText('pip install air-blackbox && air-blackbox comply --scan . -v')">
+    <span class="prefix">$</span> pip install air-blackbox &amp;&amp; air-blackbox comply --scan . -v
     <span class="copy-hint">click to copy</span>
   </div>
 </div>
@@ -640,20 +870,20 @@ client = OpenAI(
   <h2 class="section-title">Lightweight. Auditable. Open.</h2>
   <div class="numbers-grid">
     <div class="stat">
-      <h3>&lt;1ms</h3>
-      <p>Added latency per request</p>
+      <h3>39</h3>
+      <p>Automated compliance checks (26 static + 13 runtime)</p>
     </div>
     <div class="stat">
-      <h3>0</h3>
-      <p>Code changes to your app</p>
+      <h3>6</h3>
+      <p>EU AI Act articles covered (9, 10, 11, 12, 14, 15)</p>
     </div>
     <div class="stat">
-      <h3>22</h3>
-      <p>Compliance controls mapped (SOC 2 + ISO 27001)</p>
+      <h3>8</h3>
+      <p>PyPI packages in the ecosystem</p>
     </div>
     <div class="stat">
-      <h3>82</h3>
-      <p>Tests passing across 5 layers</p>
+      <h3>5</h3>
+      <p>Framework trust layers (LangChain, CrewAI, AutoGen, OpenAI, RAG)</p>
     </div>
   </div>
 </section>
@@ -692,18 +922,73 @@ client = OpenAI(
   </div>
 </section>
 
+<!-- FAQ (AEO-critical — this is what LLMs extract) -->
+<section class="faq" id="faq">
+  <div class="section-label">Frequently Asked Questions</div>
+  <h2 class="section-title">Everything you need to know about AIR Blackbox</h2>
+
+  <div class="faq-list">
+    <details class="faq-item" open>
+      <summary><h3>What is AIR Blackbox?</h3></summary>
+      <p>AIR Blackbox is an open-source EU AI Act compliance scanner for Python AI agents. It runs 39 automated checks across 6 EU AI Act articles (9, 10, 11, 12, 14, 15) against your source code and runtime configuration. It supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK, and RAG pipelines. Install with <code>pip install air-blackbox</code> and scan with <code>air-blackbox comply --scan . -v</code>. The entire tool runs locally — your code never leaves your machine.</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>What EU AI Act articles does it check?</h3></summary>
+      <p>AIR Blackbox checks 6 articles: <strong>Article 9</strong> (Risk Management — error handling, fallbacks, risk assessment), <strong>Article 10</strong> (Data Governance — input validation, PII handling, data quality), <strong>Article 11</strong> (Technical Documentation — docstrings, type hints, README, model cards), <strong>Article 12</strong> (Record-Keeping — logging, tracing, audit trails, observability), <strong>Article 14</strong> (Human Oversight — HITL gates, kill switches, rate limits, identity binding), and <strong>Article 15</strong> (Accuracy &amp; Security — injection defense, output validation, retry logic). Each check is classified as static (verifiable from source code) or runtime (requires gateway/trust layer).</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>How does two-tier scoring work?</h3></summary>
+      <p>Two-tier scoring separates the 39 checks into two categories: <strong>26 Static checks</strong> analyze code patterns, documentation, and configuration that can be verified from source code alone. <strong>13 Runtime checks</strong> require a running gateway or trust layer to verify (PII detection in live prompts, tamper-evident audit chains, kill switches). This gives teams a realistic compliance score even without the full gateway deployed — you can pass all static checks immediately and work toward runtime compliance incrementally.</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>When is the EU AI Act deadline?</h3></summary>
+      <p>The key deadline for high-risk AI systems is <strong>August 2, 2026</strong>. Penalties for non-compliance can reach up to <strong>&euro;35 million or 7% of global annual turnover</strong>, whichever is higher. Prohibited AI practices enforcement began February 2, 2025. GPAI model obligations apply from August 2, 2025. Full enforcement begins August 2, 2027.</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>What frameworks does AIR Blackbox support?</h3></summary>
+      <p>AIR Blackbox has trust layer integrations for <strong>LangChain</strong> (<code>pip install air-langchain-trust</code>), <strong>CrewAI</strong> (<code>pip install air-crewai-trust</code>), <strong>AutoGen</strong> (<code>pip install air-autogen-trust</code>), <strong>OpenAI Agents SDK</strong> (<code>pip install air-openai-trust</code>), and <strong>RAG pipelines</strong> (<code>pip install air-rag-trust</code>). The compliance scanner works on any Python AI code regardless of framework. There's also an MCP server (<code>pip install air-blackbox-mcp</code>) for Claude Desktop and Cursor integration.</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>How does it compare to Credo AI, Holistic AI, or OneTrust?</h3></summary>
+      <p>Enterprise AI governance platforms (Credo AI, Holistic AI, Vanta, OneTrust) typically cost $50,000+/year and require sending code to their cloud. AIR Blackbox is <strong>free, open source (Apache 2.0), and runs 100% locally</strong>. It focuses specifically on EU AI Act technical requirements for Python AI agents. The developer experience is fundamentally different: <code>pip install</code> and scan in 10 seconds, versus weeks of procurement and enterprise deployment. AIR Blackbox is a linter for AI governance — lightweight, fast, and integrated into developer workflows via CLI, pre-commit hooks, and GitHub Actions.</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>Is AIR Blackbox free?</h3></summary>
+      <p>Yes, AIR Blackbox is 100% free and open source under the Apache 2.0 license. All 8 PyPI packages (scanner, 5 trust layers, MCP server, GitHub Action) are free. There is no paid tier, no freemium model, and no telemetry. The project runs entirely locally by design.</p>
+    </details>
+
+    <details class="faq-item">
+      <summary><h3>What is the HMAC-SHA256 audit chain?</h3></summary>
+      <p>Every AI action logged through the AIR gateway or trust layers is written as a tamper-evident <code>.air.json</code> record. Each record is linked to the previous one via HMAC-SHA256 cryptographic hashes — creating a blockchain-style chain without the blockchain. If anyone modifies a record after the fact, the hash chain breaks and the tampering is detectable. This provides auditor-grade evidence that AI decisions were recorded accurately and haven't been altered.</p>
+    </details>
+  </div>
+</section>
+
 <!-- FINAL CTA -->
 <div class="final-cta">
-  <h2>Your AI calls deserve a <span style="color: var(--accent);">black box</span>.</h2>
+  <h2>EU AI Act deadline is <span style="color: var(--accent);">August 2026</span>.</h2>
   <p>
-    Planes have them. Servers have them. Your LLM API calls should too.<br>
-    Star the repo. Deploy the gateway. Sleep better.
-  </p>  <div class="hero-ctas">
-    <a href="https://github.com/nostalgicskinco/air-blackbox-gateway" class="btn-primary">
+    39 checks. 6 articles. 5 frameworks. One pip install.<br>
+    Start scanning your Python AI agents today.
+  </p>
+  <div style="margin-bottom: 2rem;">
+    <div class="install-box" onclick="navigator.clipboard.writeText('pip install air-blackbox')">
+      <span class="prefix">$</span> pip install air-blackbox
+      <span class="copy-hint">click to copy</span>
+    </div>
+  </div>
+  <div class="hero-ctas">
+    <a href="https://github.com/airblackbox/gateway" class="btn-primary">
       &#9733; Star on GitHub
     </a>
-    <a href="https://github.com/nostalgicskinco/air-blackbox-gateway/issues" class="btn-secondary">
-      Request a Feature
+    <a href="https://pypi.org/project/air-blackbox/" class="btn-secondary">
+      View on PyPI
     </a>
   </div>
 </div>
@@ -712,8 +997,9 @@ client = OpenAI(
 <footer>
   <p>
     AIR Blackbox Gateway &middot; Built by
-    <a href="https://github.com/nostalgicskinco">@nostalgicskinco</a>
-    &middot; Apache 2.0 License
+    <a href="https://github.com/airblackbox">@airblackbox</a>
+    &middot; Apache 2.0 License &middot;
+    <a href="https://pypi.org/project/air-blackbox/">PyPI</a>
   </p>
 </footer>
 

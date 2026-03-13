@@ -1,2 +1,3 @@
 [console_scripts]
 air-blackbox = air_blackbox.cli:main
+air-blackbox-comply-strict = air_blackbox.precommit:main

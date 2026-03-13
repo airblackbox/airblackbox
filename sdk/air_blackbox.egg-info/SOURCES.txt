@@ -6,6 +6,7 @@ sdk/air_blackbox/__init__.py
 sdk/air_blackbox/cli.py
 sdk/air_blackbox/demo_generator.py
 sdk/air_blackbox/gateway_client.py
+sdk/air_blackbox/precommit.py
 sdk/air_blackbox.egg-info/PKG-INFO
 sdk/air_blackbox.egg-info/SOURCES.txt
 sdk/air_blackbox.egg-info/dependency_links.txt
@@ -17,7 +18,9 @@ sdk/air_blackbox/aibom/generator.py
 sdk/air_blackbox/aibom/shadow.py
 sdk/air_blackbox/compliance/__init__.py
 sdk/air_blackbox/compliance/code_scanner.py
+sdk/air_blackbox/compliance/deep_scan.py
 sdk/air_blackbox/compliance/engine.py
+sdk/air_blackbox/compliance/history.py
 sdk/air_blackbox/export/__init__.py
 sdk/air_blackbox/export/bundle.py
 sdk/air_blackbox/replay/__init__.py
