@@ -68,7 +68,9 @@ def _find_python_files(scan_path: str) -> List[str]:
     skip_dirs = {
         "node_modules", ".git", "__pycache__", ".venv", "venv",
         "env", ".env", ".tox", ".mypy_cache", ".pytest_cache",
-        "dist", "build", "egg-info", ".eggs", "site-packages"
+        "dist", "build", "egg-info", ".eggs", "site-packages",
+        # Learned from LlamaIndex: community packs are being deleted and not maintained
+        "deprecated", "archived",
     }
     py_files = []
     for root, dirs, files in os.walk(scan_path):
@@ -91,12 +93,21 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
         r'Anthropic\(',
     ]
     combined = "|".join(llm_call_patterns)
+    # Framework-level error handling patterns (pipelines, workflows, etc.)
+    # Learned from Haystack: frameworks often handle errors at pipeline level, not per-file
+    framework_error_patterns = [
+        r'Pipeline.*error', r'pipeline.*except', r'PipelineError',
+        r'ComponentError', r'NodeError', r'StepError',
+        r'on_error', r'error_handler', r'error_callback',
+        r'handle_error', r'error_policy', r'retry_policy',
+    ]
+    framework_combined = "|".join(framework_error_patterns)
     files_with_llm_calls = []
     files_with_error_handling = []
     for fp, content in file_contents.items():
         if re.search(combined, content):
             files_with_llm_calls.append(fp)
-            if re.search(r'\btry\b.*?\bexcept\b', content, re.DOTALL):
+            if re.search(r'\btry\b.*?\bexcept\b', content, re.DOTALL) or re.search(framework_combined, content, re.IGNORECASE):
                 files_with_error_handling.append(fp)
     if not files_with_llm_calls:
         return [CodeFinding(article=9, name="LLM call error handling",
@@ -213,7 +224,18 @@ def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'opentelemetry', r'otel', r'trace_id', r'span_id', r'run_id', r'request_id', r'correlation_id', r'langsmith', r'langfuse', r'helicone', r'arize', r'wandb', r'mlflow', r'callbacks']
+    # Core tracing patterns — instrumentation is the modern standard
+    # (learned from LlamaIndex: callback_manager is deprecated in favor of instrumentation module)
+    patterns = [
+        r'opentelemetry', r'otel', r'trace_id', r'span_id', r'run_id',
+        r'request_id', r'correlation_id', r'langsmith', r'langfuse',
+        r'helicone', r'arize', r'wandb', r'mlflow',
+        r'instrumentation', r'instrument_module', r'dispatcher',
+        r'event_handler', r'event_bus', r'event_emitter',
+        r'TracerProvider', r'tracer\.start_span', r'tracing_enabled',
+        r'CONTENT_TRACING_ENABLED',
+        r'callbacks',  # kept for backward compat detection but lower signal
+    ]
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     if hits:
@@ -224,7 +246,19 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'human_in_the_loop', r'human_approval', r'require_approval', r'approval_gate', r'require_confirmation', r'confirmation_gate', r'confirm.*action', r'ask_human', r'human_input', r'HumanApprovalCallbackHandler', r'human_feedback', r'manual_review', r'approval_required', r'allow_human', r'human_oversight']
+    # Learned from Haystack: confirmation_strategy and confirmation_policy are real HITL patterns
+    # Learned from CrewAI: allow_delegation is a crew-level oversight mechanism
+    patterns = [
+        r'human_in_the_loop', r'human_approval', r'require_approval',
+        r'approval_gate', r'require_confirmation', r'confirmation_gate',
+        r'confirm.*action', r'ask_human', r'human_input',
+        r'HumanApprovalCallbackHandler', r'human_feedback',
+        r'manual_review', r'approval_required', r'allow_human',
+        r'human_oversight',
+        r'confirmation_strategy', r'confirmation_polic',  # Haystack HITL
+        r'allow_delegation',  # CrewAI delegation oversight
+        r'interrupt_before', r'interrupt_after',  # LangGraph HITL
+    ]
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     if hits:
@@ -257,7 +291,18 @@ def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]
 
 
 def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'prompt.?injection', r'sql.?injection', r'inject.*(?:attack|detect|prevent|filter)', r'sanitize', r'escape_prompt', r'guardrail', r'content_filter', r'moderation', r'safety_check', r'prompt_guard', r'nemo_guardrails', r'rebuff', r'lakera', r'system_prompt.*?boundary']
+    # Learned from CrewAI: hallucination_guardrail and llm_guardrail are real defense patterns
+    patterns = [
+        r'prompt.?injection', r'sql.?injection',
+        r'inject.*(?:attack|detect|prevent|filter)',
+        r'sanitize', r'escape_prompt', r'guardrail',
+        r'content_filter', r'moderation', r'safety_check',
+        r'prompt_guard', r'nemo_guardrails', r'rebuff', r'lakera',
+        r'system_prompt.*?boundary',
+        r'hallucination_guardrail', r'llm_guardrail',  # CrewAI built-in
+        r'output_guardrail', r'input_guardrail',  # Generic guardrail patterns
+        r'trust_policy', r'verify_trust', r'min_trust_score',  # LlamaIndex AgentMesh
+    ]
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     danger_patterns = [r'f".*\{.*input.*\}.*"', r'\.format\(.*input', r'user_message.*=.*input\(']
@@ -278,7 +323,14 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
 
 
 def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'output_parser', r'OutputParser', r'PydanticOutputParser', r'JsonOutputParser', r'parse_output', r'validate_output', r'response_model', r'structured_output', r'output_schema', r'response_format']
+    # Learned from CrewAI: output_pydantic enforces structured LLM responses at the task level
+    patterns = [
+        r'output_parser', r'OutputParser', r'PydanticOutputParser',
+        r'JsonOutputParser', r'parse_output', r'validate_output',
+        r'response_model', r'structured_output', r'output_schema',
+        r'response_format', r'output_pydantic', r'output_json',  # CrewAI task-level
+        r'expected_output',  # CrewAI task output spec
+    ]
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
     if hits:
@@ -294,12 +346,17 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
 
 def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if agent actions are bound to the user who authorized them."""
+    # Learned from Haystack: user_id in memory stores is real identity binding for per-user memory scoping
+    # Learned from CrewAI: Fingerprint system provides UUID-based agent identity
     identity_binding_patterns = [
         r'user_id', r'user_email', r'authorized_by', r'delegated_by',
         r'on_behalf_of', r'acting_as', r'user_context', r'auth_context',
         r'identity_token', r'delegation_token', r'agent_user_binding',
         r'x-user-id', r'X-User-Id', r'user_identity',
         r'memory_store.*user', r'store.*memories.*user',
+        r'retrieve_memories.*user', r'add_memories.*user',  # Haystack memory store
+        r'Fingerprint', r'agent_fingerprint', r'agent_identity',  # CrewAI identity
+        r'AgentCard',  # CrewAI A2A identity
     ]
     combined = "|".join(identity_binding_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
@@ -351,14 +408,19 @@ def _check_token_expiry_revocation(file_contents: dict, scan_path: str) -> List[
 
 def _check_action_audit_trail(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if agent ACTIONS (not just LLM calls) are logged with context."""
+    # Learned from Haystack: CONTENT_TRACING_ENABLED + logging_tracer = production audit capability
+    # Learned from CrewAI: event bus with typed events (agent_events, crew_events, etc.) = audit trail
     action_log_patterns = [
         r'action_log', r'audit_trail', r'audit_log', r'log_action',
         r'record_action', r'action_history', r'event_log',
         r'activity_log', r'action_record', r'decision_log',
         r'agent_action', r'tool_call.*log', r'log.*tool_call',
         r'execution_log', r'operation_log',
-        r'CONTENT_TRACING_ENABLED', r'logging_tracer',
+        r'CONTENT_TRACING_ENABLED', r'logging_tracer',  # Haystack production tracing
         r'tool_invocation.*log', r'log.*tool_invocation',
+        r'agent_events', r'crew_events', r'tool_usage_events',  # CrewAI event bus
+        r'llm_events', r'flow_events', r'system_events',  # CrewAI event types
+        r'emit_event', r'on_event', r'event_handler',  # Generic event bus patterns
     ]
     combined = "|".join(action_log_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
@@ -372,6 +434,8 @@ def _check_action_audit_trail(file_contents: dict, scan_path: str) -> List[CodeF
 
 def _check_action_boundaries(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if there are limits on what actions an agent can take."""
+    # Learned from Haystack: human_in_the_loop/policies.py is the real action boundary system
+    # Learned from Haystack: is_allowed in serialization.py is deserialization safety, NOT action boundaries
     boundary_patterns = [
         r'allowed_tools', r'tool_whitelist', r'blocked_tools',
         r'allowed_actions', r'action_filter', r'action_boundary',
@@ -380,9 +444,13 @@ def _check_action_boundaries(file_contents: dict, scan_path: str) -> List[CodeFi
         r'tool_filter', r'enabled_tools', r'disabled_tools',
         r'human_in_the_loop.*polic', r'confirmation_polic',
         r'approval_polic', r'tool_allowlist',
+        r'action_polic', r'execution_polic',  # Haystack policy patterns
     ]
     combined = "|".join(boundary_patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    # Exclude serialization files — is_allowed in serialization is deserialization safety, not action boundaries
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)
+            and 'serializ' not in os.path.basename(fp).lower()]
     if hits:
         return [CodeFinding(article=14, name="Agent action boundaries",
             status="pass", evidence=f"Action boundary controls found in {len(hits)} file(s)")]
