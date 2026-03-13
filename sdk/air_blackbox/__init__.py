@@ -11,7 +11,7 @@ One install. Four commands. 79% automated compliance.
     air-blackbox export      # Signed evidence bundle for auditors
 """
 
-__version__ = "1.2.5"
+__version__ = "1.2.6"
 __all__ = ["AirBlackbox", "AirTrust"]
 
 
@@ -91,6 +91,9 @@ class AirTrust:
         elif framework == "autogen":
             from air_blackbox.trust.autogen import attach_trust
             return attach_trust(agent, self.gateway_url)
+        elif framework == "claude_agent":
+            from air_blackbox.trust.claude_agent import attach_trust
+            return attach_trust(agent, self.gateway_url)
         else:
             print(f"[AIR] Framework not auto-detected. Using generic wrapper.")
             return agent
@@ -109,5 +112,7 @@ class AirTrust:
             return "autogen"
         elif "google" in agent_type and "adk" in agent_type:
             return "adk"
+        elif "claude_agent_sdk" in agent_type or "claude_agent" in agent_type:
+            return "claude_agent"
 
         return "unknown"
