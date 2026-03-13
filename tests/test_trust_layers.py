@@ -375,16 +375,15 @@ def test_claude_text_extraction():
 
 def test_langchain_handler_writes_chained_records():
     """LangChain handler writes records with chain_hash."""
-    try:
-        from air_blackbox.trust.langchain import AirLangChainHandler
-    except (ImportError, Exception) as e:
-        if "langchain" in str(e).lower() or "LangChain" in str(e):
-            print("  SKIP  (langchain-core not installed)")
-            return
-        raise
+    from air_blackbox.trust.langchain import AirLangChainHandler
 
     with tempfile.TemporaryDirectory() as d:
-        handler = AirLangChainHandler(runs_dir=d)
+        try:
+            handler = AirLangChainHandler(runs_dir=d)
+        except ImportError as e:
+            if "langchain" in str(e).lower():
+                return  # Skip — langchain-core not installed
+            raise
 
         # Simulate LLM start + end
         handler.on_llm_start(
