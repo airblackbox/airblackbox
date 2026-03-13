@@ -138,7 +138,7 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
 
 
 def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'pii', r'redact', r'mask', r'anonymize', r'tokenize_pii', r'presidio', r'scrub', r'private', r'sensitive', r'data_protection', r'gdpr', r'personal_data']
+    patterns = [r'pii', r'redact', r'mask_(?:data|pii|email|ssn|name)', r'anonymize', r'tokenize_pii', r'presidio', r'scrub', r'private_data', r'private_info', r'sensitive_data', r'sensitive_field', r'data_protection', r'gdpr', r'personal_data']
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     if hits:
@@ -224,7 +224,7 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'human_in_the_loop', r'human_approval', r'require_approval', r'approval_gate', r'confirm', r'ask_human', r'human_input', r'HumanApprovalCallbackHandler', r'input\(', r'human_feedback', r'manual_review', r'approval_required']
+    patterns = [r'human_in_the_loop', r'human_approval', r'require_approval', r'approval_gate', r'require_confirmation', r'confirmation_gate', r'confirm.*action', r'ask_human', r'human_input', r'HumanApprovalCallbackHandler', r'human_feedback', r'manual_review', r'approval_required', r'allow_human', r'human_oversight']
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     if hits:
@@ -257,7 +257,7 @@ def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]
 
 
 def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'injection', r'sanitize', r'escape', r'guardrail', r'content_filter', r'moderation', r'safety_check', r'prompt_guard', r'nemo_guardrails', r'rebuff', r'lakera', r'system_prompt.*?boundary']
+    patterns = [r'prompt.?injection', r'sql.?injection', r'inject.*(?:attack|detect|prevent|filter)', r'sanitize', r'escape_prompt', r'guardrail', r'content_filter', r'moderation', r'safety_check', r'prompt_guard', r'nemo_guardrails', r'rebuff', r'lakera', r'system_prompt.*?boundary']
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     danger_patterns = [r'f".*\{.*input.*\}.*"', r'\.format\(.*input', r'user_message.*=.*input\(']
