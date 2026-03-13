@@ -46,14 +46,15 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
     from air_blackbox.compliance.engine import run_all_checks
     console.print("\n[bold blue]AIR Blackbox[/] — EU AI Act Compliance Check\n")
     with console.status("[bold green]Connecting to gateway..."):
-        client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir)
+        client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
         status = client.get_status()
     if status.reachable:
         console.print(f"  [green]●[/] Gateway connected at [bold]{gateway}[/]")
     else:
         console.print(f"  [red]●[/] Gateway not reachable at [bold]{gateway}[/]")
     if status.total_runs > 0:
-        console.print(f"  [green]●[/] [bold]{status.total_runs:,}[/] logged events ({', '.join(status.models_observed[:3])})")
+        src = "gateway" if status.reachable else "trust layer records"
+        console.print(f"  [green]●[/] [bold]{status.total_runs:,}[/] logged events from {src} ({', '.join(status.models_observed[:3])})")
     else:
         console.print(f"  [yellow]●[/] No traffic data found")
     console.print(f"  [dim]Scanning: {scan}[/]\n")
