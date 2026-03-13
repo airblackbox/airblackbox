@@ -83,14 +83,16 @@ def _check_article_9(status, scan_path, code_findings=None):
 
 def _check_article_10(status, scan_path, code_findings=None):
     checks = []
-    if status.reachable:
+    if status.reachable or (status.total_runs > 0 and status.audit_chain_intact):
+        src = "Gateway" if status.reachable else "Trust layer"
         if status.pii_detected_count > 0:
             checks.append(ComplianceCheck(name="PII detection in prompts", article=10, detection="auto", status="warn",
-                evidence=f"PII detected in {status.pii_detected_count} prompts", fix_hint="Enable prompt vault redaction",
+                evidence=f"{src} scanning active. PII detected in {status.pii_detected_count} prompt(s) across {status.total_runs} runs.",
+                fix_hint="Enable prompt vault redaction",
                 tier="runtime"))
         else:
             checks.append(ComplianceCheck(name="PII detection in prompts", article=10, detection="auto", status="pass",
-                evidence=f"Gateway active. No PII detected in {status.total_runs} requests.",
+                evidence=f"{src} scanning active. No PII detected in {status.total_runs} requests.",
                 tier="runtime"))
     else:
         checks.append(ComplianceCheck(name="PII detection in prompts", article=10, detection="auto",
@@ -157,6 +159,10 @@ def _check_article_12(status, scan_path, code_findings=None):
     if status.reachable and status.total_runs > 0:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="pass",
             evidence=f"Gateway active. {status.total_runs:,} events logged. Period: {status.date_range_start} to {status.date_range_end}.",
+            tier="runtime"))
+    elif status.total_runs > 0:
+        checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="pass",
+            evidence=f"Trust layer active. {status.total_runs:,} events logged. Period: {status.date_range_start} to {status.date_range_end}.",
             tier="runtime"))
     elif status.reachable:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="warn",
@@ -248,6 +254,10 @@ def _check_article_15(status, scan_path, code_findings=None):
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="pass",
             evidence=f"Gateway scanning for injection patterns. {status.injection_attempts} attempts detected." if status.injection_attempts > 0
             else "Gateway OTel pipeline scanning. No attempts detected.",
+            tier="runtime"))
+    elif status.total_runs > 0 and status.audit_chain_intact:
+        checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="pass",
+            evidence=f"Trust layer active with injection scanning. {status.injection_attempts} attempts detected in {status.total_runs} runs.",
             tier="runtime"))
     else:
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="fail",
