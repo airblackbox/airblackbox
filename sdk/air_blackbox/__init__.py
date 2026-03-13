@@ -11,7 +11,7 @@ One install. Four commands. 79% automated compliance.
     air-blackbox export      # Signed evidence bundle for auditors
 """
 
-__version__ = "1.2.6"
+__version__ = "1.3.0"
 __all__ = ["AirBlackbox", "AirTrust"]
 
 

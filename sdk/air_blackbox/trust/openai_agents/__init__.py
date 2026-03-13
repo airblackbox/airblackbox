@@ -46,12 +46,20 @@ class AirOpenAIWrapper:
         return getattr(self._client, name)
 
     def _write_record(self, record: dict):
+        """Write .air.json record with HMAC chain hash."""
         try:
-            fname = f"{record['run_id']}.air.json"
-            with open(os.path.join(self.runs_dir, fname), "w") as f:
-                json.dump(record, f, indent=2)
+            if not hasattr(self, '_chain'):
+                from air_blackbox.trust.chain import AuditChain
+                self._chain = AuditChain(runs_dir=self.runs_dir)
+            self._chain.write(record)
         except Exception:
-            pass  # Non-blocking
+            # Fallback: write without chain hash
+            try:
+                fname = f"{record['run_id']}.air.json"
+                with open(os.path.join(self.runs_dir, fname), "w") as f:
+                    json.dump(record, f, indent=2)
+            except Exception:
+                pass  # Non-blocking
 
 
 class _ChatProxy:
