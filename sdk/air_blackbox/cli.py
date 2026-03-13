@@ -725,6 +725,215 @@ def test(gateway, verbose):
 
     _run_test("Replay engine (load + stats)", test_replay_engine)
 
+    # ── Code Scanner Tests ───────────────────────────────────────────
+    console.print(f"\n[bold]Code Scanner Tests[/]\n")
+
+    def test_scanner_error_handling():
+        """Verify scanner detects try/except around LLM calls."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # File WITH error handling
+            with open(os.path.join(tmpdir, "good.py"), "w") as f:
+                f.write("from openai import OpenAI\nclient = OpenAI()\ntry:\n    client.chat.completions.create(model='gpt-4o')\nexcept Exception:\n    pass\n")
+            findings = scan_codebase(tmpdir)
+            eh = [f for f in findings if f.name == "LLM call error handling"]
+            assert len(eh) == 1, "Should find error handling check"
+            assert eh[0].status == "pass", f"Should pass, got {eh[0].status}"
+            return True, "Error handling detection working"
+
+    _run_test("Scanner: error handling detection", test_scanner_error_handling)
+
+    def test_scanner_no_error_handling():
+        """Verify scanner catches missing error handling."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "bad.py"), "w") as f:
+                f.write("from openai import OpenAI\nclient = OpenAI()\nclient.chat.completions.create(model='gpt-4o')\n")
+            findings = scan_codebase(tmpdir)
+            eh = [f for f in findings if f.name == "LLM call error handling"]
+            assert len(eh) == 1, "Should find error handling check"
+            assert eh[0].status == "fail", f"Should fail without try/except, got {eh[0].status}"
+            return True, "Missing error handling correctly flagged"
+
+    _run_test("Scanner: missing error handling", test_scanner_no_error_handling)
+
+    def test_scanner_tracing_patterns():
+        """Verify scanner detects modern tracing (instrumentation, event bus, OTel)."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "traced.py"), "w") as f:
+                f.write("from opentelemetry import trace\ntracer = trace.get_tracer(__name__)\nwith tracer.start_span('agent_call'):\n    pass\n")
+            findings = scan_codebase(tmpdir)
+            tr = [f for f in findings if f.name == "Tracing / observability"]
+            assert len(tr) == 1 and tr[0].status == "pass", "OTel tracing should pass"
+        # Test instrumentation (LlamaIndex pattern)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "instrumented.py"), "w") as f:
+                f.write("from llama_index.core.instrumentation import dispatcher\ndispatcher.add_event_handler(my_handler)\n")
+            findings = scan_codebase(tmpdir)
+            tr = [f for f in findings if f.name == "Tracing / observability"]
+            assert len(tr) == 1 and tr[0].status == "pass", "Instrumentation pattern should pass"
+        return True, "OTel + instrumentation patterns detected"
+
+    _run_test("Scanner: tracing patterns (OTel, instrumentation)", test_scanner_tracing_patterns)
+
+    def test_scanner_hitl_patterns():
+        """Verify scanner detects HITL patterns from multiple frameworks."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        patterns_to_test = [
+            ("haystack_hitl.py", "confirmation_strategy = 'always_ask'\n"),
+            ("crewai_hitl.py", "agent = Agent(allow_delegation=True)\n"),
+            ("langgraph_hitl.py", "workflow.add_node('human', interrupt_before=['action'])\n"),
+        ]
+        for fname, content in patterns_to_test:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with open(os.path.join(tmpdir, fname), "w") as f:
+                    f.write(content)
+                findings = scan_codebase(tmpdir)
+                hitl = [f for f in findings if f.name == "Human-in-the-loop patterns"]
+                assert len(hitl) == 1 and hitl[0].status == "pass", f"HITL should pass for {fname}, got {hitl[0].status if hitl else 'none'}"
+        return True, "Haystack, CrewAI, LangGraph HITL patterns all detected"
+
+    _run_test("Scanner: HITL patterns (Haystack, CrewAI, LangGraph)", test_scanner_hitl_patterns)
+
+    def test_scanner_injection_defense():
+        """Verify scanner detects guardrail patterns from CrewAI and LlamaIndex."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "guarded.py"), "w") as f:
+                f.write("from crewai import Agent\nagent = Agent(hallucination_guardrail=True)\n")
+            findings = scan_codebase(tmpdir)
+            inj = [f for f in findings if f.name == "Prompt injection defense"]
+            assert len(inj) == 1 and inj[0].status == "pass", "CrewAI guardrail should pass"
+        return True, "CrewAI hallucination_guardrail detected"
+
+    _run_test("Scanner: injection defense (CrewAI guardrail)", test_scanner_injection_defense)
+
+    def test_scanner_output_validation():
+        """Verify scanner detects CrewAI output_pydantic and expected_output."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "tasks.py"), "w") as f:
+                f.write("from crewai import Task\ntask = Task(description='Analyze', output_pydantic=AnalysisResult, expected_output='JSON report')\n")
+            findings = scan_codebase(tmpdir)
+            ov = [f for f in findings if f.name == "LLM output validation"]
+            assert len(ov) == 1 and ov[0].status == "pass", "CrewAI output_pydantic should pass"
+        return True, "CrewAI output_pydantic + expected_output detected"
+
+    _run_test("Scanner: output validation (CrewAI patterns)", test_scanner_output_validation)
+
+    def test_scanner_identity_binding():
+        """Verify scanner detects CrewAI Fingerprint and Haystack memory patterns."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "identity.py"), "w") as f:
+                f.write("from crewai.utilities import Fingerprint\nagent_id = Fingerprint()\ncard = AgentCard(name='worker')\n")
+            findings = scan_codebase(tmpdir)
+            ib = [f for f in findings if f.name == "Agent-to-user identity binding"]
+            assert len(ib) == 1 and ib[0].status == "pass", "CrewAI Fingerprint should pass"
+        return True, "CrewAI Fingerprint + AgentCard detected"
+
+    _run_test("Scanner: identity binding (CrewAI Fingerprint)", test_scanner_identity_binding)
+
+    def test_scanner_audit_trail_events():
+        """Verify scanner detects CrewAI event bus patterns."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "events.py"), "w") as f:
+                f.write("from crewai.utilities import agent_events, crew_events\ndef on_event(event): pass\nemit_event('task_completed', data)\n")
+            findings = scan_codebase(tmpdir)
+            at = [f for f in findings if f.name == "Agent action audit trail"]
+            assert len(at) == 1 and at[0].status == "pass", "CrewAI event bus should pass"
+        return True, "CrewAI event bus audit trail detected"
+
+    _run_test("Scanner: audit trail (CrewAI event bus)", test_scanner_audit_trail_events)
+
+    def test_scanner_false_positive_pii():
+        """Regression: 'private' alone should NOT trigger PII detection."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "normal.py"), "w") as f:
+                f.write("class MyClass:\n    def __init__(self):\n        self.private = True\n        self._private_method = lambda: None\n")
+            findings = scan_codebase(tmpdir)
+            pii = [f for f in findings if f.name == "PII handling in code"]
+            # Should NOT pass — 'private' alone is not PII handling
+            assert len(pii) == 1 and pii[0].status != "pass", f"Bare 'private' should not trigger PII pass, got {pii[0].status}"
+        return True, "False positive: bare 'private' correctly ignored"
+
+    _run_test("Scanner: PII false positive regression", test_scanner_false_positive_pii)
+
+    def test_scanner_skip_deprecated():
+        """Verify scanner skips deprecated and archived directories."""
+        from air_blackbox.compliance.code_scanner import scan_codebase
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create deprecated dir with Python files — should be skipped
+            dep_dir = os.path.join(tmpdir, "deprecated")
+            os.makedirs(dep_dir)
+            with open(os.path.join(dep_dir, "old.py"), "w") as f:
+                f.write("import logging\nlogging.getLogger(__name__)\n")
+            findings = scan_codebase(tmpdir)
+            # Should find no Python files (only deprecated dir has them)
+            no_files = [f for f in findings if "No Python files" in f.evidence]
+            assert len(no_files) >= 1, "Should skip deprecated directory"
+        return True, "Deprecated directories correctly skipped"
+
+    _run_test("Scanner: skip deprecated directories", test_scanner_skip_deprecated)
+
+    # ── Two-Tier Scoring Tests ───────────────────────────────────────
+    console.print(f"\n[bold]Two-Tier Scoring Tests[/]\n")
+
+    def test_tier_labels():
+        """Verify every check has a tier and gateway checks are labeled 'runtime'."""
+        from air_blackbox.compliance.engine import run_all_checks
+        from air_blackbox.gateway_client import GatewayStatus
+        status = GatewayStatus(reachable=False, total_runs=0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            articles = run_all_checks(status, tmpdir)
+            all_checks = [c for a in articles for c in a["checks"]]
+            # Every check must have a tier
+            for c in all_checks:
+                assert "tier" in c, f"Check '{c['name']}' missing tier"
+                assert c["tier"] in ("static", "runtime"), f"Check '{c['name']}' has invalid tier: {c['tier']}"
+            static = [c for c in all_checks if c["tier"] == "static"]
+            runtime = [c for c in all_checks if c["tier"] == "runtime"]
+            assert len(static) > 0, "Should have static checks"
+            assert len(runtime) > 0, "Should have runtime checks"
+            return True, f"{len(static)} static + {len(runtime)} runtime checks, all labeled"
+
+    _run_test("Tier labels on all checks", test_tier_labels)
+
+    def test_runtime_checks_identified():
+        """Verify known gateway-dependent checks are tier='runtime'."""
+        from air_blackbox.compliance.engine import run_all_checks
+        from air_blackbox.gateway_client import GatewayStatus
+        status = GatewayStatus(reachable=False, total_runs=0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            articles = run_all_checks(status, tmpdir)
+            all_checks = {c["name"]: c for a in articles for c in a["checks"]}
+            runtime_expected = [
+                "Risk mitigations active", "PII detection in prompts",
+                "Data vault (controlled storage)", "Runtime system inventory (AI-BOM data)",
+                "Automatic event logging", "Tamper-evident audit chain",
+                "Log detail and traceability", "Kill switch / stop mechanism",
+                "Prompt injection protection",
+            ]
+            for name in runtime_expected:
+                assert name in all_checks, f"Check '{name}' not found"
+                assert all_checks[name]["tier"] == "runtime", f"'{name}' should be runtime, got {all_checks[name]['tier']}"
+            return True, f"All {len(runtime_expected)} gateway checks correctly labeled runtime"
+
+    _run_test("Runtime checks correctly identified", test_runtime_checks_identified)
+
+    def test_version_consistency():
+        """Verify version is consistent across pyproject.toml, __init__.py, and cli."""
+        import air_blackbox
+        cli_version = "1.2.4"  # from @click.version_option
+        init_version = air_blackbox.__version__
+        assert init_version == cli_version, f"__init__ ({init_version}) != cli ({cli_version})"
+        return True, f"Version {init_version} consistent across modules"
+
+    _run_test("Version consistency", test_version_consistency)
+
     # ── Gateway tests (optional) ─────────────────────────────────────
     console.print(f"\n[bold]Gateway Tests[/]\n")
 
