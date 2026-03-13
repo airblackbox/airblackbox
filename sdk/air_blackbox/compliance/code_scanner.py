@@ -294,18 +294,18 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
 
 def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if agent actions are bound to the user who authorized them."""
-    # Patterns that show user identity is being tracked alongside agent actions
     identity_binding_patterns = [
         r'user_id', r'user_email', r'authorized_by', r'delegated_by',
         r'on_behalf_of', r'acting_as', r'user_context', r'auth_context',
         r'identity_token', r'delegation_token', r'agent_user_binding',
         r'x-user-id', r'X-User-Id', r'user_identity',
+        r'memory_store.*user', r'store.*memories.*user',
     ]
     combined = "|".join(identity_binding_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=14, name="Agent-to-user identity binding",
-            status="pass", evidence=f"User identity binding found in {len(hits)} file(s) (user_id, auth context, or delegation tracking)")]
+            status="pass", evidence=f"User identity binding found in {len(hits)} file(s) (user_id, memory store, or delegation tracking)")]
     return [CodeFinding(article=14, name="Agent-to-user identity binding",
         status="warn", evidence="No user identity binding detected. Agent actions are not tied to the authorizing user.",
         fix_hint="Track user_id or auth_context alongside every agent action so you can answer 'who authorized this?'")]
@@ -314,10 +314,11 @@ def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFin
 def _check_token_scope_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if OAuth/API tokens are scoped and validated before use."""
     scope_patterns = [
-        r'scope', r'scopes', r'token_scope', r'required_scopes',
-        r'check_scope', r'verify_scope', r'has_permission',
-        r'permission_check', r'allowed_actions', r'action_whitelist',
-        r'scope_validation', r'authorize_action',
+        r'token_scope', r'required_scopes', r'check_scope', r'verify_scope',
+        r'has_permission', r'permission_check', r'allowed_actions',
+        r'action_whitelist', r'scope_validation', r'authorize_action',
+        r'confirmation_strategy', r'strategy_context', r'oauth_scope',
+        r'granted_permissions', r'check_permission',
     ]
     combined = "|".join(scope_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
@@ -330,21 +331,22 @@ def _check_token_scope_validation(file_contents: dict, scan_path: str) -> List[C
 
 
 def _check_token_expiry_revocation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    """Check if tokens have expiry/revocation handling."""
+    """Check if tokens have expiry/revocation handling or execution time-bounding."""
     expiry_patterns = [
         r'token_expir', r'expires_at', r'expires_in', r'refresh_token',
         r'token_refresh', r'revoke_token', r'revocation', r'is_expired',
-        r'check_expiry', r'token_lifetime', r'max_age', r'ttl',
-        r'short_lived', r'session_timeout',
+        r'check_expiry', r'token_lifetime', r'session_timeout',
+        r'max_agent_steps', r'max_iterations', r'execution_timeout',
+        r'agent_timeout', r'step_limit',
     ]
     combined = "|".join(expiry_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
     if hits:
-        return [CodeFinding(article=14, name="Token expiry / revocation handling",
-            status="pass", evidence=f"Token expiry or revocation patterns found in {len(hits)} file(s)")]
-    return [CodeFinding(article=14, name="Token expiry / revocation handling",
-        status="fail", evidence="No token expiry or revocation handling detected. Agent tokens may persist indefinitely.",
-        fix_hint="Implement token expiry checks and revocation so rogue agents can be stopped instantly")]
+        return [CodeFinding(article=14, name="Token expiry / execution bounding",
+            status="pass", evidence=f"Token expiry or execution boundary patterns found in {len(hits)} file(s)")]
+    return [CodeFinding(article=14, name="Token expiry / execution bounding",
+        status="fail", evidence="No token expiry or execution bounding detected. Agent may run indefinitely.",
+        fix_hint="Implement token expiry, max_agent_steps, or execution timeouts so rogue agents can be stopped")]
 
 
 def _check_action_audit_trail(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -355,6 +357,8 @@ def _check_action_audit_trail(file_contents: dict, scan_path: str) -> List[CodeF
         r'activity_log', r'action_record', r'decision_log',
         r'agent_action', r'tool_call.*log', r'log.*tool_call',
         r'execution_log', r'operation_log',
+        r'CONTENT_TRACING_ENABLED', r'logging_tracer',
+        r'tool_invocation.*log', r'log.*tool_invocation',
     ]
     combined = "|".join(action_log_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
@@ -371,9 +375,11 @@ def _check_action_boundaries(file_contents: dict, scan_path: str) -> List[CodeFi
     boundary_patterns = [
         r'allowed_tools', r'tool_whitelist', r'blocked_tools',
         r'allowed_actions', r'action_filter', r'action_boundary',
-        r'can_execute', r'is_allowed', r'permission_gate',
+        r'can_execute', r'permission_gate',
         r'restricted_actions', r'deny_list', r'allow_list',
         r'tool_filter', r'enabled_tools', r'disabled_tools',
+        r'human_in_the_loop.*polic', r'confirmation_polic',
+        r'approval_polic', r'tool_allowlist',
     ]
     combined = "|".join(boundary_patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
