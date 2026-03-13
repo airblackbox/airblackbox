@@ -17,7 +17,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.2.1", prog_name="air-blackbox")
+@click.version_option(version="1.2.2", prog_name="air-blackbox")
 def main():
     """AIR Blackbox — AI governance control plane.
 
