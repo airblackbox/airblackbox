@@ -21,7 +21,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.2.3", prog_name="air-blackbox")
+@click.version_option(version="1.2.4", prog_name="air-blackbox")
 def main():
     """AIR Blackbox — AI governance control plane.
 
@@ -62,18 +62,21 @@ def comply(gateway, scan, runs_dir, fmt, verbose):
     for article in articles:
         table = Table(title=f"Article {article['number']} — {article['title']}",
             show_header=True, header_style="bold white on dark_blue", title_style="bold")
-        table.add_column("Check", style="bold", width=30)
+        table.add_column("Check", style="bold", width=28)
+        table.add_column("Tier", width=8, justify="center")
         table.add_column("Status", width=10, justify="center")
         if verbose:
             table.add_column("Type", width=8, justify="center")
-        table.add_column("Evidence", width=50 if not verbose else 42)
+        table.add_column("Evidence", width=42 if not verbose else 36)
         for check in article["checks"]:
             si = {"pass": "[bold green]✅ PASS[/]", "warn": "[bold yellow]⚠️  WARN[/]", "fail": "[bold red]❌ FAIL[/]"}.get(check["status"])
+            tier = check.get("tier", "static")
+            tier_label = "[green]STATIC[/]" if tier == "static" else "[blue]RUNTIME[/]"
             db = {"auto": "[green]AUTO[/]", "hybrid": "[yellow]HYBRID[/]", "manual": "[red]MANUAL[/]"}.get(check.get("detection", ""), "")
             ev = check["evidence"]
             if verbose and check.get("fix_hint"):
                 ev += f"\n[dim italic]Fix: {check['fix_hint']}[/]"
-            row = [check["name"], si]
+            row = [check["name"], tier_label, si]
             if verbose:
                 row.append(db)
             row.append(ev)
@@ -84,12 +87,23 @@ def comply(gateway, scan, runs_dir, fmt, verbose):
     passing = sum(1 for a in articles for c in a["checks"] if c["status"] == "pass")
     warning = sum(1 for a in articles for c in a["checks"] if c["status"] == "warn")
     failing = sum(1 for a in articles for c in a["checks"] if c["status"] == "fail")
-    auto = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "auto")
-    hybrid = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "hybrid")
-    manual = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "manual")
+    # Two-tier breakdown
+    static_checks = [c for a in articles for c in a["checks"] if c.get("tier", "static") == "static"]
+    runtime_checks = [c for a in articles for c in a["checks"] if c.get("tier") == "runtime"]
+    s_pass = sum(1 for c in static_checks if c["status"] == "pass")
+    s_total = len(static_checks)
+    r_pass = sum(1 for c in runtime_checks if c["status"] == "pass")
+    r_total = len(runtime_checks)
     parts = f"[bold green]{passing}[/] passing  [bold yellow]{warning}[/] warnings  [bold red]{failing}[/] failing  out of [bold]{total}[/] checks"
+    parts += f"\n\n  [green]Static analysis[/]:  [bold]{s_pass}/{s_total}[/] passing  (code patterns, docs, config)"
+    parts += f"\n  [blue]Runtime checks[/]:   [bold]{r_pass}/{r_total}[/] passing  (requires gateway or trust layer)"
+    if r_total > 0 and r_pass < r_total:
+        parts += f"\n\n  [dim]Unlock runtime checks: pip install air-langchain-trust[/]"
     if verbose:
-        parts += f"\n[dim]Detection: {auto} auto, {hybrid} hybrid, {manual} manual ({(auto + hybrid) / total * 100:.0f}% automated)[/]"
+        auto = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "auto")
+        hybrid = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "hybrid")
+        manual = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "manual")
+        parts += f"\n  [dim]Detection: {auto} auto, {hybrid} hybrid, {manual} manual ({(auto + hybrid) / total * 100:.0f}% automated)[/]"
     console.print(Panel(parts, title="[bold]Compliance Summary[/]", border_style="blue"))
     if failing > 0 and not verbose:
         console.print("\n[dim]Run with -v to see fix hints for each failing check.[/]")
@@ -390,8 +404,10 @@ def demo(output):
     for article in articles:
         for check in article["checks"]:
             icon = {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}.get(check["status"], "?")
+            tier = check.get("tier", "static")
+            tier_tag = "[green]S[/]" if tier == "static" else "[blue]R[/]"
             det = {"auto": "[green]AUTO[/]", "hybrid": "[yellow]HYBR[/]", "manual": "[red]MANU[/]"}.get(check.get("detection", ""), "")
-            console.print(f"  {icon} Art. {article['number']:>2} {det} {check['name']}")
+            console.print(f"  {icon} Art. {article['number']:>2} {tier_tag} {det} {check['name']}")
 
     total = sum(len(a["checks"]) for a in articles)
     passing = sum(1 for a in articles for c in a["checks"] if c["status"] == "pass")
