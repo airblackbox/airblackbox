@@ -129,16 +129,31 @@ def _scan_injection(text: str) -> tuple[list[dict], float]:
     return alerts, max_score
 
 
+def _get_chain(runs_dir: str) -> 'AuditChain':
+    """Get or create the shared AuditChain for this runs_dir."""
+    if not hasattr(_get_chain, '_chains'):
+        _get_chain._chains = {}
+    if runs_dir not in _get_chain._chains:
+        from air_blackbox.trust.chain import AuditChain
+        _get_chain._chains[runs_dir] = AuditChain(runs_dir=runs_dir)
+    return _get_chain._chains[runs_dir]
+
+
 def _write_record(record: dict, runs_dir: str):
-    """Write .air.json audit record to runs directory."""
+    """Write .air.json audit record with HMAC chain hash."""
     try:
-        os.makedirs(runs_dir, exist_ok=True)
-        fname = f"{record['run_id']}.air.json"
-        fpath = os.path.join(runs_dir, fname)
-        with open(fpath, 'w') as f:
-            json.dump(record, f, indent=2)
+        chain = _get_chain(runs_dir)
+        chain.write(record)
     except Exception:
-        pass  # Non-blocking: recording failure never breaks the agent
+        # Fallback: write without chain hash
+        try:
+            os.makedirs(runs_dir, exist_ok=True)
+            fname = f"{record['run_id']}.air.json"
+            fpath = os.path.join(runs_dir, fname)
+            with open(fpath, 'w') as f:
+                json.dump(record, f, indent=2)
+        except Exception:
+            pass  # Non-blocking: recording failure never breaks the agent
 
 
 def _extract_text_from_input(tool_input: dict) -> str:

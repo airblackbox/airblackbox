@@ -215,15 +215,21 @@ class AirLangChainHandler(BaseCallbackHandler):
                 })
 
     def _write_record(self, record: dict):
-        """Write .air.json record to runs directory."""
+        """Write .air.json record with HMAC chain hash."""
         try:
-            fname = f"{record['run_id']}.air.json"
-            fpath = os.path.join(self.runs_dir, fname)
-            with open(fpath, "w") as f:
-                json.dump(record, f, indent=2)
-        except Exception as e:
-            # Non-blocking: recording failure never breaks the agent
-            pass
+            if not hasattr(self, '_chain'):
+                from air_blackbox.trust.chain import AuditChain
+                self._chain = AuditChain(runs_dir=self.runs_dir)
+            self._chain.write(record)
+        except Exception:
+            # Fallback: write without chain hash
+            try:
+                fname = f"{record['run_id']}.air.json"
+                fpath = os.path.join(self.runs_dir, fname)
+                with open(fpath, "w") as f:
+                    json.dump(record, f, indent=2)
+            except Exception:
+                pass  # Non-blocking
 
     def _guess_provider(self, serialized: dict) -> str:
         cls = serialized.get("id", [""])

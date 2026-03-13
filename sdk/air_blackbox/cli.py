@@ -21,7 +21,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.2.6", prog_name="air-blackbox")
+@click.version_option(version="1.3.0", prog_name="air-blackbox")
 def main():
     """AIR Blackbox — AI governance control plane.
 
@@ -97,7 +97,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
     if not no_save:
         try:
             from air_blackbox.compliance.history import save_scan
-            scan_id = save_scan(articles, scan_path=scan, version="1.2.6",
+            scan_id = save_scan(articles, scan_path=scan, version="1.3.0",
                                 deep_findings=deep_findings if deep_findings else None)
             if verbose:
                 console.print(f"  [dim]Saved to compliance history (scan #{scan_id})[/]\n")
@@ -1146,7 +1146,7 @@ def test(gateway, verbose):
     def test_version_consistency():
         """Verify version is consistent across pyproject.toml, __init__.py, and cli."""
         import air_blackbox
-        cli_version = "1.2.6"  # from @click.version_option
+        cli_version = "1.3.0"  # from @click.version_option
         init_version = air_blackbox.__version__
         assert init_version == cli_version, f"__init__ ({init_version}) != cli ({cli_version})"
         return True, f"Version {init_version} consistent across modules"

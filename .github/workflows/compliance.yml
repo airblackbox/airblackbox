@@ -26,3 +26,21 @@ jobs:
           echo "⚠️  ${{ steps.compliance.outputs.warnings }} warnings"
           echo "❌ ${{ steps.compliance.outputs.failing }} failing"
           echo "Total: ${{ steps.compliance.outputs.total }} checks"
+
+  trust-layer-tests:
+    runs-on: ubuntu-latest
+    name: Trust Layer + Audit Chain Tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run trust layer tests
+        run: python tests/test_trust_layers.py
