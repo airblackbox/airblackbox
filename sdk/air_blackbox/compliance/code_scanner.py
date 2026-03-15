@@ -189,15 +189,49 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """Check if functions use type hints (handles multi-line signatures).
+    Fixed in v1.2.3: github.com/airblackbox/scanner/issues/2
+    """
+    TYPE_PATTERN = re.compile(
+        r':\s*('
+        r'str|int|float|bool|bytes|complex|object|type|None'
+        r'|list|dict|set|tuple|frozenset'
+        r'|List|Dict|Set|Tuple|FrozenSet'
+        r'|Optional|Union|Any|Type|Callable|Coroutine'
+        r'|Sequence|Iterable|Iterator|Generator|AsyncGenerator'
+        r'|Mapping|MutableMapping|MutableSequence|MutableSet'
+        r'|Literal|Annotated|TypeVar|TypeAlias|ClassVar|Final'
+        r'|Protocol|NamedTuple|TypedDict'
+        r'|Path|PurePath|UUID|Pattern|Match'
+        r'|datetime|date|time|timedelta|Decimal'
+        r'|[A-Z][a-zA-Z0-9_]*'
+        r')'
+    )
     total_defs = 0
     typed_defs = 0
     for fp, content in file_contents.items():
-        for line in content.split("\n"):
-            stripped = line.strip()
+        lines = content.split("\n")
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
             if stripped.startswith("def ") and not stripped.startswith("def _"):
+                full_sig = stripped
+                j = i + 1
+                while j < len(lines) and (
+                    full_sig.rstrip().endswith("\\") or
+                    full_sig.count("(") > full_sig.count(")")
+                ):
+                    next_line = lines[j].strip()
+                    if full_sig.rstrip().endswith("\\"):
+                        full_sig = full_sig.rstrip()[:-1]
+                    full_sig += " " + next_line
+                    j += 1
                 total_defs += 1
-                if "->" in stripped or re.search(r':\s*(str|int|float|bool|list|dict|List|Dict|Optional|Any|Tuple)', stripped):
+                if "->" in full_sig or TYPE_PATTERN.search(full_sig):
                     typed_defs += 1
+                i = j
+            else:
+                i += 1
     if total_defs == 0:
         return []
     pct = (typed_defs / total_defs * 100) if total_defs > 0 else 0
