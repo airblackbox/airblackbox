@@ -235,16 +235,62 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    """Check if functions use type hints."""
+    """Check if functions use type hints.
+
+    Handles multi-line signatures by joining continuation lines before checking.
+    Recognizes standard library, typing module, and custom class type annotations.
+    Fixed in v1.2.3: github.com/airblackbox/scanner/issues/2
+    """
+    # Broad type pattern: typing module types, standard types, and any CamelCase class name
+    TYPE_PATTERN = re.compile(
+        r':\s*('
+        # Built-in types
+        r'str|int|float|bool|bytes|complex|object|type|None'
+        r'|list|dict|set|tuple|frozenset'
+        # typing module types
+        r'|List|Dict|Set|Tuple|FrozenSet'
+        r'|Optional|Union|Any|Type|Callable|Coroutine'
+        r'|Sequence|Iterable|Iterator|Generator|AsyncGenerator'
+        r'|Mapping|MutableMapping|MutableSequence|MutableSet'
+        r'|Literal|Annotated|TypeVar|TypeAlias|ClassVar|Final'
+        r'|Protocol|NamedTuple|TypedDict'
+        # Common stdlib types
+        r'|Path|PurePath|UUID|Pattern|Match'
+        r'|datetime|date|time|timedelta|Decimal'
+        # Any CamelCase identifier (catches custom classes like MyClass, HttpResponse, etc.)
+        r'|[A-Z][a-zA-Z0-9_]*'
+        r')'
+    )
     total_defs = 0
     typed_defs = 0
     for fp, content in file_contents.items():
-        for line in content.split("\n"):
-            stripped = line.strip()
+        lines = content.split("\n")
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
             if stripped.startswith("def ") and not stripped.startswith("def _"):
+                # Join multi-line signatures into one string
+                full_sig = stripped
+                j = i + 1
+                # If line ends with backslash or has unmatched parens, it continues
+                while j < len(lines) and (
+                    full_sig.rstrip().endswith("\\") or
+                    full_sig.count("(") > full_sig.count(")")
+                ):
+                    next_line = lines[j].strip()
+                    # Remove trailing backslash before joining
+                    if full_sig.rstrip().endswith("\\"):
+                        full_sig = full_sig.rstrip()[:-1]
+                    full_sig += " " + next_line
+                    j += 1
+
                 total_defs += 1
-                if "->" in stripped or re.search(r':\s*(str|int|float|bool|list|dict|List|Dict|Optional|Any|Tuple)', stripped):
+                # Check for return type annotation or parameter type annotations
+                if "->" in full_sig or TYPE_PATTERN.search(full_sig):
                     typed_defs += 1
+                i = j
+            else:
+                i += 1
     if total_defs == 0:
         return []
     pct = (typed_defs / total_defs * 100) if total_defs > 0 else 0
