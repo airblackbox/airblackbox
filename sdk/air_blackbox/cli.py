@@ -68,30 +68,120 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         import os
         if _ollama_available() and _model_available(model):
             console.print(f"[bold]Running hybrid analysis (regex + AI model)...[/]\n")
-            # Read all Python files for deep analysis
+            # Collect all Python files
             py_files = []
+            skip_dirs = {"node_modules", ".git", "__pycache__", ".venv", "venv",
+                         "dist", "build", ".eggs", "site-packages", ".tox",
+                         ".mypy_cache", ".pytest_cache"}
             for root, dirs, files in os.walk(scan):
-                dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}]
+                dirs[:] = [d for d in dirs if d not in skip_dirs and not d.endswith(".egg-info")]
                 for f in files:
                     if f.endswith(".py"):
                         py_files.append(os.path.join(root, f))
-            # Concatenate (up to limit) for a single deep scan
+            total_files = len(py_files)
+
+            # === Smart sampling: pick compliance-relevant files ===
+            # Priority keywords — files most likely to contain compliance patterns
+            priority_keywords = [
+                "agent", "pipeline", "tool", "llm", "model", "chat",
+                "safety", "guard", "policy", "policies", "hitl", "human",
+                "trace", "tracing", "logging", "log", "audit", "monitor",
+                "auth", "token", "scope", "permission", "identity",
+                "validate", "validation", "schema", "pii", "redact",
+                "retry", "fallback", "error", "exception", "handler",
+                "inject", "sanitize", "filter", "boundary", "limit",
+                "config", "settings", "core", "main", "app", "run",
+            ]
+            # Score and rank files by relevance
+            def _score_file(fp):
+                rel = os.path.relpath(fp, scan).lower()
+                basename = os.path.basename(fp).lower()
+                score = 0
+                # Skip test files — they don't reflect compliance posture
+                parts = rel.replace("\\", "/").split("/")
+                if any(p in {"tests", "test", "testing"} for p in parts):
+                    return -1
+                if basename.startswith("test_") or basename == "conftest.py":
+                    return -1
+                # Boost files with compliance-relevant names
+                for kw in priority_keywords:
+                    if kw in basename:
+                        score += 3
+                    elif kw in rel:
+                        score += 1
+                # Boost core source files
+                if any(p in {"src", "core", "lib", "components"} for p in parts):
+                    score += 2
+                # Boost larger files (more substance)
+                try:
+                    size = os.path.getsize(fp)
+                    if size > 5000:
+                        score += 2
+                    elif size > 1000:
+                        score += 1
+                except OSError:
+                    pass
+                return score
+
+            scored = [(fp, _score_file(fp)) for fp in py_files]
+            scored = [(fp, s) for fp, s in scored if s >= 0]  # exclude tests
+            scored.sort(key=lambda x: x[1], reverse=True)
+
+            # Build code sample from top-ranked files
+            # Cap individual files at 3KB to get more variety, total at 10KB
+            MAX_PER_FILE = 3000
+            MAX_TOTAL = 10000
             code_parts = []
             total_chars = 0
-            for fp in py_files[:30]:
+            files_included = 0
+            for fp, score in scored:
                 try:
                     with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
                         content = fh.read()
+                    if len(content.strip()) < 50:
+                        continue
+                    # Truncate large files to get more variety in the sample
+                    if len(content) > MAX_PER_FILE:
+                        content = content[:MAX_PER_FILE] + "\n# ... (file truncated for sampling)"
                     code_parts.append(f"# File: {os.path.relpath(fp, scan)}\n{content}")
                     total_chars += len(content)
-                    if total_chars > 10000:
+                    files_included += 1
+                    if total_chars > MAX_TOTAL:
                         break
                 except Exception:
                     continue
+
             merged_code = "\n\n".join(code_parts)
-            result = deep_scan(merged_code, model=model)
+            sample_desc = f"targeted sample of {files_included} compliance-relevant source files"
+
+            if verbose:
+                console.print(f"  [dim]AI model sampling: {files_included} files from {total_files} total ({total_chars:,} chars)[/]")
+                # Show top 5 sampled files
+                shown = 0
+                for fp, score in scored:
+                    if shown >= 5:
+                        break
+                    rel = os.path.relpath(fp, scan)
+                    try:
+                        size = os.path.getsize(fp)
+                        if size >= 50:
+                            console.print(f"    [dim]score={score}: {rel} ({size:,} bytes)[/]")
+                            shown += 1
+                    except OSError:
+                        pass
+                if files_included > 5:
+                    console.print(f"    [dim]... and {files_included - 5} more files[/]")
+
+            if verbose:
+                os.environ["AIR_VERBOSE"] = "1"
+            result = deep_scan(merged_code, model=model,
+                              sample_context=sample_desc,
+                              total_files=total_files)
+            if verbose:
+                os.environ.pop("AIR_VERBOSE", None)
             if result.get("available") and not result.get("error"):
                 deep_findings = result.get("findings", [])
+                console.print(f"  [green]●[/] AI model analyzed [bold]{files_included}[/] files ({total_chars:,} chars) from {total_files} total")
                 console.print(f"  [green]●[/] AI model found [bold]{len(deep_findings)}[/] finding(s) using [bold]{model}[/]")
                 console.print(f"  [green]●[/] Hybrid mode: rule-based + AI analysis merged\n")
             elif result.get("error"):
