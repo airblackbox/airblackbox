@@ -81,6 +81,32 @@ def _find_python_files(scan_path: str) -> List[str]:
     return py_files
 
 
+def _is_test_file(filepath: str) -> bool:
+    """Return True if filepath is a test file (test dirs, test_*.py, conftest.py).
+    These are excluded from docstring/type-hint coverage to match the web scanner
+    which only processes source files via GitHub API.
+    """
+    parts = filepath.replace("\\", "/").split("/")
+    # Check if any directory in the path is a test directory
+    test_dirs = {"tests", "test", "testing", "test_utils"}
+    for part in parts:
+        if part.lower() in test_dirs:
+            return True
+    # Check filename patterns
+    basename = os.path.basename(filepath)
+    if basename.startswith("test_") or basename.endswith("_test.py"):
+        return True
+    if basename in ("conftest.py",):
+        return True
+    return False
+
+
+def _source_files_only(file_contents: dict) -> dict:
+    """Filter file_contents to exclude test files."""
+    return {fp: content for fp, content in file_contents.items()
+            if not _is_test_file(fp)}
+
+
 def _rel(filepath: str, scan_path: str) -> str:
     return os.path.relpath(filepath, scan_path)
 
@@ -160,23 +186,48 @@ def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding
 
 
 def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """Check docstring coverage, handling multi-line function signatures.
+    Fixed in v1.3.1: joins multi-line signatures before searching for docstrings.
+    """
+    # Exclude test files — they tank docstring coverage with bare test_* functions
+    source_files = _source_files_only(file_contents)
     total_defs = 0
     documented_defs = 0
-    for fp, content in file_contents.items():
+    for fp, content in source_files.items():
         lines = content.split("\n")
-        for i, line in enumerate(lines):
-            stripped = line.strip()
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
             if stripped.startswith("def ") or stripped.startswith("class "):
                 if stripped.startswith("def _"):
+                    i += 1
                     continue
                 total_defs += 1
-                for j in range(i + 1, min(i + 4, len(lines))):
-                    next_line = lines[j].strip()
+                # Skip past multi-line signature to find the docstring
+                j = i + 1
+                if stripped.startswith("def "):
+                    # Join multi-line signatures (unbalanced parens or trailing backslash)
+                    full_sig = stripped
+                    while j < len(lines) and (
+                        full_sig.rstrip().endswith("\\") or
+                        full_sig.count("(") > full_sig.count(")")
+                    ):
+                        next_line = lines[j].strip()
+                        if full_sig.rstrip().endswith("\\"):
+                            full_sig = full_sig.rstrip()[:-1]
+                        full_sig += " " + next_line
+                        j += 1
+                # Now look for docstring after the signature ends
+                for k in range(j, min(j + 4, len(lines))):
+                    next_line = lines[k].strip()
                     if next_line == "":
                         continue
                     if next_line.startswith('"""') or next_line.startswith("'''"):
                         documented_defs += 1
                     break
+                i = j
+            else:
+                i += 1
     if total_defs == 0:
         return [CodeFinding(article=11, name="Code documentation (docstrings)", status="pass", evidence="No public functions/classes found to document")]
     pct = (documented_defs / total_defs * 100) if total_defs > 0 else 0
@@ -207,9 +258,11 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         r'|[A-Z][a-zA-Z0-9_]*'
         r')'
     )
+    # Exclude test files — test functions rarely have type hints
+    source_files = _source_files_only(file_contents)
     total_defs = 0
     typed_defs = 0
-    for fp, content in file_contents.items():
+    for fp, content in source_files.items():
         lines = content.split("\n")
         i = 0
         while i < len(lines):
@@ -260,6 +313,8 @@ def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     # Core tracing patterns — instrumentation is the modern standard
     # (learned from LlamaIndex: callback_manager is deprecated in favor of instrumentation module)
+    # Learned from Haystack (Julian Risch): HAYSTACK_CONTENT_TRACING_ENABLED + logging_tracer.py
+    # is real production audit capability, stronger than basic debug logging
     patterns = [
         r'opentelemetry', r'otel', r'trace_id', r'span_id', r'run_id',
         r'request_id', r'correlation_id', r'langsmith', r'langfuse',
@@ -267,13 +322,23 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         r'instrumentation', r'instrument_module', r'dispatcher',
         r'event_handler', r'event_bus', r'event_emitter',
         r'TracerProvider', r'tracer\.start_span', r'tracing_enabled',
-        r'CONTENT_TRACING_ENABLED',
+        r'CONTENT_TRACING_ENABLED', r'logging_tracer',
         r'callbacks',  # kept for backward compat detection but lower signal
     ]
+    # Production-grade tracing patterns (stronger signal)
+    production_tracing = [
+        r'CONTENT_TRACING_ENABLED', r'logging_tracer',
+        r'opentelemetry', r'TracerProvider', r'langsmith', r'langfuse',
+    ]
     combined = "|".join(patterns)
+    prod_combined = "|".join(production_tracing)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    prod_hits = [fp for fp, content in file_contents.items() if re.search(prod_combined, content, re.IGNORECASE)]
     if hits:
-        return [CodeFinding(article=12, name="Tracing / observability", status="pass", evidence=f"Tracing patterns found in {len(hits)} file(s)")]
+        evidence = f"Tracing patterns found in {len(hits)} file(s)"
+        if prod_hits:
+            evidence += f" (includes {len(prod_hits)} with production-grade tracing)"
+        return [CodeFinding(article=12, name="Tracing / observability", status="pass", evidence=evidence)]
     return [CodeFinding(article=12, name="Tracing / observability", status="warn",
         evidence="No tracing or observability integration detected",
         fix_hint="Add OpenTelemetry, LangSmith, or similar to track AI decisions")]
@@ -403,7 +468,11 @@ def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFin
 
 
 def _check_token_scope_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    """Check if OAuth/API tokens are scoped and validated before use."""
+    """Check if OAuth/API tokens are scoped and validated before use.
+    Note: confirmation_strategy_context in Haystack is request-scoped resource
+    passing for HITL strategies, not permission scoping. We still count it as
+    a positive signal because scoped resource passing IS a form of access control.
+    """
     scope_patterns = [
         r'token_scope', r'required_scopes', r'check_scope', r'verify_scope',
         r'has_permission', r'permission_check', r'allowed_actions',

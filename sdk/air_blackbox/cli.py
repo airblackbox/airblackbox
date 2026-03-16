@@ -21,7 +21,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.3.0", prog_name="air-blackbox")
+@click.version_option(version="1.4.0", prog_name="air-blackbox")
 def main():
     """AIR Blackbox — AI governance control plane.
 
@@ -37,10 +37,11 @@ def main():
 @click.option("--runs-dir", default=None, help="Path to .air.json records directory")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
 @click.option("--verbose", "-v", is_flag=True, help="Show detection type and fix hints")
-@click.option("--deep", is_flag=True, help="Run LLM deep analysis via Ollama (requires air-compliance-v2)")
-@click.option("--model", default="air-compliance-v2", help="Ollama model for deep scan")
+@click.option("--deep", is_flag=True, default=False, hidden=True, help="(deprecated, now default) Run LLM deep analysis")
+@click.option("--no-llm", is_flag=True, help="Skip LLM analysis, regex-only scan")
+@click.option("--model", default="air-compliance", help="Ollama model for deep scan")
 @click.option("--no-save", is_flag=True, help="Don't save results to compliance history")
-def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
+def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     """Check EU AI Act compliance from live gateway traffic."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
@@ -60,45 +61,52 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
     console.print(f"  [dim]Scanning: {scan}[/]\n")
     articles = run_all_checks(status, scan)
 
-    # Deep scan with LLM if requested
+    # Hybrid mode: auto-run LLM analysis unless --no-llm
     deep_findings = []
-    if deep:
-        from air_blackbox.compliance.deep_scan import deep_scan
+    if not no_llm:
+        from air_blackbox.compliance.deep_scan import deep_scan, _ollama_available, _model_available
         import os
-        console.print("[bold]Running deep LLM analysis...[/]\n")
-        # Read all Python files for deep analysis
-        py_files = []
-        for root, dirs, files in os.walk(scan):
-            dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}]
-            for f in files:
-                if f.endswith(".py"):
-                    py_files.append(os.path.join(root, f))
-        # Concatenate (up to limit) for a single deep scan
-        code_parts = []
-        total_chars = 0
-        for fp in py_files[:30]:
-            try:
-                with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
-                    content = fh.read()
-                code_parts.append(f"# File: {os.path.relpath(fp, scan)}\n{content}")
-                total_chars += len(content)
-                if total_chars > 10000:
-                    break
-            except Exception:
-                continue
-        merged_code = "\n\n".join(code_parts)
-        result = deep_scan(merged_code, model=model)
-        if result.get("available") and not result.get("error"):
-            deep_findings = result.get("findings", [])
-            console.print(f"  [green]●[/] LLM analysis found [bold]{len(deep_findings)}[/] additional finding(s) using {model}\n")
-        elif result.get("error"):
-            console.print(f"  [yellow]●[/] Deep scan: {result['error']}\n")
+        if _ollama_available() and _model_available(model):
+            console.print(f"[bold]Running hybrid analysis (regex + AI model)...[/]\n")
+            # Read all Python files for deep analysis
+            py_files = []
+            for root, dirs, files in os.walk(scan):
+                dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}]
+                for f in files:
+                    if f.endswith(".py"):
+                        py_files.append(os.path.join(root, f))
+            # Concatenate (up to limit) for a single deep scan
+            code_parts = []
+            total_chars = 0
+            for fp in py_files[:30]:
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                        content = fh.read()
+                    code_parts.append(f"# File: {os.path.relpath(fp, scan)}\n{content}")
+                    total_chars += len(content)
+                    if total_chars > 10000:
+                        break
+                except Exception:
+                    continue
+            merged_code = "\n\n".join(code_parts)
+            result = deep_scan(merged_code, model=model)
+            if result.get("available") and not result.get("error"):
+                deep_findings = result.get("findings", [])
+                console.print(f"  [green]●[/] AI model found [bold]{len(deep_findings)}[/] finding(s) using [bold]{model}[/]")
+                console.print(f"  [green]●[/] Hybrid mode: rule-based + AI analysis merged\n")
+            elif result.get("error"):
+                console.print(f"  [yellow]●[/] AI model: {result['error']}")
+                console.print(f"  [dim]Falling back to regex-only scan[/]\n")
+        else:
+            if verbose:
+                console.print(f"  [dim]AI model not available — using regex-only scan[/]")
+                console.print(f"  [dim]Install: ollama create air-compliance -f Modelfile[/]\n")
 
     # Save to compliance history
     if not no_save:
         try:
             from air_blackbox.compliance.history import save_scan
-            scan_id = save_scan(articles, scan_path=scan, version="1.3.0",
+            scan_id = save_scan(articles, scan_path=scan, version="1.4.0",
                                 deep_findings=deep_findings if deep_findings else None)
             if verbose:
                 console.print(f"  [dim]Saved to compliance history (scan #{scan_id})[/]\n")
@@ -150,22 +158,28 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
         console.print(table)
         console.print()
 
-    # Display deep findings if any
-    if deep_findings:
-        deep_table = Table(title="LLM Deep Analysis Findings",
-            show_header=True, header_style="bold white on dark_blue", title_style="bold magenta")
-        deep_table.add_column("Article", width=10, justify="center")
-        deep_table.add_column("Finding", style="bold", width=30)
-        deep_table.add_column("Status", width=10, justify="center")
-        deep_table.add_column("Evidence", width=40)
-        for f in deep_findings:
-            si = {"pass": "[bold green]✅ PASS[/]", "warn": "[bold yellow]⚠️  WARN[/]", "fail": "[bold red]❌ FAIL[/]"}.get(f.get("status", "warn"))
-            ev = f.get("evidence", "")
-            if verbose and f.get("fix_hint"):
-                ev += f"\n[dim italic]Fix: {f['fix_hint']}[/]"
-            deep_table.add_row(f"Art {f.get('article', '?')}", f.get("name", ""), si, ev)
-        console.print(deep_table)
-        console.print()
+    # Display deep findings if any (supplementary — not counted in main score)
+    if deep_findings and verbose:
+        # Only show LLM findings that ADD info beyond what rules found
+        rule_articles = {a["number"] for a in articles}
+        novel_findings = [f for f in deep_findings if f.get("article", 0) not in rule_articles]
+        supplementary = [f for f in deep_findings if f.get("article", 0) in rule_articles]
+        if novel_findings or supplementary:
+            deep_table = Table(title="AI Model Insights (supplementary)",
+                show_header=True, header_style="bold white on dark_blue", title_style="dim")
+            deep_table.add_column("Article", width=10, justify="center")
+            deep_table.add_column("AI Assessment", style="bold", width=30)
+            deep_table.add_column("Status", width=10, justify="center")
+            deep_table.add_column("Evidence", width=40)
+            for f in deep_findings:
+                si = {"pass": "[bold green]✅ PASS[/]", "warn": "[bold yellow]⚠️  WARN[/]", "fail": "[bold red]❌ FAIL[/]"}.get(f.get("status", "warn"))
+                ev = f.get("evidence", "")
+                if f.get("fix_hint"):
+                    ev += f"\n[dim italic]Fix: {f['fix_hint']}[/]"
+                deep_table.add_row(f"Art {f.get('article', '?')}", f.get("name", ""), si, ev)
+            console.print(deep_table)
+            console.print("[dim]  Note: AI model assessed a code sample (max 12KB). Rule-based checks above are more accurate.[/]")
+            console.print()
 
     total = sum(len(a["checks"]) for a in articles)
     passing = sum(1 for a in articles for c in a["checks"] if c["status"] == "pass")
@@ -182,9 +196,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, model, no_save):
     parts += f"\n\n  [green]Static analysis[/]:  [bold]{s_pass}/{s_total}[/] passing  (code patterns, docs, config)"
     parts += f"\n  [blue]Runtime checks[/]:   [bold]{r_pass}/{r_total}[/] passing  (requires gateway or trust layer)"
     if deep_findings:
+        deep_pass = sum(1 for f in deep_findings if f.get("status") == "pass")
         deep_fail = sum(1 for f in deep_findings if f.get("status") == "fail")
         deep_warn = sum(1 for f in deep_findings if f.get("status") == "warn")
-        parts += f"\n  [magenta]LLM deep analysis[/]: [bold]{len(deep_findings)}[/] finding(s) ({deep_fail} fail, {deep_warn} warn)"
+        parts += f"\n  [magenta]AI model[/]:          [bold]{deep_pass}[/] pass, [bold]{deep_warn}[/] warn, [bold]{deep_fail}[/] fail (supplementary, not counted above)"
     if r_total > 0 and r_pass < r_total:
         parts += f"\n\n  [dim]Unlock runtime checks: pip install air-langchain-trust[/]"
     if verbose:
