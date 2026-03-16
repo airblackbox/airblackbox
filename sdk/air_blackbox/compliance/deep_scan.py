@@ -65,7 +65,9 @@ JSON findings (array only, no extra text):"""
 DEEP_PROMPT_ALPACA = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
-Analyze this Python code for EU AI Act compliance gaps. Check against Articles 9, 10, 11, 12, 14, and 15. For each article, report status (pass/warn/fail), evidence from the code, and specific fix recommendations. Output as a JSON array.
+Analyze this Python code for EU AI Act compliance. This is a {sample_context} from a project with {total_files} Python files. Assess ONLY what is visible in the code below — do not assume patterns are missing if they could exist in files not shown.
+
+For each of Articles 9, 10, 11, 12, 14, and 15: report status (pass if evidence found, warn if partial, fail only if clearly absent), cite specific evidence from the code (function names, patterns, line references), and give fix recommendations. Output as a JSON array.
 
 ### Input:
 {code}
@@ -74,8 +76,16 @@ Analyze this Python code for EU AI Act compliance gaps. Check against Articles 9
 """
 
 
-def deep_scan(code: str, model: str = "air-compliance") -> dict:
+def deep_scan(code: str, model: str = "air-compliance",
+              sample_context: str = "code sample",
+              total_files: int = 0) -> dict:
     """Run deep LLM analysis on code.
+
+    Args:
+        code: The code to analyze
+        model: Ollama model name
+        sample_context: Description of what the sample contains (e.g., "core pipeline files")
+        total_files: Total number of Python files in the project (for context)
 
     Returns:
         dict with 'available' (bool), 'findings' (list), 'model' (str), 'error' (str or None)
@@ -105,7 +115,11 @@ def deep_scan(code: str, model: str = "air-compliance") -> dict:
 
     # Use Alpaca prompt for fine-tuned model, JSON prompt for others
     if model.startswith("air-compliance"):
-        prompt = DEEP_PROMPT_ALPACA.format(code=code)
+        prompt = DEEP_PROMPT_ALPACA.format(
+            code=code,
+            sample_context=sample_context,
+            total_files=total_files or "unknown number of",
+        )
     else:
         prompt = DEEP_PROMPT_JSON.format(code=code)
 
@@ -122,12 +136,31 @@ def deep_scan(code: str, model: str = "air-compliance") -> dict:
                 "error": f"Ollama returned error: {result.stderr[:200]}",
             }
 
-        findings = _parse_llm_output(result.stdout)
+        raw_output = result.stdout
+
+        # Always print raw output in verbose mode for debugging
+        import os
+        if os.environ.get("AIR_VERBOSE"):
+            print(f"\n  [DEBUG] Model raw output ({len(raw_output)} chars):")
+            print(f"  {raw_output[:1000]}")
+            if len(raw_output) > 1000:
+                print(f"  ... ({len(raw_output) - 1000} more chars)")
+
+        findings = _parse_llm_output(raw_output)
+
+        # Debug: log raw output length and first 500 chars for troubleshooting
+        import logging
+        logger = logging.getLogger("air_blackbox.deep_scan")
+        logger.debug(f"Model raw output ({len(raw_output)} chars): {raw_output[:500]}")
+        logger.debug(f"Parsed {len(findings)} findings from model output")
+
         return {
             "available": True,
             "findings": findings,
             "model": model,
             "error": None,
+            "raw_length": len(raw_output),
+            "sample_chars": len(code),
         }
 
     except subprocess.TimeoutExpired:
@@ -296,11 +329,19 @@ def _parse_llm_output(raw: str) -> list:
         return findings
 
     # Strategy 4: parse markdown-style output from fine-tuned model
-    # Matches patterns like:
-    #   **Article 9 — Risk Management**: FAIL
-    #   **Article 11 — Technical Documentation**: PASS
-    article_pattern = re.compile(
+    # Handles two formats:
+    #   Format A: **Article 9 — Risk Management**: FAIL (status on same line)
+    #   Format B: ### Article 9 — Risk Management \n **Status**: FAIL (status on next line)
+    article_with_status = re.compile(
         r'\*{0,2}Article\s+(\d+)[^*:]*\*{0,2}\s*:\s*(PASS|FAIL|WARN)',
+        re.IGNORECASE
+    )
+    article_header_only = re.compile(
+        r'(?:#{1,4}\s+)?\*{0,2}Article\s+(\d+)\s*[—–-]\s*([^*:\n]+)',
+        re.IGNORECASE
+    )
+    status_line = re.compile(
+        r'\*{0,2}Status\*{0,2}\s*:\s*(PASS|FAIL|WARN)',
         re.IGNORECASE
     )
     # Also match "Analysis:" or "Evidence:" lines
@@ -314,8 +355,14 @@ def _parse_llm_output(raw: str) -> list:
     current_fix = []
 
     for line in raw.split("\n"):
-        art_match = article_pattern.search(line)
-        if art_match:
+        # Check for article header with status on same line (Format A)
+        art_status_match = article_with_status.search(line)
+        # Check for article header without status (Format B)
+        art_header_match = article_header_only.search(line)
+        # Check for standalone status line
+        status_match = status_line.search(line.strip())
+
+        if art_status_match:
             # Save previous finding
             if current_article is not None:
                 findings.append(_validate_finding({
@@ -325,13 +372,30 @@ def _parse_llm_output(raw: str) -> list:
                     "evidence": " ".join(current_evidence).strip(),
                     "fix_hint": " ".join(current_fix).strip(),
                 }))
-            current_article = int(art_match.group(1))
-            current_status = art_match.group(2).lower()
-            # Extract article name from the line (e.g., "Risk Management")
+            current_article = int(art_status_match.group(1))
+            current_status = art_status_match.group(2).lower()
             name_match = re.search(r'Article\s+\d+\s*[—–-]\s*([^*:]+)', line)
             current_name = name_match.group(1).strip() if name_match else f"Article {current_article} analysis"
             current_evidence = []
             current_fix = []
+        elif art_header_match and not art_status_match:
+            # Save previous finding
+            if current_article is not None:
+                findings.append(_validate_finding({
+                    "article": current_article,
+                    "name": current_name or f"Article {current_article} analysis",
+                    "status": current_status,
+                    "evidence": " ".join(current_evidence).strip(),
+                    "fix_hint": " ".join(current_fix).strip(),
+                }))
+            current_article = int(art_header_match.group(1))
+            current_name = art_header_match.group(2).strip()
+            current_status = "warn"  # Default until we find a Status line
+            current_evidence = []
+            current_fix = []
+        elif status_match and current_article is not None:
+            # Standalone **Status**: PASS/FAIL/WARN line (Format B)
+            current_status = status_match.group(1).lower()
         elif current_article is not None:
             ev_match = evidence_pattern.match(line.strip())
             rec_match = recommend_pattern.match(line.strip())
