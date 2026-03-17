@@ -1,6 +1,7 @@
 """
 AIR Blackbox CLI — AI governance control plane.
 
+    air-blackbox setup       # One-command setup: install model + verify
     air-blackbox discover    # Shadow AI inventory + AI-BOM
     air-blackbox comply      # EU AI Act compliance from live traffic
     air-blackbox replay      # Incident reconstruction from audit chain
@@ -29,6 +30,86 @@ def main():
     security, inventory, and incident response out of the box.
     """
     pass
+
+
+@main.command()
+def setup():
+    """One-command setup: install the AI compliance model and verify everything works.
+
+    This pulls the air-compliance model from Ollama registry and verifies
+    the scanner is ready to use. Run this once after installing air-blackbox.
+
+    Requirements: Ollama must be installed first (https://ollama.com)
+    """
+    import subprocess
+    import shutil
+
+    console.print(Panel.fit(
+        "[bold cyan]AIR Blackbox Setup[/bold cyan]\n"
+        "Setting up the AI compliance scanner...",
+        border_style="cyan",
+    ))
+
+    # Step 1: Check Ollama
+    console.print("\n[bold]Step 1/3:[/bold] Checking Ollama installation...")
+    if shutil.which("ollama"):
+        try:
+            result = subprocess.run(["ollama", "--version"], capture_output=True, text=True, timeout=5)
+            console.print(f"  [green]✓[/green] Ollama installed: {result.stdout.strip()}")
+        except Exception:
+            console.print("  [green]✓[/green] Ollama found")
+    else:
+        console.print("  [red]✗[/red] Ollama not installed")
+        console.print("\n  Install Ollama first:")
+        console.print("    Mac:   [cyan]brew install ollama[/cyan]")
+        console.print("    Linux: [cyan]curl -fsSL https://ollama.com/install.sh | sh[/cyan]")
+        console.print("    All:   [cyan]https://ollama.com/download[/cyan]")
+        console.print("\n  Then run [cyan]air-blackbox setup[/cyan] again.")
+        return
+
+    # Step 2: Pull model
+    console.print("\n[bold]Step 2/3:[/bold] Pulling air-compliance model from registry...")
+    console.print("  This downloads ~8GB (one-time). Grab a coffee.\n")
+
+    try:
+        result = subprocess.run(
+            ["ollama", "pull", "airblackbox/air-compliance"],
+            timeout=600,
+        )
+        if result.returncode == 0:
+            # Create local alias
+            subprocess.run(
+                ["ollama", "cp", "airblackbox/air-compliance", "air-compliance"],
+                capture_output=True, timeout=30,
+            )
+            console.print("  [green]✓[/green] Model pulled and ready")
+        else:
+            console.print("  [red]✗[/red] Failed to pull model")
+            console.print("  Try manually: [cyan]ollama pull airblackbox/air-compliance[/cyan]")
+            return
+    except subprocess.TimeoutExpired:
+        console.print("  [red]✗[/red] Download timed out. Try: [cyan]ollama pull airblackbox/air-compliance[/cyan]")
+        return
+
+    # Step 3: Verify
+    console.print("\n[bold]Step 3/3:[/bold] Verifying scanner...")
+    try:
+        result = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=10)
+        if "air-compliance" in result.stdout:
+            console.print("  [green]✓[/green] Model verified in Ollama")
+        else:
+            console.print("  [yellow]⚠[/yellow] Model pulled but not showing in list. Try restarting Ollama.")
+    except Exception:
+        pass
+
+    console.print(Panel.fit(
+        "[bold green]Setup complete![/bold green]\n\n"
+        "Run your first scan:\n"
+        "  [cyan]air-blackbox comply --scan .[/cyan]\n\n"
+        "Or try the demo:\n"
+        "  [cyan]air-blackbox demo[/cyan]",
+        border_style="green",
+    ))
 
 
 @main.command()
@@ -172,17 +253,95 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                 if files_included > 5:
                     console.print(f"    [dim]... and {files_included - 5} more files[/]")
 
+            # Build rule-based context summary for the model
+            rule_context_lines = []
+            article_map = {9: "Risk Management", 10: "Data Governance",
+                          11: "Technical Documentation", 12: "Record-Keeping",
+                          14: "Human Oversight", 15: "Accuracy & Security"}
+            for article in articles:
+                art_num = article.get("number", 0)
+                if art_num not in article_map:
+                    continue
+                passes = []
+                fails = []
+                warns = []
+                for check in article.get("checks", []):
+                    name = check.get("name", "")
+                    evidence = check.get("evidence", "")
+                    status = check.get("status", "")
+                    summary = f"{name}: {evidence[:80]}" if evidence else name
+                    if status == "pass":
+                        passes.append(summary)
+                    elif status == "fail":
+                        fails.append(summary)
+                    elif status == "warn":
+                        warns.append(summary)
+                line = f"Article {art_num} ({article_map[art_num]}): "
+                if passes:
+                    line += f"{len(passes)} PASS ({'; '.join(passes[:2])})"
+                if fails:
+                    line += f", {len(fails)} FAIL" if passes else f"{len(fails)} FAIL"
+                if warns:
+                    line += f", {len(warns)} WARN" if (passes or fails) else f"{len(warns)} WARN"
+                rule_context_lines.append(line)
+            rule_context = "\n".join(rule_context_lines)
+
             if verbose:
                 os.environ["AIR_VERBOSE"] = "1"
             result = deep_scan(merged_code, model=model,
                               sample_context=sample_desc,
-                              total_files=total_files)
+                              total_files=total_files,
+                              rule_context=rule_context)
             if verbose:
                 os.environ.pop("AIR_VERBOSE", None)
             if result.get("available") and not result.get("error"):
                 deep_findings = result.get("findings", [])
+
+                # ── Smart reconciliation: override model FAIL when rule-based has strong PASS ──
+                # Build a map of rule-based pass counts per article
+                rule_pass_counts = {}
+                rule_evidence_map = {}
+                for article in articles:
+                    art_num = article.get("number", 0)
+                    passes = [c for c in article.get("checks", []) if c.get("status") == "pass"]
+                    rule_pass_counts[art_num] = len(passes)
+                    if passes:
+                        # Collect the best evidence summaries
+                        rule_evidence_map[art_num] = "; ".join(
+                            c.get("evidence", "")[:60] for c in passes[:3]
+                        )
+
+                overrides = 0
+                for finding in deep_findings:
+                    art = finding.get("article", 0)
+                    model_status = finding.get("status", "")
+                    rule_passes = rule_pass_counts.get(art, 0)
+
+                    # If model says FAIL but rule-based has 2+ PASS checks → override to PASS
+                    if model_status == "fail" and rule_passes >= 2:
+                        finding["status"] = "pass"
+                        rule_ev = rule_evidence_map.get(art, "")
+                        finding["evidence"] = (
+                            f"[Corrected by rule-based analysis] "
+                            f"Rule-based scanner found {rule_passes} passing checks: {rule_ev}. "
+                            f"Model's original assessment: {finding.get('evidence', '')}"
+                        )
+                        finding["fix_hint"] = ""
+                        overrides += 1
+                    # If model says FAIL but rule-based has 1 PASS → upgrade to WARN
+                    elif model_status == "fail" and rule_passes == 1:
+                        finding["status"] = "warn"
+                        rule_ev = rule_evidence_map.get(art, "")
+                        finding["evidence"] = (
+                            f"[Partial — rule-based found evidence] {rule_ev}. "
+                            f"Model noted: {finding.get('evidence', '')}"
+                        )
+                        overrides += 1
+
                 console.print(f"  [green]●[/] AI model analyzed [bold]{files_included}[/] files ({total_chars:,} chars) from {total_files} total")
                 console.print(f"  [green]●[/] AI model found [bold]{len(deep_findings)}[/] finding(s) using [bold]{model}[/]")
+                if overrides > 0:
+                    console.print(f"  [green]●[/] Smart reconciliation: [bold]{overrides}[/] model verdict(s) corrected by rule-based evidence")
                 console.print(f"  [green]●[/] Hybrid mode: rule-based + AI analysis merged\n")
             elif result.get("error"):
                 console.print(f"  [yellow]●[/] AI model: {result['error']}")

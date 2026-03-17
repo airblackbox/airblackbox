@@ -85,11 +85,17 @@ class AirTrust:
         elif framework == "crewai":
             from air_blackbox.trust.crewai import attach_trust
             return attach_trust(agent, self.gateway_url)
+        elif framework == "haystack":
+            from air_blackbox.trust.haystack import attach_trust
+            return attach_trust(agent, self.gateway_url)
         elif framework == "openai":
             from air_blackbox.trust.openai_agents import attach_trust
             return attach_trust(agent, self.gateway_url)
         elif framework == "autogen":
             from air_blackbox.trust.autogen import attach_trust
+            return attach_trust(agent, self.gateway_url)
+        elif framework == "adk":
+            from air_blackbox.trust.adk import attach_trust
             return attach_trust(agent, self.gateway_url)
         elif framework == "claude_agent":
             from air_blackbox.trust.claude_agent import attach_trust
@@ -106,6 +112,8 @@ class AirTrust:
             return "langchain"
         elif "crewai" in agent_type:
             return "crewai"
+        elif "haystack" in agent_type:
+            return "haystack"
         elif "openai" in agent_type:
             return "openai"
         elif "autogen" in agent_type:
@@ -114,5 +122,12 @@ class AirTrust:
             return "adk"
         elif "claude_agent_sdk" in agent_type or "claude_agent" in agent_type:
             return "claude_agent"
+
+        # Fallback: check class name for common patterns
+        cls_name = type(agent).__name__
+        if cls_name == "Pipeline" and hasattr(agent, "run"):
+            return "haystack"
+        elif cls_name == "Crew" and hasattr(agent, "kickoff"):
+            return "crewai"
 
         return "unknown"
