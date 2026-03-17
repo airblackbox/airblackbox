@@ -38,6 +38,7 @@ dependencies = [
 [project.optional-dependencies]
 langchain = ["langchain-core>=0.2.0"]
 crewai = ["crewai>=0.50.0"]
+haystack = ["haystack-ai>=2.0.0"]
 openai = ["openai>=1.0"]
 autogen = ["autogen-agentchat>=0.4.0"]
 adk = ["google-adk>=0.1.0"]
@@ -45,6 +46,7 @@ claude = ["claude-agent-sdk>=0.1.0"]
 all = [
     "air-blackbox[langchain]",
     "air-blackbox[crewai]",
+    "air-blackbox[haystack]",
     "air-blackbox[openai]",
     "air-blackbox[autogen]",
     "air-blackbox[claude]",

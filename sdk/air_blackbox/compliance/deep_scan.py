@@ -65,9 +65,14 @@ JSON findings (array only, no extra text):"""
 DEEP_PROMPT_ALPACA = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
-Analyze this Python code for EU AI Act compliance. This is a {sample_context} from a project with {total_files} Python files. Assess ONLY what is visible in the code below — do not assume patterns are missing if they could exist in files not shown.
+Analyze this Python code for EU AI Act compliance. This is a {sample_context} from a project with {total_files} Python files.
 
-For each of Articles 9, 10, 11, 12, 14, and 15: report status (pass if evidence found, warn if partial, fail only if clearly absent), cite specific evidence from the code (function names, patterns, line references), and give fix recommendations. Output as a JSON array.
+IMPORTANT: A rule-based scanner has ALREADY analyzed the full project. Use these verified findings as ground truth:
+{rule_context}
+
+Your job: confirm or refine these findings using the code sample below. If the rule-based scanner found evidence (e.g. "logging in 143 files"), report PASS for that article. Only report FAIL if BOTH the scanner found nothing AND the code sample shows no evidence.
+
+For each of Articles 9, 10, 11, 12, 14, and 15: report status, cite specific evidence, and give fix recommendations.
 
 ### Input:
 {code}
@@ -78,7 +83,8 @@ For each of Articles 9, 10, 11, 12, 14, and 15: report status (pass if evidence 
 
 def deep_scan(code: str, model: str = "air-compliance",
               sample_context: str = "code sample",
-              total_files: int = 0) -> dict:
+              total_files: int = 0,
+              rule_context: str = "") -> dict:
     """Run deep LLM analysis on code.
 
     Args:
@@ -86,6 +92,7 @@ def deep_scan(code: str, model: str = "air-compliance",
         model: Ollama model name
         sample_context: Description of what the sample contains (e.g., "core pipeline files")
         total_files: Total number of Python files in the project (for context)
+        rule_context: Summary of rule-based scanner findings to guide the model
 
     Returns:
         dict with 'available' (bool), 'findings' (list), 'model' (str), 'error' (str or None)
@@ -99,14 +106,16 @@ def deep_scan(code: str, model: str = "air-compliance",
             "error": "Ollama not installed. Install: brew install ollama && ollama create air-compliance -f Modelfile",
         }
 
-    # Check if model exists
+    # Check if model exists — auto-pull from registry if missing
     if not _model_available(model):
-        return {
-            "available": False,
-            "findings": [],
-            "model": model,
-            "error": f"Model '{model}' not found. Create it: cd ~/models/air-compliance && ollama create air-compliance -f Modelfile",
-        }
+        pulled = _auto_pull_model(model)
+        if not pulled:
+            return {
+                "available": False,
+                "findings": [],
+                "model": model,
+                "error": f"Model '{model}' not found. Install it: ollama pull airblackbox/air-compliance",
+            }
 
     # Truncate very long code to avoid context overflow
     max_chars = 12000
@@ -119,6 +128,7 @@ def deep_scan(code: str, model: str = "air-compliance",
             code=code,
             sample_context=sample_context,
             total_files=total_files or "unknown number of",
+            rule_context=rule_context or "No rule-based findings available.",
         )
     else:
         prompt = DEEP_PROMPT_JSON.format(code=code)
@@ -283,6 +293,55 @@ def _model_available(model: str) -> bool:
         )
         return model in result.stdout
     except Exception:
+        return False
+
+
+# Map of short model names to their Ollama registry paths
+REGISTRY_MODELS = {
+    "air-compliance": "airblackbox/air-compliance",
+}
+
+
+def _auto_pull_model(model: str) -> bool:
+    """Try to auto-pull the model from Ollama registry.
+
+    When a user runs the scanner for the first time, they may not have
+    the model yet. This pulls it automatically from ollama.com/airblackbox/air-compliance
+    so they don't have to do it manually.
+
+    Returns True if model is now available, False otherwise.
+    """
+    import sys
+
+    registry_name = REGISTRY_MODELS.get(model, model)
+    print(f"\n  Model '{model}' not found locally.", file=sys.stderr)
+    print(f"  Pulling from Ollama registry: {registry_name} ...", file=sys.stderr)
+    print(f"  (This is a one-time ~8GB download)\n", file=sys.stderr)
+
+    try:
+        # Stream the pull so user sees progress
+        result = subprocess.run(
+            ["ollama", "pull", registry_name],
+            timeout=600,  # 10 min timeout for large model download
+        )
+        if result.returncode == 0:
+            # If we pulled a registry name like "airblackbox/air-compliance",
+            # create a local alias so "air-compliance" works too
+            if registry_name != model:
+                subprocess.run(
+                    ["ollama", "cp", registry_name, model],
+                    capture_output=True, timeout=30,
+                )
+            print(f"\n  Model '{model}' ready.\n", file=sys.stderr)
+            return True
+        else:
+            print(f"\n  Failed to pull model. Run manually: ollama pull {registry_name}\n", file=sys.stderr)
+            return False
+    except subprocess.TimeoutExpired:
+        print(f"\n  Download timed out. Run manually: ollama pull {registry_name}\n", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"\n  Error pulling model: {e}\n", file=sys.stderr)
         return False
 
 

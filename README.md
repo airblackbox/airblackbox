@@ -103,6 +103,18 @@ Then point any OpenAI-compatible client at `http://localhost:8080/v1`.
 
 ```bash
 pip install air-blackbox                   # Core SDK + tracing + compliance
+air-blackbox setup                         # Pulls the AI model (~8GB, one-time)
+```
+
+That's it. Two commands and you're scanning.
+
+The `setup` command pulls our fine-tuned compliance model ([airblackbox/air-compliance](https://ollama.com/airblackbox/air-compliance)) from the Ollama registry. It requires [Ollama](https://ollama.com) to be installed first.
+
+If you skip setup, the scanner still works — it just uses regex-only checks instead of the AI model. First time you run `air-blackbox comply`, it will auto-pull the model for you.
+
+**Framework extras:**
+
+```bash
 pip install "air-blackbox[langchain]"      # + LangChain / LangGraph trust layer
 pip install "air-blackbox[openai]"         # + OpenAI client wrapper
 pip install "air-blackbox[crewai]"         # + CrewAI trust layer
@@ -125,10 +137,12 @@ Non-blocking callback handlers that observe and log — they never control or bl
 | Framework | Install | Status |
 |---|---|---|
 | LangChain / LangGraph | `pip install "air-blackbox[langchain]"` | ✅ Full |
-| OpenAI SDK | `pip install "air-blackbox[openai]"` | ✅ Full |
-| CrewAI | `pip install "air-blackbox[crewai]"` | 🔧 Scaffold |
-| AutoGen | `pip install "air-blackbox[autogen]"` | 🔧 Scaffold |
-| Google ADK | `pip install "air-blackbox[adk]"` | 🔧 Scaffold |
+| OpenAI Agents SDK | `pip install "air-blackbox[openai]"` | ✅ Full |
+| CrewAI | `pip install "air-blackbox[crewai]"` | ✅ Full |
+| AutoGen | `pip install "air-blackbox[autogen]"` | ✅ Full |
+| Google ADK | `pip install "air-blackbox[adk]"` | ✅ Full |
+| Haystack | `pip install "air-blackbox[haystack]"` | ✅ Full |
+| Claude Agent SDK | `pip install "air-blackbox[claude]"` | ✅ Full |
 
 Every trust layer includes:
 
