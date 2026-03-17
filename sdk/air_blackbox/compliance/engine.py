@@ -32,6 +32,12 @@ def _finding_to_dict(finding) -> dict:
 
 
 def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
+    # Support single-file scanning: code scanner gets the file,
+    # but doc checks use the parent directory
+    doc_path = scan_path
+    if os.path.isfile(scan_path):
+        doc_path = os.path.dirname(os.path.abspath(scan_path)) or "."
+
     # Run code-level scan
     code_findings = []
     try:
@@ -46,12 +52,12 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
         code_by_article.setdefault(f.article, []).append(f)
 
     return [
-        _check_article_9(status, scan_path, code_by_article.get(9, [])),
-        _check_article_10(status, scan_path, code_by_article.get(10, [])),
-        _check_article_11(status, scan_path, code_by_article.get(11, [])),
-        _check_article_12(status, scan_path, code_by_article.get(12, [])),
-        _check_article_14(status, scan_path, code_by_article.get(14, [])),
-        _check_article_15(status, scan_path, code_by_article.get(15, [])),
+        _check_article_9(status, doc_path, code_by_article.get(9, [])),
+        _check_article_10(status, doc_path, code_by_article.get(10, [])),
+        _check_article_11(status, doc_path, code_by_article.get(11, [])),
+        _check_article_12(status, doc_path, code_by_article.get(12, [])),
+        _check_article_14(status, doc_path, code_by_article.get(14, [])),
+        _check_article_15(status, doc_path, code_by_article.get(15, [])),
     ]
 
 
