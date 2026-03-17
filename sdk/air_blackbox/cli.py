@@ -286,14 +286,20 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                 rule_context_lines.append(line)
             rule_context = "\n".join(rule_context_lines)
 
-            if verbose:
-                os.environ["AIR_VERBOSE"] = "1"
-            result = deep_scan(merged_code, model=model,
-                              sample_context=sample_desc,
-                              total_files=total_files,
-                              rule_context=rule_context)
-            if verbose:
-                os.environ.pop("AIR_VERBOSE", None)
+            # Only run AI model if we have actual code to analyze
+            if files_included == 0 or not merged_code.strip():
+                if verbose:
+                    console.print(f"  [dim]No Python files found for AI analysis — skipping model[/]")
+                result = {"available": False, "findings": [], "model": model, "error": None}
+            else:
+                if verbose:
+                    os.environ["AIR_VERBOSE"] = "1"
+                result = deep_scan(merged_code, model=model,
+                                  sample_context=sample_desc,
+                                  total_files=total_files,
+                                  rule_context=rule_context)
+                if verbose:
+                    os.environ.pop("AIR_VERBOSE", None)
             if result.get("available") and not result.get("error"):
                 deep_findings = result.get("findings", [])
 

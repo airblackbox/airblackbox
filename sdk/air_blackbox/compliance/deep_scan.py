@@ -72,7 +72,13 @@ IMPORTANT: A rule-based scanner has ALREADY analyzed the full project. Use these
 
 Your job: confirm or refine these findings using the code sample below. If the rule-based scanner found evidence (e.g. "logging in 143 files"), report PASS for that article. Only report FAIL if BOTH the scanner found nothing AND the code sample shows no evidence.
 
-For each of Articles 9, 10, 11, 12, 14, and 15: report status, cite specific evidence, and give fix recommendations.
+EVIDENCE RULES — you MUST follow these:
+1. ALWAYS cite specific function names, class names, or variable names from the code (e.g. "found retry_with_backoff() in utils.py")
+2. ALWAYS reference file names when citing evidence (e.g. "logging configured in config/settings.py")
+3. NEVER use generic phrases like "No error handling detected" — instead say what you looked for and where (e.g. "No try/except blocks or fallback functions found in agent.py or pipeline.py")
+4. If the rule-based scanner found evidence but you don't see it in the code sample, trust the scanner and say "Rule-based scanner confirmed: [their evidence]. Code sample does not include these files."
+
+For each of Articles 9, 10, 11, 12, 14, and 15: report status, cite SPECIFIC evidence from the code with file/function names, and give actionable fix recommendations.
 
 ### Input:
 {code}
@@ -116,6 +122,15 @@ def deep_scan(code: str, model: str = "air-compliance",
                 "model": model,
                 "error": f"Model '{model}' not found. Install it: ollama pull airblackbox/air-compliance",
             }
+
+    # Guard: skip if no actual code provided
+    if not code or not code.strip():
+        return {
+            "available": True,
+            "findings": [],
+            "model": model,
+            "error": "No code provided for analysis",
+        }
 
     # Truncate very long code to avoid context overflow
     max_chars = 12000
