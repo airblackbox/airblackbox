@@ -100,7 +100,8 @@ def setup():
         else:
             console.print("  [yellow]⚠[/yellow] Model pulled but not showing in list. Try restarting Ollama.")
     except Exception:
-        pass
+        # Best-effort verification; do not fail setup if this check errors
+        console.print("  [yellow]⚠[/yellow] Could not verify model in Ollama (verification step failed).")
 
     console.print(Panel.fit(
         "[bold green]Setup complete![/bold green]\n\n"
@@ -149,16 +150,19 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         import os
         if _ollama_available() and _model_available(model):
             console.print(f"[bold]Running hybrid analysis (regex + AI model)...[/]\n")
-            # Collect all Python files
+            # Collect all Python files (supports single-file and directory scanning)
             py_files = []
-            skip_dirs = {"node_modules", ".git", "__pycache__", ".venv", "venv",
-                         "dist", "build", ".eggs", "site-packages", ".tox",
-                         ".mypy_cache", ".pytest_cache"}
-            for root, dirs, files in os.walk(scan):
-                dirs[:] = [d for d in dirs if d not in skip_dirs and not d.endswith(".egg-info")]
-                for f in files:
-                    if f.endswith(".py"):
-                        py_files.append(os.path.join(root, f))
+            if os.path.isfile(scan) and scan.endswith(".py"):
+                py_files = [os.path.abspath(scan)]
+            else:
+                skip_dirs = {"node_modules", ".git", "__pycache__", ".venv", "venv",
+                             "dist", "build", ".eggs", "site-packages", ".tox",
+                             ".mypy_cache", ".pytest_cache"}
+                for root, dirs, files in os.walk(scan):
+                    dirs[:] = [d for d in dirs if d not in skip_dirs and not d.endswith(".egg-info")]
+                    for f in files:
+                        if f.endswith(".py"):
+                            py_files.append(os.path.join(root, f))
             total_files = len(py_files)
 
             # === Smart sampling: pick compliance-relevant files ===
@@ -366,7 +370,9 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
             if verbose:
                 console.print(f"  [dim]Saved to compliance history (scan #{scan_id})[/]\n")
         except Exception:
-            pass  # Don't break the scan if history fails
+            # Don't break the scan if history save fails
+            if verbose:
+                console.print("  [dim]Could not save to compliance history[/]")
 
     if fmt == "json":
         import json

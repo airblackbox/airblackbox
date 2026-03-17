@@ -65,6 +65,10 @@ def scan_codebase(scan_path: str) -> List[CodeFinding]:
 
 
 def _find_python_files(scan_path: str) -> List[str]:
+    # Support single-file scanning (e.g., --scan ./agent.py)
+    if os.path.isfile(scan_path) and scan_path.endswith(".py"):
+        return [os.path.abspath(scan_path)]
+
     skip_dirs = {
         "node_modules", ".git", "__pycache__", ".venv", "venv",
         "env", ".env", ".tox", ".mypy_cache", ".pytest_cache",
@@ -175,14 +179,36 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
 
 
 def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'pii', r'redact', r'mask_(?:data|pii|email|ssn|name)', r'anonymize', r'tokenize_pii', r'presidio', r'scrub', r'private_data', r'private_info', r'sensitive_data', r'sensitive_field', r'data_protection', r'gdpr', r'personal_data']
-    combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
-    if hits:
-        return [CodeFinding(article=10, name="PII handling in code", status="pass", evidence=f"PII-aware patterns found in {len(hits)} file(s)")]
+    # Strong signals: actual PII detection/redaction libraries or explicit PII-handling code
+    strong_patterns = [
+        r'presidio', r'scrubadub', r'detect_pii', r'pii_detect',
+        r'redact_pii', r'mask_pii', r'anonymize_pii', r'strip_pii',
+        r'PiiDetect', r'PiiRedact', r'PiiFilter',
+        r'mask_(?:email|ssn|phone|name|address)',
+        r'gdpr_complian', r'data_protection_officer',
+    ]
+    # Moderate signals: awareness of PII concept (variable names, comments)
+    moderate_patterns = [
+        r'\bpii\b',  # Word boundary so "api" doesn't match
+        r'redact(?:ed|ion|_data)', r'anonymiz(?:e|ed|ation)',
+        r'personal_data', r'sensitive_data', r'private_data',
+        r'data_classification', r'data_retention',
+    ]
+    strong_combined = "|".join(strong_patterns)
+    moderate_combined = "|".join(moderate_patterns)
+    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    moderate_hits = [fp for fp, content in file_contents.items()
+                     if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
+    if strong_hits:
+        return [CodeFinding(article=10, name="PII handling in code", status="pass",
+            evidence=f"PII detection/redaction found in {len(strong_hits)} file(s) (library-grade)")]
+    if moderate_hits and len(moderate_hits) >= 3:
+        return [CodeFinding(article=10, name="PII handling in code", status="warn",
+            evidence=f"PII-aware variable names or references in {len(moderate_hits)} file(s), but no detection/redaction library",
+            fix_hint="Add actual PII detection (e.g., presidio, scrubadub) instead of just naming patterns")]
     return [CodeFinding(article=10, name="PII handling in code", status="warn",
         evidence="No PII detection, redaction, or masking patterns found in code",
-        fix_hint="Consider adding PII detection before sending data to LLM providers")]
+        fix_hint="Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub)")]
 
 
 def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -368,14 +394,32 @@ def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFindin
 
 
 def _check_rate_limiting(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'rate_limit', r'max_tokens', r'max_iterations', r'max_steps', r'budget', r'token_limit', r'cost_limit', r'max_retries', r'max_calls', r'throttle', r'cooldown', r'max_rpm']
-    combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
-    if hits:
-        return [CodeFinding(article=14, name="Usage limits / budget controls", status="pass", evidence=f"Rate limiting or budget controls found in {len(hits)} file(s)")]
+    # Strong: actual budget/cost enforcement that a human can control
+    strong_patterns = [
+        r'rate_limit(?:er|ing)', r'RPMController', r'max_rpm',
+        r'cost_limit', r'budget_limit', r'spend_limit',
+        r'token_budget', r'usage_quota', r'quota_exceeded',
+        r'throttle_agent', r'agent_budget',
+    ]
+    # Weak: config params that exist in every LLM wrapper (not human oversight)
+    weak_patterns = [
+        r'max_tokens', r'max_iterations', r'max_steps',
+        r'max_retries', r'cooldown',
+    ]
+    strong_combined = "|".join(strong_patterns)
+    weak_combined = "|".join(weak_patterns)
+    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    weak_hits = [fp for fp, content in file_contents.items() if re.search(weak_combined, content, re.IGNORECASE)]
+    if strong_hits:
+        return [CodeFinding(article=14, name="Usage limits / budget controls", status="pass",
+            evidence=f"Active rate limiting or budget controls found in {len(strong_hits)} file(s)")]
+    if weak_hits and len(weak_hits) >= 5:
+        return [CodeFinding(article=14, name="Usage limits / budget controls", status="warn",
+            evidence=f"Basic execution limits (max_tokens, max_iterations) in {len(weak_hits)} file(s), but no explicit budget enforcement",
+            fix_hint="Add explicit budget limits (cost_limit, usage_quota) that a human operator can configure")]
     return [CodeFinding(article=14, name="Usage limits / budget controls", status="warn",
         evidence="No rate limiting or token budget controls detected",
-        fix_hint="Set max_tokens, max_iterations, or budget limits to prevent runaway agents")]
+        fix_hint="Set cost_limit, usage_quota, or RPM limits to prevent runaway agents")]
 
 
 def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -390,20 +434,36 @@ def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]
 
 
 def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    # Learned from CrewAI: hallucination_guardrail and llm_guardrail are real defense patterns
-    patterns = [
+    """Check for prompt injection defense patterns.
+
+    Tightened in v1.4.1: 'sanitize' alone matches sanitize_filename, sanitize_url, etc.
+    Now requires sanitize to be in a prompt/input/llm context, or uses specific security patterns.
+    """
+    # Strong: explicit security libraries/patterns
+    strong_patterns = [
         r'prompt.?injection', r'sql.?injection',
         r'inject.*(?:attack|detect|prevent|filter)',
-        r'sanitize', r'escape_prompt', r'guardrail',
-        r'content_filter', r'moderation', r'safety_check',
+        r'escape_prompt', r'content_filter', r'moderation',
         r'prompt_guard', r'nemo_guardrails', r'rebuff', r'lakera',
         r'system_prompt.*?boundary',
         r'hallucination_guardrail', r'llm_guardrail',  # CrewAI built-in
-        r'output_guardrail', r'input_guardrail',  # Generic guardrail patterns
-        r'trust_policy', r'verify_trust', r'min_trust_score',  # LlamaIndex AgentMesh
+        r'output_guardrail', r'input_guardrail',  # Guardrail patterns
+        r'trust_policy', r'verify_trust', r'min_trust_score',
+        r'jailbreak_detect', r'safety_check.*(?:prompt|input|llm)',
     ]
-    combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    # Moderate: guardrail/sanitize in AI-specific context (not just sanitize_filename)
+    moderate_patterns = [
+        r'(?:prompt|input|llm|agent).*sanitiz',
+        r'sanitiz.*(?:prompt|input|query)',
+        r'(?:Guardrail|GuardRail)(?:Component|Service|Check)',
+        r'guardrails_config', r'guardrail_check',
+    ]
+    strong_combined = "|".join(strong_patterns)
+    moderate_combined = "|".join(moderate_patterns)
+    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    moderate_hits = [fp for fp, content in file_contents.items()
+                     if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
+    hits = strong_hits + moderate_hits
     danger_patterns = [r'f".*\{.*input.*\}.*"', r'\.format\(.*input', r'user_message.*=.*input\(']
     danger_combined = "|".join(danger_patterns)
     danger_hits = [fp for fp, content in file_contents.items() if re.search(danger_combined, content)]
@@ -444,26 +504,41 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
 # ─────────────────────────────────────────────
 
 def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    """Check if agent actions are bound to the user who authorized them."""
-    # Learned from Haystack: user_id in memory stores is real identity binding for per-user memory scoping
-    # Learned from CrewAI: Fingerprint system provides UUID-based agent identity
-    identity_binding_patterns = [
-        r'user_id', r'user_email', r'authorized_by', r'delegated_by',
-        r'on_behalf_of', r'acting_as', r'user_context', r'auth_context',
-        r'identity_token', r'delegation_token', r'agent_user_binding',
-        r'x-user-id', r'X-User-Id', r'user_identity',
-        r'memory_store.*user', r'store.*memories.*user',
-        r'retrieve_memories.*user', r'add_memories.*user',  # Haystack memory store
-        r'Fingerprint', r'agent_fingerprint', r'agent_identity',  # CrewAI identity
+    """Check if agent actions are bound to the user who authorized them.
+
+    Tightened in v1.4.1: bare 'user_id' is too common (every web app has it).
+    Now requires delegation-specific patterns or user_id in agent/LLM context.
+    """
+    # Strong: explicit delegation/authorization binding
+    strong_patterns = [
+        r'authorized_by', r'delegated_by', r'on_behalf_of', r'acting_as',
+        r'delegation_token', r'agent_user_binding', r'agent_identity',
+        r'Fingerprint', r'agent_fingerprint',  # CrewAI identity
         r'AgentCard',  # CrewAI A2A identity
+        r'identity_token', r'auth_context',
     ]
-    combined = "|".join(identity_binding_patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
-    if hits:
+    # Moderate: user identity in agent/AI context (not just web framework user_id)
+    moderate_patterns = [
+        r'(?:agent|llm|crew|chain|pipeline).*user_id',
+        r'user_id.*(?:agent|llm|crew|chain|pipeline)',
+        r'memory_store.*user', r'store.*memories.*user',
+        r'retrieve_memories.*user', r'add_memories.*user',
+        r'user_context.*(?:agent|run|execute)',
+    ]
+    strong_combined = "|".join(strong_patterns)
+    moderate_combined = "|".join(moderate_patterns)
+    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    moderate_hits = [fp for fp, content in file_contents.items()
+                     if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
+    if strong_hits:
         return [CodeFinding(article=14, name="Agent-to-user identity binding",
-            status="pass", evidence=f"User identity binding found in {len(hits)} file(s) (user_id, memory store, or delegation tracking)")]
+            status="pass", evidence=f"Delegation/identity binding found in {len(strong_hits)} file(s) (agent identity, delegation tokens)")]
+    if moderate_hits:
+        return [CodeFinding(article=14, name="Agent-to-user identity binding",
+            status="warn", evidence=f"User identity referenced in agent context in {len(moderate_hits)} file(s), but no explicit delegation binding",
+            fix_hint="Add explicit delegation tracking (authorized_by, delegation_token) alongside user_id")]
     return [CodeFinding(article=14, name="Agent-to-user identity binding",
-        status="warn", evidence="No user identity binding detected. Agent actions are not tied to the authorizing user.",
+        status="warn", evidence="No user identity binding in agent context. Agent actions not tied to authorizing user.",
         fix_hint="Track user_id or auth_context alongside every agent action so you can answer 'who authorized this?'")]
 
 
@@ -491,22 +566,37 @@ def _check_token_scope_validation(file_contents: dict, scan_path: str) -> List[C
 
 
 def _check_token_expiry_revocation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    """Check if tokens have expiry/revocation handling or execution time-bounding."""
-    expiry_patterns = [
-        r'token_expir', r'expires_at', r'expires_in', r'refresh_token',
+    """Check if tokens have expiry/revocation handling or execution time-bounding.
+
+    Tightened in v1.4.1: separated token security (strong) from basic config params (weak).
+    max_iterations alone is not a security boundary — it's a config param.
+    """
+    # Strong: actual token lifecycle management
+    strong_patterns = [
+        r'token_expir', r'expires_at', r'refresh_token',
         r'token_refresh', r'revoke_token', r'revocation', r'is_expired',
-        r'check_expiry', r'token_lifetime', r'session_timeout',
-        r'max_agent_steps', r'max_iterations', r'execution_timeout',
-        r'agent_timeout', r'step_limit',
+        r'check_expiry', r'token_lifetime',
+        r'execution_timeout', r'agent_timeout',
     ]
-    combined = "|".join(expiry_patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
-    if hits:
+    # Weak: basic config that limits execution but isn't a security control
+    weak_patterns = [
+        r'max_agent_steps', r'max_iterations', r'step_limit',
+        r'session_timeout', r'expires_in',
+    ]
+    strong_combined = "|".join(strong_patterns)
+    weak_combined = "|".join(weak_patterns)
+    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    weak_hits = [fp for fp, content in file_contents.items() if re.search(weak_combined, content, re.IGNORECASE)]
+    if strong_hits:
         return [CodeFinding(article=14, name="Token expiry / execution bounding",
-            status="pass", evidence=f"Token expiry or execution boundary patterns found in {len(hits)} file(s)")]
+            status="pass", evidence=f"Token expiry or execution timeout found in {len(strong_hits)} file(s)")]
+    if weak_hits and len(weak_hits) >= 3:
+        return [CodeFinding(article=14, name="Token expiry / execution bounding",
+            status="warn", evidence=f"Basic iteration/step limits in {len(weak_hits)} file(s), but no token expiry or revocation",
+            fix_hint="Add token expiry (expires_at), refresh logic, and execution timeouts alongside step limits")]
     return [CodeFinding(article=14, name="Token expiry / execution bounding",
         status="fail", evidence="No token expiry or execution bounding detected. Agent may run indefinitely.",
-        fix_hint="Implement token expiry, max_agent_steps, or execution timeouts so rogue agents can be stopped")]
+        fix_hint="Implement token expiry, execution_timeout, or revocation so rogue agents can be stopped")]
 
 
 def _check_action_audit_trail(file_contents: dict, scan_path: str) -> List[CodeFinding]:
