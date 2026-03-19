@@ -43,6 +43,7 @@ openai = ["openai>=1.0"]
 autogen = ["autogen-agentchat>=0.4.0"]
 adk = ["google-adk>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.0"]
+pdf = ["reportlab>=4.0"]
 all = [
     "air-blackbox[langchain]",
     "air-blackbox[crewai]",
@@ -50,6 +51,7 @@ all = [
     "air-blackbox[openai]",
     "air-blackbox[autogen]",
     "air-blackbox[claude]",
+    "air-blackbox[pdf]",
 ]
 
 [project.scripts]
