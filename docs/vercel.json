@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/vaultmind", "destination": "/vaultmind.html" },
+    { "source": "/vaultmind/", "destination": "/vaultmind.html" }
+  ]
+}
