@@ -673,43 +673,80 @@ def replay(gateway, runs_dir, episode, last, verify):
 
 
 @main.command()
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--gateway",  default="http://localhost:8080", help="Gateway URL")
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
-@click.option("--range", "time_range", default="30d", help="Time range")
-@click.option("--format", "fmt", type=click.Choice(["json", "pdf"]), default="json")
-@click.option("--output", "-o", default=None, help="Output file path")
-def export(gateway, runs_dir, time_range, fmt, output):
-    """Generate signed evidence bundles for auditors and insurers."""
+@click.option("--scan",     default=".", help="Path to scan for code-level checks")
+@click.option("--range",    "time_range", default="30d", help="Time range")
+@click.option("--format",   "fmt", type=click.Choice(["json", "pdf"]), default="json")
+@click.option("--output",   "-o", default=None, help="Output file path")
+def export(gateway, runs_dir, scan, time_range, fmt, output):
+    """Generate signed evidence bundles for auditors and insurers.
+
+    \b
+    Formats:
+        json  — machine-readable signed evidence bundle (default)
+        pdf   — formatted PDF compliance report for humans / auditors
+
+    \b
+    Examples:
+        air-blackbox export
+        air-blackbox export --format pdf
+        air-blackbox export --scan ~/myproject --format pdf
+        air-blackbox export --scan . --format pdf --output report.pdf
+    """
     from air_blackbox.export.bundle import generate_evidence_bundle
     import json as jsonlib
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Evidence Export\n")
+    console.print("\n[bold cyan]AIR Blackbox[/] — Evidence Export\n")
 
     with console.status("[bold green]Generating evidence bundle..."):
-        bundle = generate_evidence_bundle(gateway_url=gateway, runs_dir=runs_dir, scan_path=".")
+        bundle = generate_evidence_bundle(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
 
     summary = bundle.get("compliance", {}).get("summary", {})
-    trail = bundle.get("audit_trail", {})
-    chain = trail.get("chain_verification", {})
+    trail   = bundle.get("audit_trail", {})
+    chain   = trail.get("chain_verification", {})
 
-    console.print(f"  [bold]Compliance:[/] {summary.get('passing', 0)} passing, {summary.get('warnings', 0)} warnings, {summary.get('failing', 0)} failing")
-    console.print(f"  [bold]AI-BOM:[/] {len(bundle.get('aibom', {}).get('components', []))} components")
-    console.print(f"  [bold]Audit trail:[/] {trail.get('total_records', 0)} records")
-    console.print(f"  [bold]Chain:[/] {'[green]INTACT[/]' if chain.get('intact') else '[red]BROKEN[/]'}")
-    console.print(f"  [bold]Signed:[/] HMAC-SHA256")
+    passing  = summary.get("passing",  0)
+    warnings = summary.get("warnings", 0)
+    failing  = summary.get("failing",  0)
+
+    console.print(f"  [bold]Compliance:[/]   {passing} passing · {warnings} warnings · {failing} failing")
+    console.print(f"  [bold]AI-BOM:[/]        {len(bundle.get('aibom', {}).get('components', []))} components")
+    console.print(f"  [bold]Audit trail:[/]   {trail.get('total_records', 0)} records")
+    console.print(f"  [bold]Chain:[/]         {'[green]INTACT[/]' if chain.get('intact') else '[yellow]No signing key set[/]'}")
     console.print()
 
-    out_path = output or f"air-blackbox-evidence-{datetime.utcnow().strftime('%Y%m%d')}.json"
-    with open(out_path, "w") as f:
-        jsonlib.dump(bundle, f, indent=2)
+    if fmt == "pdf":
+        from air_blackbox.export.pdf_report import generate_pdf, REPORTLAB_OK
+        if not REPORTLAB_OK:
+            console.print("[red]reportlab not installed.[/] Run: [bold]pip install reportlab[/]")
+            raise SystemExit(1)
 
-    console.print(Panel(
-        f"Evidence bundle written to [bold]{out_path}[/]\n\n"
-        f"Contains: compliance scan + AI-BOM (CycloneDX) + audit trail + HMAC attestation\n"
-        f"Hand this file to your auditor or insurer as a single verifiable document.",
-        title="[bold green]Export Complete[/]",
-        border_style="green",
-    ))
+        out_path = output or f"AIR_Blackbox_Compliance_Report_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+        with console.status("[bold green]Rendering PDF report..."):
+            generate_pdf(bundle, out_path)
+
+        console.print(Panel(
+            f"PDF report written to [bold]{out_path}[/]\n\n"
+            f"Contains: compliance scorecard · per-article findings · audit trail · priority fix list\n"
+            f"Ready to hand to your auditor, compliance team, or share with stakeholders.",
+            title="[bold green]PDF Export Complete[/]",
+            border_style="green",
+        ))
+    else:
+        # Default: JSON evidence bundle
+        out_path = output or f"air-blackbox-evidence-{datetime.utcnow().strftime('%Y%m%d')}.json"
+        with open(out_path, "w") as f:
+            jsonlib.dump(bundle, f, indent=2)
+
+        console.print(Panel(
+            f"Evidence bundle written to [bold]{out_path}[/]\n\n"
+            f"Contains: compliance scan + AI-BOM (CycloneDX) + audit trail + HMAC attestation\n"
+            f"Hand this file to your auditor or insurer as a single verifiable document.\n\n"
+            f"[dim]Tip: use [bold]--format pdf[/bold] to generate a human-readable PDF report[/dim]",
+            title="[bold green]Export Complete[/]",
+            border_style="green",
+        ))
 
 
 @main.command()
