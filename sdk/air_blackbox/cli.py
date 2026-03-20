@@ -22,27 +22,24 @@ console = Console()
 
 
 AIR_BANNER = r"""[bold #00d4aa]
-    ___  ___ ___    ___  _      _   ___ _  ___  _____  __
-   / _ \|_ _| _ \  | _ )| |    /_\ / __| |/ / |/ / _ \ \ / /
-  | (_) || ||   /  | _ \| |__ / _ \| (__| ' <| ' < (_) > <
-   \___/|___|_|_\  |___/|____/_/ \_\___|_|\_\_|\_\___/_/\_\
+    _    ___ ____    ____  _            _    _
+   / \  |_ _|  _ \  | __ )| | __ _  ___| | _| |__   _____  __
+  / _ \  | || |_) | |  _ \| |/ _` |/ __| |/ / '_ \ / _ \ \/ /
+ / ___ \ | ||  _ <  | |_) | | (_| | (__|   <| |_) | (_) >  <
+/_/   \_\___|_| \_\ |____/|_|\__,_|\___|_|\_\_.__/ \___/_/\_\
 [/bold #00d4aa]"""
 
-AIR_SUBTITLE = "[dim]EU AI Act Compliance · AI-BOM · Audit Chain · Incident Replay[/dim]"
-AIR_DEADLINE = "[bold #f85149]⚠  Enforcement deadline: August 2, 2026  —  €35M or 7% global turnover[/bold #f85149]"
-AIR_INSTALL  = "[dim]pip install air-blackbox  ·  github.com/airblackbox/gateway  ·  airblackbox.ai[/dim]"
 
 
 def print_banner():
-    from rich.align import Align
     from rich.rule import Rule
     console.print(AIR_BANNER)
-    console.print(Align.center(AIR_SUBTITLE))
+    console.print("  [dim]EU AI Act Compliance · AI-BOM · Audit Chain · Incident Replay[/dim]")
     console.print()
     console.print(Rule(style="#1e2530"))
-    console.print(Align.center(AIR_DEADLINE))
+    console.print("  [bold #f85149]⚠  Enforcement deadline: August 2, 2026  —  €35M or 7% global turnover[/bold #f85149]")
     console.print(Rule(style="#1e2530"))
-    console.print(Align.center(AIR_INSTALL))
+    console.print("  [dim]pip install air-blackbox  ·  github.com/airblackbox/gateway  ·  airblackbox.ai[/dim]")
     console.print()
 
 
