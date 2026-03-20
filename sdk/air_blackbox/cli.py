@@ -240,9 +240,9 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
             scored.sort(key=lambda x: x[1], reverse=True)
 
             # Build code sample from top-ranked files
-            # Cap individual files at 3KB to get more variety, total at 10KB
-            MAX_PER_FILE = 3000
-            MAX_TOTAL = 10000
+            # Cap individual files at 8KB to preserve full context, total at 48KB
+            MAX_PER_FILE = 8000
+            MAX_TOTAL = 48000
             code_parts = []
             total_chars = 0
             files_included = 0
@@ -466,7 +466,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                     ev += f"\n[dim italic]Fix: {f['fix_hint']}[/]"
                 deep_table.add_row(f"Art {f.get('article', '?')}", f.get("name", ""), si, ev)
             console.print(deep_table)
-            console.print("[dim]  Note: AI model assessed a code sample (max 12KB). Rule-based checks above are more accurate.[/]")
+            console.print("[dim]  Note: AI model assessed a code sample (max 48KB). Rule-based checks above are more accurate.[/]")
             console.print()
 
     total = sum(len(a["checks"]) for a in articles)
