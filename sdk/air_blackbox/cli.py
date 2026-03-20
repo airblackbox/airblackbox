@@ -21,12 +21,12 @@ from rich.panel import Panel
 console = Console()
 
 
-AIR_BANNER = """[bold #00d4aa]
-    ░░░░░  ▀█▀ █▀█   █▄▄ █░░ ▄▀█ █▀▀ █▄▀ █▄▄ █▀█ ▀▄▀
-    ░▄▄▄░   █  █▀▄   █▄█ █▄▄ █▀█ █▄▄ █░█ █▄█ █▄█ █░█[/bold #00d4aa]
-    [dim]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/dim]
-    [#00d4aa]v1.4.0[/#00d4aa]  [dim]EU AI Act Compliance Engine  ·  Apache 2.0  ·  airblackbox.ai[/dim]
-"""
+AIR_BANNER = r"""[bold #00d4aa]
+    ___  ___ ___    ___  _      _   ___ _  ___  _____  __
+   / _ \|_ _| _ \  | _ )| |    /_\ / __| |/ / |/ / _ \ \ / /
+  | (_) || ||   /  | _ \| |__ / _ \| (__| ' <| ' < (_) > <
+   \___/|___|_|_\  |___/|____/_/ \_\___|_|\_\_|\_\___/_/\_\
+[/bold #00d4aa]"""
 
 AIR_SUBTITLE = "[dim]EU AI Act Compliance · AI-BOM · Audit Chain · Incident Replay[/dim]"
 AIR_DEADLINE = "[bold #f85149]⚠  Enforcement deadline: August 2, 2026  —  €35M or 7% global turnover[/bold #f85149]"
