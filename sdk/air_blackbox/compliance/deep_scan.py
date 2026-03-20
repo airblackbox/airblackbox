@@ -163,6 +163,9 @@ def deep_scan(code: str, model: str = "air-compliance",
 
         raw_output = result.stdout
 
+        # Sanitize known model hallucinations from fine-tuning
+        raw_output = _sanitize_model_output(raw_output)
+
         # Always print raw output in verbose mode for debugging
         import os
         if os.environ.get("AIR_VERBOSE"):
@@ -358,6 +361,22 @@ def _auto_pull_model(model: str) -> bool:
     except Exception as e:
         print(f"\n  Error pulling model: {e}\n", file=sys.stderr)
         return False
+
+
+def _sanitize_model_output(raw: str) -> str:
+    """Remove known hallucinations from fine-tuned model output.
+
+    The fine-tuned model sometimes generates brand names or product references
+    that leaked from training data. This strips them before parsing.
+    """
+    import re
+    # Remove hallucinated trust layer references (e.g. "Jason AI Trust Layer",
+    # "Install the Jason AI Trust Layer", etc.)
+    raw = re.sub(r'(?i)\b(?:the\s+)?jason\s+ai\s+trust\s+layer\b', 'a trust layer', raw)
+    # Remove "Install the <Name> Trust Layer for full compliance" pattern
+    raw = re.sub(r'(?i)install\s+(?:the\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+trust\s+layer\s+for\s+full\s+compliance',
+                 'Install a trust layer package for full compliance', raw)
+    return raw
 
 
 def _parse_llm_output(raw: str) -> list:
