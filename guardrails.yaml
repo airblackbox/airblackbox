@@ -104,3 +104,36 @@ trust:
     frameworks:
       - SOC2
       - ISO27001
+
+
+## --- Telemetry Layer ---
+## Controls what anonymized scan metadata leaves this environment.
+## This is the data flywheel: crowd-sourced metadata improves the compliance
+## model for everyone. Enterprise can opt out completely.
+##
+## Modes:
+##   crowd_source  — Anonymized metadata sent to telemetry.airblackbox.ai (default for free tier)
+##   private       — Metadata stays local, but you get benchmarking dashboard access (pro tier)
+##   air_gapped    — Nothing leaves this network. Full isolation. (enterprise tier)
+##
+## What IS sent (crowd_source mode):
+##   - Framework detected (LangChain, CrewAI, AutoGen, etc.)
+##   - Article pass/fail/warn scores per scan
+##   - File count and language breakdown
+##   - Model provider (OpenAI, Anthropic, etc.) and token counts
+##   - Error patterns and fix adoption rates
+##
+## What is NEVER sent (any mode):
+##   - Source code, file contents, or file paths
+##   - Prompts, completions, or conversation content
+##   - API keys, credentials, or environment variables
+##   - Repository URLs, company names, or user identities
+##
+telemetry:
+  mode: "crowd_source"  # crowd_source | private | air_gapped
+  endpoint: "telemetry.airblackbox.ai:4317"  # OTel collector endpoint
+  batch_size: 50         # buffer this many scan results before sending
+  flush_interval: 300    # seconds between flushes (5 min default)
+  include_model_metrics: true   # token counts, latency, error rates
+  include_framework_detection: true  # which frameworks detected
+  include_article_scores: true  # per-article pass/fail/warn
