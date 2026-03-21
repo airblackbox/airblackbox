@@ -15,8 +15,10 @@ services:
       - VAULT_USE_SSL=false
       - OTEL_EXPORTER_OTLP_ENDPOINT=collector:4317
       - RUNS_DIR=/data/runs
+      - GUARDRAILS_CONFIG=/etc/gateway/guardrails.yaml
     volumes:
       - ./runs:/data/runs
+      - ./guardrails.yaml:/etc/gateway/guardrails.yaml:ro
     depends_on:
       - minio
       - collector
