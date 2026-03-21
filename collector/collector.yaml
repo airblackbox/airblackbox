@@ -75,9 +75,114 @@ exporters:
   debug:
     verbosity: basic
 
+  ## Crowd-source exporter — sends anonymized metadata to AIR Blackbox central.
+  ## Only active when TELEMETRY_MODE=crowd_source (default for free tier).
+  ## Disabled for air_gapped and private modes.
+  otlp/crowd:
+    endpoint: ${env:TELEMETRY_ENDPOINT:-telemetry.airblackbox.ai:4317}
+    tls:
+      insecure: false
+    headers:
+      x-air-tier: ${env:AIR_TIER:-free}
+    sending_queue:
+      enabled: true
+      queue_size: 500
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
+
+processors:
+  # Step 1: Normalize vendor-specific attributes to gen_ai.* semantic conventions.
+  genai_semantic_normalizer:
+    enable_defaults: true
+    overwrite: false
+    drop_original: false
+
+  # Step 2: Offload prompt/response content to filesystem vault.
+  promptvault:
+    storage:
+      backend: filesystem
+      filesystem:
+        base_path: /data/vault
+    vault:
+      keys:
+        - gen_ai.system_instructions
+        - gen_ai.input.messages
+        - gen_ai.output.messages
+        - gen_ai.prompt
+        - gen_ai.completion
+      size_threshold: 0
+      mode: replace_with_ref
+
+  # Step 3: PII redaction, token metrics, loop detection.
+  genaisafe:
+    redact:
+      mode: hash_and_preview
+      preview_chars: 48
+      salt: air-demo-salt
+      keys:
+        - gen_ai.prompt
+        - gen_ai.completion
+        - llm.prompt
+        - llm.completion
+      denylist_regex:
+        - "(?i)api[_-]?key"
+        - "(?i)authorization"
+        - "(?i)sk-[a-z0-9]{20,}"
+    metrics:
+      enable: true
+    loop_detection:
+      enable: true
+      repeat_threshold: 6
+
+  # Step 3b: Aggressive PII scrub for crowd-source pipeline.
+  # Same as genaisafe but with full_hash mode — no preview chars leak.
+  genaisafe/crowd:
+    redact:
+      mode: full_hash
+      preview_chars: 0
+      salt: air-crowd-salt
+      keys:
+        - gen_ai.prompt
+        - gen_ai.completion
+        - llm.prompt
+        - llm.completion
+        - gen_ai.system_instructions
+        - gen_ai.input.messages
+        - gen_ai.output.messages
+      denylist_regex:
+        - "(?i)api[_-]?key"
+        - "(?i)authorization"
+        - "(?i)sk-[a-z0-9]{20,}"
+        - "(?i)password"
+        - "(?i)secret"
+    metrics:
+      enable: true
+    loop_detection:
+      enable: false  # not needed for crowd pipeline
+
+  # Step 4: Standard batching before export.
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  batch/crowd:
+    timeout: 30s
+    send_batch_size: 50
+
 service:
   pipelines:
-    traces:
+    ## Local pipeline — full processing, vault storage, local observability.
+    ## Always active regardless of telemetry mode.
+    traces/local:
       receivers: [otlp]
       processors: [genai_semantic_normalizer, promptvault, genaisafe, batch]
       exporters: [otlp/jaeger, debug]
+
+    ## Crowd-source pipeline — anonymized metadata only.
+    ## Normalizer + aggressive PII scrub. NO vault processor (prompts never sent).
+    ## Toggle via TELEMETRY_MODE env var. Disabled = comment out this pipeline.
+    traces/crowd:
+      receivers: [otlp]
+      processors: [genai_semantic_normalizer, genaisafe/crowd, batch/crowd]
+      exporters: [otlp/crowd]
