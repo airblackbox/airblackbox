@@ -1,0 +1,101 @@
+##
+## Test config for dual-pipeline OTel Collector.
+##
+## Uses stock otel-collector-contrib (no custom AIR processors).
+## Tests the routing: local pipeline → Jaeger, crowd pipeline → logged to debug.
+##
+## Once the custom collector build is fixed, swap in the full collector.yaml
+## which adds genai_semantic_normalizer, promptvault, and genaisafe processors.
+##
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Standard batching for local pipeline.
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  # Smaller batch for crowd pipeline — sends less frequently.
+  batch/crowd:
+    timeout: 30s
+    send_batch_size: 50
+
+  # Strip sensitive attributes before crowd export.
+  # This is the stock-collector equivalent of genaisafe/crowd.
+  attributes/crowd_scrub:
+    actions:
+      # Remove any prompt/completion content — never send to crowd endpoint
+      - key: gen_ai.prompt
+        action: delete
+      - key: gen_ai.completion
+        action: delete
+      - key: gen_ai.system_instructions
+        action: delete
+      - key: gen_ai.input.messages
+        action: delete
+      - key: gen_ai.output.messages
+        action: delete
+      - key: llm.prompt
+        action: delete
+      - key: llm.completion
+        action: delete
+      # Remove anything that could identify the user
+      - key: user.id
+        action: delete
+      - key: user.email
+        action: delete
+      - key: http.url
+        action: delete
+      - key: http.target
+        action: delete
+      # Tag as crowd-sourced for the aggregation endpoint
+      - key: air.telemetry_mode
+        action: upsert
+        value: "crowd_source"
+      - key: air.collector_version
+        action: upsert
+        value: "0.1.0-test"
+
+exporters:
+  # Local: Jaeger for observability dashboard
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Local: Debug output for testing
+  debug:
+    verbosity: detailed
+
+  # Crowd: In test mode, just log what WOULD be sent.
+  # In production, this points to telemetry.airblackbox.ai:4317
+  debug/crowd:
+    verbosity: normal
+
+service:
+  telemetry:
+    logs:
+      level: info
+
+  pipelines:
+    ## Local pipeline — full traces to Jaeger + debug log.
+    ## Always active.
+    traces/local:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]
+
+    ## Crowd-source pipeline — scrubbed traces to crowd exporter.
+    ## Strips all prompt/completion content before export.
+    ## In test mode: exports to debug/crowd so we can see what would be sent.
+    traces/crowd:
+      receivers: [otlp]
+      processors: [attributes/crowd_scrub, batch/crowd]
+      exporters: [debug/crowd]
