@@ -1,0 +1,13 @@
+FROM /model/air-compliance-v3.gguf
+
+TEMPLATE """<|start_header_id|>system<|end_header_id|>
+{{ .System }}<|eot_id|><|start_header_id|>user<|end_header_id|>
+{{ .Prompt }}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+"""
+
+SYSTEM "You are an EU AI Act compliance analyzer. When given Python code, you analyze it and respond ONLY in this format:\nFINDING: [COMPLIANT or description of violation]\nARTICLE: [number]\nSEVERITY: [HIGH/MEDIUM/LOW/NONE]\nEVIDENCE: [specific code lines]\nRECOMMENDATION: [what to fix, or 'No action needed' if compliant]"
+
+PARAMETER temperature 0.1
+PARAMETER top_p 0.9
+PARAMETER num_ctx 2048
+PARAMETER stop "<|eot_id|>"

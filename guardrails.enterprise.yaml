@@ -1,0 +1,80 @@
+## AIR Blackbox Gateway — Enterprise Air-Gapped Configuration
+##
+## Locked down for high-security environments. No data leaves this machine.
+## Deploy inside client VPS / on-prem with docker-compose.enterprise.yaml.
+
+budgets:
+  max_session_tokens: 80000
+  max_session_cost_usd: 25
+
+loop_detection:
+  similar_prompt_threshold: 0.80
+  max_similar_prompts: 5
+  window_seconds: 60
+
+tool_protection:
+  max_repeat_calls: 3
+  repeat_window_seconds: 30
+
+retry_protection:
+  max_consecutive_errors: 3
+
+alerts:
+  webhook_url: ""  # Set to internal Slack/Teams webhook for alerting
+
+actions:
+  on_trigger:
+    - terminate_session
+    - block_tool_execution
+    - alert_webhook
+    - save_replay
+
+prevention:
+  tools:
+    enabled: true
+    allowlist: []
+    blocklist:
+      - execute_dangerous_command
+      - delete_all_data
+
+  pii:
+    enabled: true
+    block_ssn: true
+    block_cc: true
+    block_email: false
+    block_phone: false
+    redact_mode: "redact"
+
+  model_limits:
+    enabled: false
+
+  approval:
+    enabled: false
+
+optimization:
+  analytics:
+    enabled: true
+
+  router:
+    enabled: false
+
+trust:
+  enabled: true
+  signing_key: ""  # Set via TRUST_SIGNING_KEY env var
+  compliance:
+    frameworks:
+      - SOC2
+      - ISO27001
+      - EU_AI_ACT
+
+## --- Telemetry: AIR-GAPPED ---
+## Nothing leaves this network. Zero external connections.
+## The collector runs a single local pipeline with no crowd export.
+telemetry:
+  mode: "air_gapped"
+  endpoint: ""           # No external endpoint — all local
+  batch_size: 0
+  flush_interval: 0
+  include_model_metrics: false
+  include_framework_detection: false
+  include_article_scores: false
