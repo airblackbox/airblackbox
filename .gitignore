@@ -26,3 +26,6 @@ __pycache__/
 *.pyc
 dist/
 build/
+
+# Model files (too large for git — ship separately)
+model/*.gguf

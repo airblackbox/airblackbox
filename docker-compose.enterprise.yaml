@@ -1,0 +1,108 @@
+##
+## AIR Blackbox Enterprise — Air-Gapped Deployment
+##
+## Self-contained compliance scanner. Everything runs locally:
+##   - Ollama + fine-tuned air-compliance model (baked into image)
+##   - Gateway (OpenAI-compatible proxy with audit recording)
+##   - OTel Collector (single local pipeline — no crowd export)
+##   - Jaeger (trace observability dashboard)
+##   - MinIO (object storage for prompt vault / audit artifacts)
+##
+## Zero data leaves this machine. Deploy on client VPS or on-prem.
+##
+## Build (first time only — bakes the fine-tuned model into the image):
+##   cp ~/Desktop/untitled\ folder/air-compliance-v3.gguf model/air-compliance-v3.gguf
+##   docker build -f model/Dockerfile.ollama -t airblackbox/ollama-compliance:v3 .
+##
+## Run:
+##   docker compose -f docker-compose.enterprise.yaml up -d
+##   air-blackbox comply --scan  (from any project directory)
+##
+## Ports exposed (bind to localhost only in production):
+##   8080  — Gateway API (OpenAI-compatible)
+##   16686 — Jaeger UI (trace dashboard)
+##   9001  — MinIO Console (object storage admin)
+##
+
+services:
+  # ── LLM Engine ──────────────────────────────────────────────
+  # Fine-tuned air-compliance model baked into image.
+  # No internet required. No model download at runtime.
+  ollama:
+    image: airblackbox/ollama-compliance:v3
+    deploy:
+      resources:
+        reservations:
+          memory: 4G
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q air-compliance"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+
+  # ── AIR Blackbox Gateway ────────────────────────────────────
+  # Proxies LLM calls, records .air.json audit files, enforces guardrails.
+  gateway:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - LISTEN_ADDR=:8080
+      - PROVIDER_URL=http://ollama:11434
+      - VAULT_ENDPOINT=minio:9000
+      - VAULT_ACCESS_KEY=${MINIO_USER:-minioadmin}
+      - VAULT_SECRET_KEY=${MINIO_PASS:-minioadmin}
+      - VAULT_BUCKET=air-runs
+      - VAULT_USE_SSL=false
+      - OTEL_EXPORTER_OTLP_ENDPOINT=collector:4317
+      - RUNS_DIR=/data/runs
+      - GUARDRAILS_CONFIG=/etc/gateway/guardrails.yaml
+      - TRUST_SIGNING_KEY=${TRUST_SIGNING_KEY:-air-blackbox-enterprise}
+    volumes:
+      - ./runs:/data/runs
+      - ./guardrails.enterprise.yaml:/etc/gateway/guardrails.yaml:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      collector:
+        condition: service_started
+
+  # ── OTel Collector ──────────────────────────────────────────
+  # Single local pipeline. No crowd export. Traces stay on this machine.
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    command: ["--config=/etc/otel/collector.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./collector/collector-airgapped.yaml:/etc/otel/collector.yaml:ro
+
+  # ── Jaeger ──────────────────────────────────────────────────
+  # Trace dashboard. View every LLM call, latency, token usage.
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports:
+      - "127.0.0.1:16686:16686"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  # ── MinIO ───────────────────────────────────────────────────
+  # Object storage for prompt vault and audit artifacts.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_PASS:-minioadmin}
+    volumes:
+      - minio-data:/data
+
+volumes:
+  minio-data:
