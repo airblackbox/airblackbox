@@ -22,8 +22,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -39,7 +37,7 @@ func main() {
 	tp, err := initTracer(ctx)
 	if err != nil {
 		log.Printf("WARN: OTel tracing disabled: %v", err)
-	} else {
+	} else if tp != nil {
 		defer tp.Shutdown(ctx)
 	}
 
@@ -165,14 +163,12 @@ func initTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
 		return nil, nil
 	}
 
-	conn, err := grpc.NewClient(endpoint,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	// Use OTel SDK options instead of manual gRPC connection.
+	// This handles DNS resolution correctly in Docker networking.
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(),
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +184,7 @@ func initTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
+	log.Printf("OTel tracing: enabled (endpoint: %s)", endpoint)
 	return tp, nil
 }
 
