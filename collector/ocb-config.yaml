@@ -24,13 +24,13 @@ processors:
 
   # --- AIR custom processors ---
   # gomod = root module (matches go.mod), import = sub-package with NewFactory()
-  - gomod: github.com/airblackbox/otel-semantic-normalizer v0.2.0
+  - gomod: github.com/airblackbox/otel-semantic-normalizer v0.3.0
     import: github.com/airblackbox/otel-semantic-normalizer/processor/genainormprocessor
 
-  - gomod: github.com/airblackbox/otel-prompt-vault v0.2.0
+  - gomod: github.com/airblackbox/otel-prompt-vault v0.3.0
     import: github.com/airblackbox/otel-prompt-vault/processor/promptvaultprocessor
 
-  - gomod: github.com/airblackbox/otel-collector-genai v0.2.0
+  - gomod: github.com/airblackbox/otel-collector-genai v0.3.0
     import: github.com/airblackbox/otel-collector-genai/processor/genaisafeprocessor
 
 exporters:
