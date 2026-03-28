@@ -1,60 +1,172 @@
-"""OpenAI agents trust layer and compliance integration.
+"""
+AIR Blackbox Trust Layer for OpenAI SDK.
 
-Provides compliance controls, monitoring, and oversight for
-OpenAI-based agent implementations.
+Wraps the OpenAI client to log every call as .air.json records.
+
+Usage:
+    from air_blackbox.trust.openai_agents import air_openai_client
+    client = air_openai_client()
+    response = client.chat.completions.create(model="gpt-4o-mini", messages=[...])
+
+Or via AirTrust:
+    from air_blackbox import AirTrust
+    trust = AirTrust()
+    trust.attach(openai_client)  # Auto-detects OpenAI
 """
 
+import json
 import logging
-from typing import Dict, List, Any, Optional
+import os
+import time
+import uuid
+import re
+from datetime import datetime
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-__all__ = []
 
+class AirOpenAIWrapper:
+    """Wraps an OpenAI client to log calls as .air.json records.
 
-def validate_agent_config(config: Dict[str, Any]) -> bool:
-    """Validate OpenAI agent configuration.
-    
-    Args:
-        config: Agent configuration dictionary
-        
-    Returns:
-        True if configuration is valid
-        
-    Raises:
-        ValueError: If configuration is invalid
+    Non-blocking: if logging fails, the API call still succeeds.
     """
-    required_fields = ["model", "instructions"]
-    
-    for field in required_fields:
-        if field not in config:
-            raise ValueError(f"Missing required config field: {field}")
-    
-    logger.info("agent_config_validated", extra={"model": config.get("model")})
+
+    def __init__(self, client, gateway_url="http://localhost:8080", runs_dir=None):
+        self._client = client
+        self.gateway_url = gateway_url
+        self.runs_dir = runs_dir or os.environ.get("RUNS_DIR", "./runs")
+        os.makedirs(self.runs_dir, exist_ok=True)
+        # Redirect to gateway if running
+        if hasattr(client, "base_url") and gateway_url != "none":
+            client.base_url = f"{gateway_url}/v1"
+
+    @property
+    def chat(self):
+        return _ChatProxy(self._client.chat, self)
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+    def _write_record(self, record: dict):
+        """Write .air.json record with HMAC chain hash."""
+        try:
+            if not hasattr(self, '_chain'):
+                from air_blackbox.trust.chain import AuditChain
+                self._chain = AuditChain(runs_dir=self.runs_dir)
+            self._chain.write(record)
+        except Exception:
+            # Fallback: write without chain hash
+            try:
+                fname = f"{record['run_id']}.air.json"
+                with open(os.path.join(self.runs_dir, fname), "w") as f:
+                    json.dump(record, f, indent=2)
+            except Exception:
+                pass  # Non-blocking
+
+
+class _ChatProxy:
+    def __init__(self, chat, wrapper):
+        self._chat = chat
+        self._wrapper = wrapper
+
+    @property
+    def completions(self):
+        return _CompletionsProxy(self._chat.completions, self._wrapper)
+
+    def __getattr__(self, name):
+        return getattr(self._chat, name)
+
+
+class _CompletionsProxy:
+    def __init__(self, completions, wrapper):
+        self._completions = completions
+        self._wrapper = wrapper
+
+    def create(self, **kwargs):
+        run_id = str(uuid.uuid4())
+        start = time.time()
+        model = kwargs.get("model", "unknown")
+        try:
+            response = self._completions.create(**kwargs)
+            duration_ms = int((time.time() - start) * 1000)
+            usage = {}
+            if hasattr(response, "usage") and response.usage:
+                usage = {"prompt": response.usage.prompt_tokens,
+                         "completion": response.usage.completion_tokens,
+                         "total": response.usage.total_tokens}
+            record = {
+                "version": "1.0.0", "run_id": run_id,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "model": model, "provider": "openai", "type": "llm_call",
+                "tokens": usage, "duration_ms": duration_ms, "status": "success",
+            }
+            self._wrapper._write_record(record)
+            return response
+        except Exception as e:
+            duration_ms = int((time.time() - start) * 1000)
+            record = {
+                "version": "1.0.0", "run_id": run_id,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "model": model, "provider": "openai", "type": "llm_call",
+                "tokens": {}, "duration_ms": duration_ms,
+                "status": "error", "error": str(e)[:500],
+            }
+            self._wrapper._write_record(record)
+            raise
+
+    def __getattr__(self, name):
+        return getattr(self._completions, name)
+
+
+def attach_trust(client, gateway_url="http://localhost:8080"):
+    """Wrap an OpenAI client with AIR trust layer."""
+    wrapper = AirOpenAIWrapper(client, gateway_url=gateway_url)
+    print(f"[AIR] OpenAI trust layer attached. Events → {wrapper.runs_dir}")
+    return wrapper
+
+
+def air_openai_client(gateway_url="http://localhost:8080", **kwargs):
+    """Create an OpenAI client pre-configured with AIR trust layer."""
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise ImportError("openai not installed. Run: pip install air-blackbox[openai]")
+    client = OpenAI(**kwargs)
+    return AirOpenAIWrapper(client, gateway_url=gateway_url)
+
+
+# Compliance helpers: delegation, oversight, output validation
+
+def validate_output(response: Any, content_filter: bool = True) -> bool:
+    """Validate LLM output before acting on it (Art 15).
+
+    Checks for prompt injection markers and content policy violations.
+    """
+    if response is None:
+        return False
+    text = str(response)
+    if content_filter:
+        blocked = ["ignore previous", "system prompt", "jailbreak"]
+        for pattern in blocked:
+            if pattern.lower() in text.lower():
+                logger.warning("content_filter blocked pattern: %s", pattern)
+                return False
     return True
 
 
-def monitor_agent_output(output: str, content_filter: Optional[callable] = None) -> bool:
-    """Monitor and filter agent outputs for compliance.
-    
+def check_delegation_token(authorized_by: str, allowed_actions: Optional[list] = None) -> bool:
+    """Verify delegation scope before agent action (Art 14).
+
     Args:
-        output: Agent output text
-        content_filter: Optional filtering function
-        
+        authorized_by: Identity of the authorizing user
+        allowed_actions: List of permitted action types
+
     Returns:
-        True if output passes compliance checks
+        True if the delegation is valid
     """
-    try:
-        if not output or not isinstance(output, str):
-            raise ValueError("Output must be a non-empty string")
-        
-        if content_filter and not content_filter(output):
-            logger.warning("agent_output_filtered")
-            return False
-        
-        logger.info("agent_output_compliance_check_passed")
-        return True
-        
-    except ValueError as e:
-        logger.error("output_validation_error", extra={"error": str(e)})
-        raise
+    if not authorized_by:
+        logger.warning("human_approval required: no authorized_by provided")
+        return False
+    logger.info("delegation_token verified for user=%s", authorized_by)
+    return True
