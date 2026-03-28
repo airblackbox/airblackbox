@@ -1,37 +1,34 @@
-# AIR Blackbox pre-commit hook for EU AI Act compliance scanning
-# https://github.com/airblackbox/gateway
-#
-# Usage in your .pre-commit-config.yaml:
-#
-#   repos:
-#     - repo: https://github.com/airblackbox/gateway
-#       rev: v1.3.0
-#       hooks:
-#         - id: air-blackbox-comply
-#
-#         # Or with strict mode (fail on any findings):
-#         - id: air-blackbox-comply-strict
-
 - id: air-blackbox-comply
-  name: EU AI Act Compliance (AIR Blackbox)
-  entry: air-blackbox comply --scan
-  language: python
-  types: [python]
-  pass_filenames: false
-  additional_dependencies: ['air-blackbox>=1.3.0']
-  description: >
-    Scan Python AI code for EU AI Act compliance (Articles 9-15).
-    Reports findings but does not block commits.
-  stages: [pre-commit]
-
-- id: air-blackbox-comply-strict
-  name: EU AI Act Compliance — Strict (AIR Blackbox)
+  name: AIR Blackbox EU AI Act Compliance
+  description: Scan Python files for EU AI Act compliance issues
   entry: air-blackbox-comply-strict
   language: python
   types: [python]
-  pass_filenames: false
-  additional_dependencies: ['air-blackbox>=1.3.0']
-  description: >
-    Scan Python AI code for EU AI Act compliance and fail if any checks fail.
-    Use this to enforce compliance in CI and pre-commit.
-  stages: [pre-commit]
+  additional_dependencies: ['air-blackbox']
+
+- id: air-blackbox-comply-strict
+  name: AIR Blackbox Strict Compliance
+  description: Scan Python files for EU AI Act compliance (fails on warnings)
+  entry: air-blackbox-comply-strict
+  args: ['--strict']
+  language: python
+  types: [python]
+  additional_dependencies: ['air-blackbox']
+
+- id: air-blackbox-comply-gdpr
+  name: AIR Blackbox EU AI Act + GDPR Compliance
+  description: Scan Python files for EU AI Act and GDPR compliance
+  entry: air-blackbox-comply-strict
+  args: ['--gdpr']
+  language: python
+  types: [python]
+  additional_dependencies: ['air-blackbox']
+
+- id: air-blackbox-comply-full
+  name: AIR Blackbox Full Compliance (EU AI Act + GDPR + Bias)
+  description: Full compliance scan including bias and fairness checks
+  entry: air-blackbox-comply-strict
+  args: ['--gdpr', '--bias', '--strict']
+  language: python
+  types: [python]
+  additional_dependencies: ['air-blackbox']
