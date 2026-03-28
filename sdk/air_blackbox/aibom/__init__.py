@@ -1,4 +1,16 @@
-"""AI-BOM and Shadow AI detection."""
-from air_blackbox.aibom.generator import generate_aibom
-from air_blackbox.aibom.shadow import detect_shadow_ai, generate_approved_registry
-__all__ = ["generate_aibom", "detect_shadow_ai", "generate_approved_registry"]
+"""AI Bill of Materials (AIBOM) components.
+
+Provides tools for generating and managing AI Bills of Materials
+with compliance documentation and shadow AI detection.
+"""
+
+from .generator import AIBOMGenerator, AIBOMEntry
+from .shadow import ShadowAIDetector, ShadowAIFinding, RiskClassification
+
+__all__ = [
+    "AIBOMGenerator",
+    "AIBOMEntry",
+    "ShadowAIDetector",
+    "ShadowAIFinding",
+    "RiskClassification",
+]

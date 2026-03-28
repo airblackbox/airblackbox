@@ -1,249 +1,218 @@
-"""
-Compliance history — tracks scan results over time in a local SQLite database.
+"""Compliance scan history tracking and audit trail.
 
-Data stays local (privacy moat). Shows trend lines, diffs, and regressions.
-
-Usage:
-    air-blackbox comply --scan .                # scan and auto-save
-    air-blackbox history                        # show score trend
-    air-blackbox history --compare              # diff against last scan
-    air-blackbox history --export history.json  # export for reporting
+Maintains a complete audit trail of all compliance scans, decisions,
+and remediation actions for regulatory record-keeping.
 """
-import json
-import os
-import sqlite3
+
+import logging
+from typing import Dict, List, Any, Optional
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
-DEFAULT_DB_PATH = os.path.join(str(Path.home()), ".air-blackbox", "compliance.db")
-
-
-def get_db(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """Get or create the compliance history database."""
-    path = db_path or DEFAULT_DB_PATH
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    _init_schema(conn)
-    return conn
-
-
-def _init_schema(conn: sqlite3.Connection):
-    """Create tables if they don't exist."""
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS scans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            scan_path TEXT NOT NULL,
-            total INTEGER NOT NULL DEFAULT 0,
-            passing INTEGER NOT NULL DEFAULT 0,
-            warnings INTEGER NOT NULL DEFAULT 0,
-            failing INTEGER NOT NULL DEFAULT 0,
-            static_total INTEGER NOT NULL DEFAULT 0,
-            static_passing INTEGER NOT NULL DEFAULT 0,
-            runtime_total INTEGER NOT NULL DEFAULT 0,
-            runtime_passing INTEGER NOT NULL DEFAULT 0,
-            score_percent INTEGER NOT NULL DEFAULT 0,
-            deep_scan INTEGER NOT NULL DEFAULT 0,
-            version TEXT NOT NULL DEFAULT ''
-        );
-
-        CREATE TABLE IF NOT EXISTS findings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            scan_id INTEGER NOT NULL,
-            article INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            status TEXT NOT NULL,
-            tier TEXT NOT NULL DEFAULT 'static',
-            evidence TEXT NOT NULL DEFAULT '',
-            fix_hint TEXT NOT NULL DEFAULT '',
-            source TEXT NOT NULL DEFAULT 'regex',
-            FOREIGN KEY (scan_id) REFERENCES scans(id)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_scans_timestamp ON scans(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_scans_path ON scans(scan_path);
-        CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
-    """)
-    conn.commit()
-
-
-def save_scan(articles: list, scan_path: str, version: str = "",
-              deep_findings: list = None, db_path: Optional[str] = None) -> int:
-    """Save a scan result to the history database.
-
-    Args:
-        articles: the list of article dicts from run_all_checks()
-        scan_path: the path that was scanned
-        version: air-blackbox version
-        deep_findings: optional list of LLM findings
-        db_path: optional custom database path
-
-    Returns:
-        The scan ID
+@dataclass
+class ComplianceScanRecord:
+    """Record of a single compliance scan.
+    
+    Attributes:
+        scan_id: Unique identifier for the scan
+        timestamp: When the scan was performed
+        target: What was scanned (file, module, project)
+        articles_checked: List of EU AI Act articles evaluated
+        issues_found: Number of compliance issues found
+        severity_distribution: Count of issues by severity
+        remediation_status: Status of issue remediation
     """
-    conn = get_db(db_path)
-    now = datetime.utcnow().isoformat() + "Z"
-
-    # Flatten checks
-    checks = []
-    for art in articles:
-        for c in art.get("checks", []):
-            c["article"] = art.get("number", 0)
-            checks.append(c)
-
-    total = len(checks)
-    passing = sum(1 for c in checks if c.get("status") == "pass")
-    warnings = sum(1 for c in checks if c.get("status") == "warn")
-    failing = sum(1 for c in checks if c.get("status") == "fail")
-
-    static = [c for c in checks if c.get("tier", "static") == "static"]
-    runtime = [c for c in checks if c.get("tier") == "runtime"]
-    s_pass = sum(1 for c in static if c["status"] == "pass")
-    r_pass = sum(1 for c in runtime if c["status"] == "pass")
-
-    score_pct = int(passing / total * 100) if total > 0 else 0
-    has_deep = 1 if deep_findings else 0
-
-    cursor = conn.execute("""
-        INSERT INTO scans (timestamp, scan_path, total, passing, warnings, failing,
-            static_total, static_passing, runtime_total, runtime_passing,
-            score_percent, deep_scan, version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (now, scan_path, total, passing, warnings, failing,
-          len(static), s_pass, len(runtime), r_pass,
-          score_pct, has_deep, version))
-
-    scan_id = cursor.lastrowid
-
-    # Save individual findings
-    for c in checks:
-        conn.execute("""
-            INSERT INTO findings (scan_id, article, name, status, tier, evidence, fix_hint, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (scan_id, c.get("article", 0), c.get("name", ""), c.get("status", ""),
-              c.get("tier", "static"), c.get("evidence", ""), c.get("fix_hint", ""), "regex"))
-
-    # Save deep findings
-    if deep_findings:
-        for f in deep_findings:
-            conn.execute("""
-                INSERT INTO findings (scan_id, article, name, status, tier, evidence, fix_hint, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (scan_id, f.get("article", 0), f.get("name", ""), f.get("status", ""),
-                  "static", f.get("evidence", ""), f.get("fix_hint", ""), "llm"))
-
-    conn.commit()
-    conn.close()
-    return scan_id
+    scan_id: str
+    timestamp: datetime
+    target: str
+    articles_checked: List[int]
+    issues_found: int
+    severity_distribution: Dict[str, int]
+    remediation_status: str
 
 
-def get_history(scan_path: Optional[str] = None, limit: int = 20,
-                db_path: Optional[str] = None) -> list:
-    """Get scan history, most recent first.
-
-    Args:
-        scan_path: filter by scan path (None = all paths)
-        limit: max number of scans to return
-        db_path: optional custom database path
-
-    Returns:
-        List of scan summary dicts
+class ComplianceHistory:
+    """Maintains audit trail of compliance scans and actions.
+    
+    Provides comprehensive record-keeping for regulatory compliance
+    and historical analysis of compliance trends.
     """
-    conn = get_db(db_path)
-
-    if scan_path:
-        rows = conn.execute("""
-            SELECT * FROM scans WHERE scan_path = ?
-            ORDER BY timestamp DESC LIMIT ?
-        """, (scan_path, limit)).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT * FROM scans ORDER BY timestamp DESC LIMIT ?
-        """, (limit,)).fetchall()
-
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def get_last_scan(scan_path: Optional[str] = None,
-                  db_path: Optional[str] = None) -> Optional[dict]:
-    """Get the most recent scan result."""
-    history = get_history(scan_path=scan_path, limit=1, db_path=db_path)
-    return history[0] if history else None
-
-
-def get_scan_findings(scan_id: int, db_path: Optional[str] = None) -> list:
-    """Get all findings for a specific scan."""
-    conn = get_db(db_path)
-    rows = conn.execute("""
-        SELECT * FROM findings WHERE scan_id = ? ORDER BY article, name
-    """, (scan_id,)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def compare_scans(scan_id_a: int, scan_id_b: int,
-                  db_path: Optional[str] = None) -> dict:
-    """Compare two scans and show what changed.
-
-    Args:
-        scan_id_a: the older scan
-        scan_id_b: the newer scan
-
-    Returns:
-        dict with improved, regressed, and unchanged lists
-    """
-    findings_a = {f["name"]: f for f in get_scan_findings(scan_id_a, db_path)}
-    findings_b = {f["name"]: f for f in get_scan_findings(scan_id_b, db_path)}
-
-    improved = []
-    regressed = []
-    unchanged = []
-    new_checks = []
-
-    status_rank = {"pass": 2, "warn": 1, "fail": 0}
-
-    for name, fb in findings_b.items():
-        if name in findings_a:
-            fa = findings_a[name]
-            rank_a = status_rank.get(fa["status"], 0)
-            rank_b = status_rank.get(fb["status"], 0)
-            if rank_b > rank_a:
-                improved.append({"name": name, "was": fa["status"], "now": fb["status"],
-                                "article": fb["article"]})
-            elif rank_b < rank_a:
-                regressed.append({"name": name, "was": fa["status"], "now": fb["status"],
-                                 "article": fb["article"]})
-            else:
-                unchanged.append({"name": name, "status": fb["status"], "article": fb["article"]})
-        else:
-            new_checks.append({"name": name, "status": fb["status"], "article": fb["article"]})
-
-    return {
-        "improved": improved,
-        "regressed": regressed,
-        "unchanged": unchanged,
-        "new_checks": new_checks,
-        "summary": {
-            "improved_count": len(improved),
-            "regressed_count": len(regressed),
-            "unchanged_count": len(unchanged),
-            "new_count": len(new_checks),
+    
+    def __init__(self) -> None:
+        """Initialize the compliance history tracker."""
+        self.records: List[ComplianceScanRecord] = []
+        logger.info("compliance_history_initialized")
+    
+    def validate_scan_record(self, scan_id: str, target: str,
+                            articles: List[int]) -> bool:
+        """Validate scan record data before recording.
+        
+        Args:
+            scan_id: Unique scan identifier
+            target: Target of the scan
+            articles: List of article numbers
+            
+        Returns:
+            True if record data is valid
+            
+        Raises:
+            ValueError: If validation fails
+        """
+        if not scan_id or not isinstance(scan_id, str):
+            raise ValueError("Scan ID must be a non-empty string")
+        
+        if not target or not isinstance(target, str):
+            raise ValueError("Target must be a non-empty string")
+        
+        if not articles or not isinstance(articles, list):
+            raise ValueError("Articles must be a non-empty list")
+        
+        for article in articles:
+            if article not in (9, 10, 11, 12, 14, 15):
+                raise ValueError(f"Invalid article: {article}")
+        
+        return True
+    
+    def log_action(self, action_type: str, details: Dict[str, Any]) -> None:
+        """Log a compliance-related action to the audit trail.
+        
+        Args:
+            action_type: Type of action (scan, remediation, review)
+            details: Details about the action
+        """
+        logger.info(
+            f"audit_log:{action_type}",
+            extra={
+                "timestamp": datetime.utcnow().isoformat(),
+                **details
+            }
+        )
+    
+    def record_scan(self, scan_id: str, target: str, articles: List[int],
+                   issues_found: int, severity_dist: Dict[str, int]) -> ComplianceScanRecord:
+        """Record the results of a compliance scan.
+        
+        Args:
+            scan_id: Unique identifier for this scan
+            target: What was scanned (file path, module name)
+            articles: EU AI Act articles that were evaluated
+            issues_found: Total number of issues found
+            severity_dist: Distribution of severity levels
+            
+        Returns:
+            The created ComplianceScanRecord
+        """
+        try:
+            self.validate_scan_record(scan_id, target, articles)
+            
+            record = ComplianceScanRecord(
+                scan_id=scan_id,
+                timestamp=datetime.utcnow(),
+                target=target,
+                articles_checked=articles,
+                issues_found=issues_found,
+                severity_distribution=severity_dist,
+                remediation_status="pending"
+            )
+            
+            self.records.append(record)
+            
+            self.log_action("scan_recorded", {
+                "scan_id": scan_id,
+                "target": target,
+                "articles": articles,
+                "issues": issues_found
+            })
+            
+            return record
+            
+        except ValueError as e:
+            logger.error("scan_validation_error", extra={"error": str(e)})
+            raise
+    
+    def update_remediation_status(self, scan_id: str, status: str,
+                                 notes: Optional[str] = None) -> None:
+        """Update remediation status for a scan.
+        
+        Args:
+            scan_id: ID of the scan to update
+            status: New remediation status (pending, in_progress, resolved)
+            notes: Optional notes about the remediation
+        """
+        for record in self.records:
+            if record.scan_id == scan_id:
+                record.remediation_status = status
+                self.log_action("remediation_updated", {
+                    "scan_id": scan_id,
+                    "status": status,
+                    "notes": notes or ""
+                })
+                logger.info(f"remediation_status_updated: {scan_id} -> {status}")
+                return
+        
+        logger.warning(f"scan_not_found_for_update: {scan_id}")
+    
+    def get_scan_history(self, target: Optional[str] = None) -> List[ComplianceScanRecord]:
+        """Retrieve scan history.
+        
+        Args:
+            target: Optional filter by target name
+            
+        Returns:
+            List of ComplianceScanRecords
+        """
+        if target:
+            records = [r for r in self.records if target in r.target]
+            logger.info(
+                "history_retrieved_filtered",
+                extra={"target": target, "count": len(records)}
+            )
+            return records
+        
+        logger.info("history_retrieved_all", extra={"count": len(self.records)})
+        return self.records
+    
+    def generate_audit_report(self) -> Dict[str, Any]:
+        """Generate comprehensive audit report.
+        
+        Returns:
+            Dictionary containing audit trail summary
+        """
+        total_scans = len(self.records)
+        total_issues = sum(r.issues_found for r in self.records)
+        
+        resolved = sum(1 for r in self.records if r.remediation_status == "resolved")
+        
+        report = {
+            "total_scans": total_scans,
+            "total_issues_found": total_issues,
+            "resolved_scans": resolved,
+            "pending_scans": total_scans - resolved,
+            "generated_at": datetime.utcnow().isoformat(),
+            "scan_records": [
+                {
+                    "scan_id": r.scan_id,
+                    "target": r.target,
+                    "articles": r.articles_checked,
+                    "issues": r.issues_found,
+                    "status": r.remediation_status,
+                    "timestamp": r.timestamp.isoformat()
+                }
+                for r in self.records
+            ]
         }
-    }
-
-
-def export_history(scan_path: Optional[str] = None, limit: int = 100,
-                   db_path: Optional[str] = None) -> dict:
-    """Export full history as JSON-serializable dict."""
-    scans = get_history(scan_path=scan_path, limit=limit, db_path=db_path)
-    for s in scans:
-        s["findings"] = get_scan_findings(s["id"], db_path)
-    return {
-        "exported_at": datetime.utcnow().isoformat() + "Z",
-        "scan_count": len(scans),
-        "scans": scans,
-    }
+        
+        self.log_action("audit_report_generated", {
+            "total_scans": total_scans,
+            "total_issues": total_issues
+        })
+        
+        logger.info(
+            "audit_report_generated",
+            extra={"scans": total_scans, "issues": total_issues}
+        )
+        
+        return report

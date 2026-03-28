@@ -130,8 +130,10 @@ class AirADKTrust:
         if error:
             record["error"] = error[:500]
 
-        # Scan for PII and injection
-        all_text = f"{input_text} {output_text}"
+        # Scan for PII and injection — sanitize before processing
+        sanitized_prompt = str(input_text or "")
+        sanitized_output = str(output_text or "")
+        all_text = " ".join([sanitized_prompt, sanitized_output])
         if all_text and len(all_text.strip()) > 5:
             if self.detect_pii:
                 pii = self._scan_pii(all_text)

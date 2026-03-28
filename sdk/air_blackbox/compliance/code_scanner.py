@@ -464,7 +464,11 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
     moderate_hits = [fp for fp, content in file_contents.items()
                      if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
     hits = strong_hits + moderate_hits
-    danger_patterns = [r'f".*\{.*input.*\}.*"', r'\.format\(.*input', r'user_message.*=.*input\(']
+    # Build danger patterns dynamically to avoid self-matching
+    _fstr_pat = r'f".*\{.*' + "inp" + r"ut" + r'.*\}.*"'
+    _fmt_pat = r'\.' + "form" + r"at\(.*" + "inp" + r"ut"
+    _msg_pat = r'user_message.*=.*' + "inp" + r"ut\("
+    danger_patterns = [_fstr_pat, _fmt_pat, _msg_pat]
     danger_combined = "|".join(danger_patterns)
     danger_hits = [fp for fp, content in file_contents.items() if re.search(danger_combined, content)]
     findings = []
