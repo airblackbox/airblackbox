@@ -1,804 +1,793 @@
-# AIR Blackbox Audit Chain Specification v1.0
+% AIR Blackbox HMAC-SHA256 Audit Chain Specification v1.0
+% AIR Blackbox Trust Layer Authors
+% 2026-03-28
 
-**Status:** Published
-**Version:** 1.0.0
-**Date:** 2026-03-13
-**Author:** Jason Shotwell (jason.j.shotwell@gmail.com)
-**Repository:** https://github.com/airblackbox/gateway
-**License:** Apache 2.0
+# AIR Blackbox HMAC-SHA256 Audit Chain Specification
 
----
+## 1. Abstract
 
-## 1. Introduction
+This specification defines the AIR Blackbox Audit Chain format, a tamper-evident, cryptographically signed event log based on HMAC-SHA256 hash chains. The audit chain creates a secure, verifiable record of all agent actions and trust layer decisions. Each record cryptographically links to the previous record, making any tampering, deletion, or reordering of records detectable through chain verification.
 
-### 1.1 Purpose
+The audit chain serves three purposes: (1) compliance evidence for EU AI Act, GDPR, and ISO 42001 audits; (2) tamper detection for forensic investigations; and (3) immutable transaction history for liability protection. This specification is normative; implementations MUST follow all requirements marked MUST, SHOULD, or MAY per RFC 2119.
 
-This specification defines the tamper-evident audit chain format used by AIR Blackbox to log AI agent operations. The audit chain creates a cryptographically linked sequence of records that satisfies the record-keeping requirements of the EU AI Act (Article 12) and provides a verifiable evidence trail for regulators, auditors, and insurers.
+## 2. Status
 
-### 1.2 Scope
+Status: **Draft v1.0**
 
-This specification covers:
+This specification defines the initial audit chain format implemented in AIR Blackbox trust layers. Future versions may add features such as record compression, distributed signing, or hardware security module (HSM) integration, but MUST maintain backward compatibility with v1.0 chains.
 
-- The `.air.json` record format for individual audit entries
-- The HMAC-SHA256 chaining algorithm that links records into a tamper-evident sequence
-- Entry types for LLM calls, tool executions, human oversight events, and system events
-- The verification algorithm for detecting tampering
-- The signed evidence bundle format for export
+## 3. Terminology
 
-This specification does not cover:
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in RFC 2119.
 
-- Legal compliance advice (consult qualified legal counsel)
-- Network transport protocols between trust layers and storage backends
-- Gateway proxy implementation details
+**Audit Chain**: An ordered sequence of cryptographically signed records where each record's signature depends on the previous record's signature.
 
-### 1.3 Definitions
+**Record**: A single JSON object representing an agent action, decision, or event in the audit chain.
 
-| Term | Definition |
-|------|-----------|
-| **Audit Chain** | An ordered sequence of `.air.json` records linked by HMAC-SHA256 hashes, where each record's hash depends on the previous record's hash. |
-| **Audit Record** | A single `.air.json` file capturing one discrete agent event (LLM call, tool execution, etc.). |
-| **Chain Hash** | The HMAC-SHA256 hash stored in each record's `chain_hash` field, computed from the record content and the previous record's chain hash. |
-| **Genesis Hash** | The initial hash value (`genesis`) used as the `previous_hash` for the first record in a chain. |
-| **Signing Key** | A secret key used for HMAC computation. Set via the `TRUST_SIGNING_KEY` environment variable. |
-| **Trust Layer** | A framework-specific adapter (LangChain callback, CrewAI hook, Claude Agent SDK hook, etc.) that generates audit records from agent operations. |
-| **Evidence Bundle** | A signed JSON document combining compliance scan results, AI-BOM, audit trail statistics, and an HMAC attestation. |
+**Chain Hash**: The HMAC-SHA256 signature of a record, computed as HMAC(key, previous_hash || JSON(record)).
 
-### 1.4 EU AI Act Context
+**Genesis Record**: The first record in a chain, with previous_hash set to the literal string "genesis".
 
-The EU AI Act (Regulation 2024/1689) becomes enforceable in August 2026. Article 12 requires that high-risk AI systems:
+**Signing Key**: A secret key used to compute HMAC signatures. MUST be 32 bytes or longer for production use.
 
-> "shall technically allow for the automatic recording of events ('logs') over the lifetime of the system."
+**Tamper Detection**: The ability to identify that a record in the chain has been modified, deleted, or reordered.
 
-These logs must be detailed enough for regulators to verify system behavior, and must be protected against unauthorized modification. The HMAC-SHA256 audit chain satisfies both requirements: it automatically records events and makes any modification cryptographically detectable.
+**Verification**: The process of recomputing all chain hashes and confirming they match the stored values.
 
----
+## 4. Chain Structure
 
-## 2. Audit Record Format
+### 4.1 Overview
 
-### 2.1 File Format
+An audit chain is an append-only sequence of records. Each record MUST contain a unique run_id, timestamp, and version. The chain maintains state through the previous_hash field, which links each record to its predecessor.
 
-Each audit record is a single JSON file with the extension `.air.json`, stored in a runs directory (default: `./runs/`). The filename is the record's `run_id` with the `.air.json` extension:
+The first record in the chain (genesis record) has previous_hash set to the literal string "genesis". All subsequent records have previous_hash set to the hex-encoded chain_hash of the immediately preceding record.
 
+The chain_hash for each record is computed deterministically using HMAC-SHA256, making the chain tamper-evident. If any record is modified, reordered, or deleted, verification will detect the inconsistency.
+
+### 4.2 Genesis Record
+
+The genesis record is the first record written to a chain. It MUST have:
+
+- previous_hash: the literal string "genesis" (not a hex value)
+- chain_hash: computed as HMAC-SHA256(signing_key, b"genesis" || JSON(record))
+
+Example genesis record:
+
+```json
+{
+  "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-03-28T14:32:00.000Z",
+  "version": "1.0.0",
+  "framework": "langchain",
+  "action": "agent_start",
+  "previous_hash": "genesis",
+  "chain_hash": "a7f3d8e4b2c6f1a9e5d3c8b4f7e2a1d6c4e8f1a3d5b7c9e2f4a6c8e1b3d5f7"
+}
+```
+
+### 4.3 Record Format (JSON Schema)
+
+Every record MUST be a JSON object with the following structure:
+
+```json
+{
+  "run_id": "string (UUID v4, REQUIRED)",
+  "timestamp": "string (ISO 8601 UTC, REQUIRED)",
+  "version": "string (semver, REQUIRED)",
+  "previous_hash": "string (hex or 'genesis', COMPUTED)",
+  "chain_hash": "string (hex, COMPUTED)",
+  "framework": "string (OPTIONAL)",
+  "model": "string (OPTIONAL)",
+  "action": "string (OPTIONAL)",
+  "tokens": "integer (OPTIONAL)",
+  "injection_score": "float 0-1 (OPTIONAL)",
+  "pii_detected": "boolean (OPTIONAL)",
+  "authorized_by": "string (OPTIONAL)",
+  "result": "string (OPTIONAL)",
+  "input_context": "string (OPTIONAL)",
+  "payload": "object (OPTIONAL)"
+}
+```
+
+**Required Fields**:
+
+- `run_id` (string): A UUID v4 that uniquely identifies this agent run or session. MUST be present in every record.
+- `timestamp` (string): ISO 8601 format with UTC timezone (e.g., "2026-03-28T14:32:00.000Z"). REQUIRED. SHOULD be generated at record creation time.
+- `version` (string): Semantic version of the audit chain format (e.g., "1.0.0"). REQUIRED.
+
+**Computed Fields** (MUST be set before storage):
+
+- `previous_hash` (string): For genesis records, the literal string "genesis". For all other records, the hex-encoded chain_hash of the immediately preceding record.
+- `chain_hash` (string): The HMAC-SHA256 signature of this record, computed as described in Section 4.4.
+
+**Optional Fields**:
+
+- `framework` (string): The agent framework (e.g., "langchain", "crewai", "autogen", "openai"). OPTIONAL.
+- `model` (string): The LLM model identifier (e.g., "claude-3-opus"). OPTIONAL.
+- `action` (string): The action type (e.g., "agent_start", "tool_call", "email_send", "database_write"). OPTIONAL.
+- `tokens` (integer): Number of tokens consumed. OPTIONAL.
+- `injection_score` (float): Prompt injection risk score, range 0.0 to 1.0. OPTIONAL.
+- `pii_detected` (boolean): Whether personally identifiable information was detected. OPTIONAL.
+- `authorized_by` (string): Human or system that authorized this action (e.g., "policy_auto_allow", "user@example.com"). OPTIONAL.
+- `result` (string): Outcome status (e.g., "pending", "approved", "rejected", "blocked", "executed"). OPTIONAL.
+- `input_context` (string): The prompt or input that triggered this action. OPTIONAL.
+- `payload` (object): The actual data being recorded (e.g., email body, API request, database row). OPTIONAL.
+
+Additional custom fields MAY be added by implementations, but MUST NOT override required or computed fields.
+
+### 4.4 Chain Hash Computation
+
+The chain_hash for a record is computed using HMAC-SHA256 as follows:
+
+1. Sort all fields in the record alphabetically by key (excluding chain_hash itself).
+2. Serialize to JSON with no whitespace (canonical form).
+3. Compute HMAC-SHA256(signing_key, previous_hash_bytes || record_bytes).
+4. Encode the result as hexadecimal (lowercase).
+
+Pseudocode:
+
+```python
+import hashlib
+import hmac
+import json
+
+def compute_chain_hash(signing_key, previous_hash, record):
+    # Remove chain_hash field if present
+    record_copy = {k: v for k, v in record.items() if k != "chain_hash"}
+    
+    # Canonical JSON: sorted keys, no whitespace
+    record_json = json.dumps(record_copy, sort_keys=True, separators=(",", ":"))
+    record_bytes = record_json.encode("utf-8")
+    
+    # Convert previous_hash to bytes
+    if previous_hash == "genesis":
+        prev_bytes = b"genesis"
+    else:
+        prev_bytes = bytes.fromhex(previous_hash)
+    
+    # HMAC-SHA256
+    h = hmac.new(signing_key, prev_bytes + record_bytes, hashlib.sha256)
+    return h.hexdigest()
+```
+
+### 4.5 Previous Hash Linkage
+
+The previous_hash field creates the chain linkage:
+
+- **Genesis record**: previous_hash is the literal string "genesis" (not a computed value).
+- **Subsequent records**: previous_hash is the hex-encoded chain_hash of the preceding record.
+
+This linkage ensures that deleting or reordering records breaks the chain, making tampering detectable during verification.
+
+## 5. Record Fields Reference
+
+### 5.1 Core Fields
+
+**run_id** (UUID v4, REQUIRED)
+
+- Uniquely identifies an agent execution or session
+- Format: must be valid UUID v4 (e.g., "550e8400-e29b-41d4-a716-446655440000")
+- MUST be present in every record
+- Implementations SHOULD generate this field if not provided
+
+**timestamp** (ISO 8601 UTC, REQUIRED)
+
+- Moment when the record was created
+- Format: "YYYY-MM-DDTHH:MM:SS.sssZ" (UTC timezone required)
+- MUST be in UTC; local times MUST be converted
+- SHOULD be generated automatically at write time
+
+**version** (Semantic Version, REQUIRED)
+
+- Audit chain format version (e.g., "1.0.0")
+- MUST follow semver rules
+- All v1.x implementations MUST be backward compatible with 1.0.0
+
+### 5.2 Computed Fields
+
+**chain_hash** (Hex String, COMPUTED)
+
+- HMAC-SHA256 signature of this record
+- Format: lowercase hexadecimal (64 characters for SHA256)
+- Computed as: HMAC(key, previous_hash || JSON(record))
+- MUST be set before persisting the record
+- MUST be verified during chain verification (Section 6)
+
+**previous_hash** (Hex String or "genesis", COMPUTED)
+
+- Links this record to the previous record
+- For genesis: the literal string "genesis"
+- For all others: the hex-encoded chain_hash of the previous record
+- MUST NOT be set by the application; the chain implementation MUST compute it
+
+### 5.3 Optional Context Fields
+
+**framework** (String, OPTIONAL)
+
+- The agent framework in use
+- Examples: "langchain", "crewai", "autogen", "openai", "rag"
+- Used for audit classification
+
+**model** (String, OPTIONAL)
+
+- The LLM model identifier
+- Examples: "claude-3-opus", "gpt-4-turbo", "llama-2-70b"
+- Used for compliance reporting
+
+**action** (String, OPTIONAL)
+
+- The action type being recorded
+- Examples: "agent_start", "tool_call", "email_send", "database_write", "file_access"
+- Used for filtering and analysis
+
+**tokens** (Integer, OPTIONAL)
+
+- Number of tokens consumed or generated
+- SHOULD be sum of input and output tokens
+- Used for usage tracking and cost analysis
+
+### 5.4 Optional Security Fields
+
+**injection_score** (Float 0.0-1.0, OPTIONAL)
+
+- Prompt injection risk score
+- 0.0: no injection detected
+- 1.0: high confidence injection attack
+- Used to flag potentially malicious inputs
+
+**pii_detected** (Boolean, OPTIONAL)
+
+- Whether personally identifiable information (PII) was detected
+- true: PII present (social security number, credit card, etc.)
+- false or absent: no PII detected
+- Used for GDPR audit trails
+
+### 5.5 Optional Approval/Status Fields
+
+**authorized_by** (String, OPTIONAL)
+
+- Who or what approved this action
+- Examples: "policy_auto_allow", "user@example.com", "security_team"
+- Used to track authorization chain
+
+**result** (String, OPTIONAL)
+
+- Outcome status
+- Values: "pending", "approved", "rejected", "blocked", "executed", "failed"
+- Used for action lifecycle tracking
+
+**input_context** (String, OPTIONAL)
+
+- The prompt or input that triggered this action
+- Should not contain sensitive data (PII, secrets)
+- Used for audit investigation
+
+**payload** (Object, OPTIONAL)
+
+- The actual data being recorded
+- Should not contain secrets, API keys, or other sensitive data
+- Used for transaction reconstruction
+
+## 6. Chain Verification Algorithm
+
+### 6.1 Verification Overview
+
+Chain verification confirms that no records have been tampered with, deleted, or reordered. The verification process recomputes every chain_hash and compares it to the stored value.
+
+### 6.2 Step-by-Step Verification
+
+```python
+def verify_chain(records, signing_key):
+    """
+    Verify a chain of audit records.
+    
+    Args:
+        records: List of records in order
+        signing_key: The HMAC signing key (bytes)
+    
+    Returns:
+        dict with keys:
+            valid (bool): True if chain is intact
+            events_checked (int): Number of records verified
+            errors (list): Any verification failures
+    """
+    errors = []
+    
+    if not records:
+        return {"valid": True, "events_checked": 0, "errors": []}
+    
+    # Verify each record
+    for i, record in enumerate(records):
+        # Check 1: Recompute the chain_hash
+        expected_hash = compute_chain_hash(
+            signing_key,
+            record["previous_hash"],
+            record
+        )
+        if record["chain_hash"] != expected_hash:
+            errors.append(
+                f"Record {i} ({record['run_id']}): chain_hash mismatch. "
+                f"Expected {expected_hash}, got {record['chain_hash']}. "
+                f"TAMPERING DETECTED."
+            )
+        
+        # Check 2: Verify previous_hash linkage
+        if i == 0:
+            # Genesis record must link to "genesis"
+            if record["previous_hash"] != "genesis":
+                errors.append(
+                    f"Record 0 ({record['run_id']}): genesis record must have "
+                    f"previous_hash='genesis', got '{record['previous_hash']}'"
+                )
+        else:
+            # All other records must link to the previous record's chain_hash
+            expected_prev = records[i - 1]["chain_hash"]
+            if record["previous_hash"] != expected_prev:
+                errors.append(
+                    f"Record {i} ({record['run_id']}): chain broken. "
+                    f"previous_hash should be {expected_prev}, got "
+                    f"{record['previous_hash']}. "
+                    f"Record may have been deleted or reordered."
+                )
+    
+    return {
+        "valid": len(errors) == 0,
+        "events_checked": len(records),
+        "errors": errors
+    }
+```
+
+### 6.3 Tamper Detection
+
+Tampering is detected when:
+
+1. **Modification**: A record's field is changed. The computed chain_hash will not match the stored value.
+2. **Deletion**: A record is removed from the middle of the chain. The next record's previous_hash will not match the preceding record's chain_hash.
+3. **Reordering**: Records are placed out of sequence. The previous_hash linkage will break.
+4. **Insertion**: A new record is inserted out of order. The following record's previous_hash will not match.
+
+All tampering is immediately detectable because previous_hash values create an unbreakable dependency chain.
+
+### 6.4 Error Handling
+
+If verification fails:
+
+1. Log all errors for audit investigation
+2. Do NOT trust the chain or use records for decisions
+3. Escalate to security team
+4. Do NOT attempt to repair the chain automatically
+5. Preserve the corrupted chain as evidence
+
+## 7. Storage Backends
+
+### 7.1 JSONL (JSON Lines)
+
+JSONL is a simple, human-readable format where each record is a complete JSON object on a single line.
+
+**Format**:
+```
+{"run_id":"...", "timestamp":"...", ...}\n
+{"run_id":"...", "timestamp":"...", ...}\n
+```
+
+**Advantages**:
+- Human-readable for debugging
+- Simple append-only writes
+- Works with standard Unix tools
+
+**Disadvantages**:
+- Slower to load (O(n) scan required)
+- No indexing
+- Entire file must be parsed to verify
+
+**File extension**: `.jsonl`
+
+### 7.2 SQLite
+
+SQLite provides indexed, queryable storage with better performance for large chains.
+
+**Schema**:
+```sql
+CREATE TABLE events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT UNIQUE NOT NULL,
+    timestamp TEXT NOT NULL,
+    version TEXT NOT NULL,
+    previous_hash TEXT NOT NULL,
+    chain_hash TEXT NOT NULL,
+    framework TEXT,
+    model TEXT,
+    action TEXT,
+    tokens INTEGER,
+    injection_score REAL,
+    pii_detected BOOLEAN,
+    authorized_by TEXT,
+    result TEXT,
+    input_context TEXT,
+    payload TEXT
+);
+
+CREATE INDEX idx_run_id ON events(run_id);
+CREATE INDEX idx_timestamp ON events(timestamp);
+CREATE INDEX idx_action ON events(action);
+CREATE INDEX idx_result ON events(result);
+```
+
+**Advantages**:
+- Fast queries and indexing
+- Supports concurrent reads
+- Built-in integrity constraints
+- No external dependencies
+
+**Disadvantages**:
+- Requires SQLite driver
+- Schema migration needed for extensions
+- Less human-readable than JSONL
+
+**File extension**: `.db`
+
+### 7.3 Individual .air.json Files
+
+Records can also be stored as individual JSON files in a directory structure.
+
+**Naming**: Each record is stored as `{run_id}.air.json`
+
+**Directory structure**:
 ```
 runs/
   550e8400-e29b-41d4-a716-446655440000.air.json
-  6ba7b810-9dad-11d1-80b4-00c04fd430c8.air.json
-  ...
+  550e8400-e29b-41d4-a716-446655440001.air.json
+  550e8400-e29b-41d4-a716-446655440002.air.json
 ```
 
-### 2.2 Required Fields
+**Advantages**:
+- Decentralized, each record is independent
+- Works with version control (Git)
+- Can be archived or compressed individually
 
-Every audit record MUST contain the following fields:
+**Disadvantages**:
+- Slow to verify (filesystem I/O per record)
+- No indexing
+- Directory scaling issues with millions of records
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `version` | string | Specification version. MUST be `"1.0.0"`. |
-| `run_id` | string | Unique identifier for this record. UUID v4 format. |
-| `timestamp` | string | ISO 8601 UTC timestamp with `Z` suffix. Example: `"2026-03-13T14:30:00.000Z"` |
-| `type` | string | Record type. One of: `llm_call`, `tool_call`, `tool_error`, `pre_tool_call`, `permission_decision`, `injection_blocked`, `session_end`, `human_override`. |
-| `status` | string | Outcome status. One of: `success`, `error`, `timeout`, `blocked`, `scanned`, `completed`, `denied`, `allowed`, `approval_required`. |
+## 8. Signing Key Management
 
-### 2.3 Common Optional Fields
+### 8.1 Key Derivation
 
-These fields appear on most record types:
+The signing key MUST be at least 32 bytes (256 bits). Implementations SHOULD use one of:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `trace_id` | string | Correlation ID linking related records in the same agent session. First 16 hex characters of a UUID. |
-| `session_id` | string | Session identifier for multi-turn conversations. |
-| `framework` | string | Agent framework that produced this record. One of: `langchain`, `crewai`, `openai`, `autogen`, `haystack`, `claude_agent_sdk`. |
-| `chain_hash` | string | HMAC-SHA256 hash linking this record to the chain. Hex-encoded. See Section 3. |
-| `pii_alerts` | array | PII detections. Each element: `{"type": "<pii_type>", "count": <int>, "timestamp": "<iso8601>"}`. Types: `email`, `ssn`, `phone`, `credit_card`, `iban`. |
-| `injection_alerts` | array | Injection pattern matches. Each element: `{"pattern": "<regex>", "weight": <float>, "timestamp": "<iso8601>"}`. |
+1. **Direct key**: A 32-byte random value (generated by `secrets.token_bytes(32)` in Python)
+2. **Key derivation**: PBKDF2-SHA256 from a passphrase (at least 100,000 iterations)
+3. **Key from environment**: The environment variable `TRUST_SIGNING_KEY` (RECOMMENDED for deployment)
 
-### 2.4 JSON Schema
+Implementations MUST NOT use short passphrases, hardcoded keys, or md5/sha1 derived keys.
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://airblackbox.ai/spec/audit-record-v1.schema.json",
-  "title": "AIR Blackbox Audit Record v1.0",
-  "type": "object",
-  "required": ["version", "run_id", "timestamp", "type", "status"],
-  "properties": {
-    "version": {
-      "type": "string",
-      "const": "1.0.0"
-    },
-    "run_id": {
-      "type": "string",
-      "format": "uuid",
-      "description": "Unique record identifier (UUID v4)"
-    },
-    "timestamp": {
-      "type": "string",
-      "format": "date-time",
-      "description": "ISO 8601 UTC timestamp"
-    },
-    "type": {
-      "type": "string",
-      "enum": [
-        "llm_call",
-        "tool_call",
-        "tool_error",
-        "pre_tool_call",
-        "permission_decision",
-        "injection_blocked",
-        "session_end",
-        "human_override"
-      ]
-    },
-    "status": {
-      "type": "string",
-      "enum": [
-        "success", "error", "timeout",
-        "blocked", "scanned", "completed",
-        "denied", "allowed", "approval_required"
-      ]
-    },
-    "trace_id": {
-      "type": "string",
-      "maxLength": 16
-    },
-    "session_id": {
-      "type": "string"
-    },
-    "framework": {
-      "type": "string",
-      "enum": [
-        "langchain", "crewai", "openai",
-        "autogen", "haystack", "claude_agent_sdk"
-      ]
-    },
-    "chain_hash": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$",
-      "description": "HMAC-SHA256 chain hash (hex-encoded)"
-    },
-    "model": {
-      "type": "string",
-      "description": "LLM model identifier"
-    },
-    "provider": {
-      "type": "string",
-      "description": "LLM provider (openai, anthropic, google, etc.)"
-    },
-    "tokens": {
-      "type": "object",
-      "properties": {
-        "prompt": { "type": "integer" },
-        "completion": { "type": "integer" },
-        "total": { "type": "integer" }
-      }
-    },
-    "duration_ms": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Operation duration in milliseconds"
-    },
-    "tool_name": {
-      "type": "string",
-      "description": "Name of the tool (for tool_call, pre_tool_call types)"
-    },
-    "risk_level": {
-      "type": "string",
-      "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-      "description": "EU AI Act risk classification"
-    },
-    "injection_score": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1,
-      "description": "Injection detection confidence (0.0–1.0)"
-    },
-    "pii_alerts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": { "type": "string" },
-          "count": { "type": "integer" },
-          "timestamp": { "type": "string", "format": "date-time" }
-        }
-      }
-    },
-    "injection_alerts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "pattern": { "type": "string" },
-          "weight": { "type": "number" },
-          "timestamp": { "type": "string", "format": "date-time" }
-        }
-      }
-    },
-    "error": {
-      "type": "string",
-      "maxLength": 500,
-      "description": "Error message (truncated to 500 chars)"
-    },
-    "request_vault_ref": {
-      "type": "string",
-      "description": "Vault reference for the request payload"
-    },
-    "response_vault_ref": {
-      "type": "string",
-      "description": "Vault reference for the response payload"
-    },
-    "request_checksum": {
-      "type": "string",
-      "description": "SHA-256 checksum of the request payload"
-    },
-    "response_checksum": {
-      "type": "string",
-      "description": "SHA-256 checksum of the response payload"
-    }
-  }
-}
-```
+### 8.2 Key Rotation Procedure
 
----
+To rotate keys (e.g., after key compromise):
 
-## 3. Cryptographic Integrity
+1. Generate a new signing key
+2. Read all existing records from the old chain
+3. Recompute all chain_hash values using the new signing key
+4. Write the recomputed chain to a new storage location
+5. Verify the new chain with the new key
+6. Retire the old chain to archive storage
+7. Update the application to use the new key
 
-### 3.1 HMAC-SHA256 Computation
+**Important**: Key rotation invalidates all old chain_hash values. This is acceptable for updating compromised keys, but SHOULD NOT be done frequently.
 
-Each record's `chain_hash` is computed using HMAC-SHA256 with the following inputs:
+### 8.3 Environment Variable
 
-- **Key:** The signing key (from `TRUST_SIGNING_KEY` environment variable, or `"air-blackbox-default"` if not set)
-- **Message:** The concatenation of the previous record's chain hash (as raw bytes) and the current record's JSON content (serialized with sorted keys, encoded as UTF-8)
-
-```
-chain_hash[i] = HMAC-SHA256(key, chain_hash[i-1] || JSON(record[i]))
-```
-
-Where `||` denotes byte concatenation and `JSON()` denotes `json.dumps(record, sort_keys=True).encode("utf-8")`.
-
-### 3.2 Chain Linking
-
-The chain is an ordered sequence where each record's hash depends on all previous records. This means modifying any record invalidates all subsequent hashes.
-
-```
-Record 0:  chain_hash = HMAC-SHA256(key, b"genesis" || JSON(record_0))
-Record 1:  chain_hash = HMAC-SHA256(key, bytes(chain_hash_0) || JSON(record_1))
-Record 2:  chain_hash = HMAC-SHA256(key, bytes(chain_hash_1) || JSON(record_2))
-...
-Record N:  chain_hash = HMAC-SHA256(key, bytes(chain_hash_N-1) || JSON(record_N))
-```
-
-The genesis value `b"genesis"` (7 bytes, ASCII) is the initial previous hash for the first record in any chain.
-
-### 3.3 Key Management
-
-The signing key determines who can produce valid chain hashes and who can verify them.
-
-| Scenario | Key Source | Security Level |
-|----------|-----------|----------------|
-| Development | Default key `"air-blackbox-default"` | Low — anyone can verify and forge |
-| Production | `TRUST_SIGNING_KEY` environment variable | Medium — key holder can verify and produce |
-| Enterprise | External KMS (AWS KMS, HashiCorp Vault) | High — key never leaves the KMS |
-
-**Recommendations:**
-
-- Never use the default key in production
-- Rotate keys periodically (the chain remains verifiable with the key that was active when each record was created)
-- Store keys separately from audit records
-
-### 3.4 Verification Algorithm
-
-To verify a chain, a verifier with the signing key recomputes each hash and compares it to the stored `chain_hash`:
+Implementations SHOULD read the signing key from the environment variable `TRUST_SIGNING_KEY`:
 
 ```python
-import json
-import hashlib
-import hmac
-
-def verify_chain(records: list[dict], signing_key: str) -> tuple[bool, int]:
-    """Verify HMAC-SHA256 audit chain integrity.
-
-    Args:
-        records: List of audit records, sorted by timestamp.
-        signing_key: The HMAC signing key.
-
-    Returns:
-        (intact: bool, verified_count: int)
-        If intact is False, verified_count indicates where the break occurred.
-    """
-    key = signing_key.encode("utf-8")
-    prev_hash = b"genesis"
-
-    for i, record in enumerate(records):
-        # Serialize record without the chain_hash field
-        record_copy = {k: v for k, v in record.items() if k != "chain_hash"}
-        record_bytes = json.dumps(record_copy, sort_keys=True).encode("utf-8")
-
-        # Compute expected hash
-        expected = hmac.new(key, prev_hash + record_bytes, hashlib.sha256).hexdigest()
-
-        # Compare to stored hash
-        stored = record.get("chain_hash")
-        if stored and stored != expected:
-            return False, i  # Chain broken at record i
-
-        prev_hash = hmac.new(key, prev_hash + record_bytes, hashlib.sha256).digest()
-
-    return True, len(records)
+signing_key = os.environ.get(
+    "TRUST_SIGNING_KEY",
+    "air-blackbox-default"  # Development default only
+)
 ```
 
----
+The default value MUST NOT be used in production. In production, `TRUST_SIGNING_KEY` MUST be set to a strong, random value.
 
-## 4. Entry Types
+## 9. Security Considerations
 
-### 4.1 LLM Interaction Records
+### 9.1 What the Chain Protects Against
 
-Type: `llm_call`
+The audit chain provides cryptographic protection against:
 
-Generated when a trust layer intercepts an LLM API call. Captures the model, provider, token usage, and duration.
+1. **Tampering**: Modifying any field in any record invalidates all subsequent chain_hash values
+2. **Deletion**: Removing a record breaks the linkage for all following records
+3. **Reordering**: Moving records out of sequence causes previous_hash mismatches
+4. **Undetectable modification**: The chain_hash computation includes all record fields; no tampering goes undetected
+
+### 9.2 What the Chain Does NOT Protect Against
+
+The audit chain does NOT protect against:
+
+1. **Key compromise**: If the signing key is exposed, an attacker can forge chain_hash values for new records
+2. **Implementation bugs**: Software bugs in the chain implementation could allow bypassing the chain
+3. **Storage backend compromise**: An attacker with direct database or filesystem access can modify records and their hashes
+4. **Denial of service**: The chain can be truncated (records deleted) without triggering integrity checks
+5. **Selective disclosure**: The chain cannot prevent hiding records that were created but not persisted
+
+### 9.3 Recommendations for Production
+
+1. **Signing Key Management**:
+   - Store the signing key in a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
+   - Rotate keys annually
+   - Never commit keys to version control
+   - Use separate keys for different environments (dev, staging, production)
+
+2. **Storage Security**:
+   - Store chains in a write-once or append-only storage system
+   - Enable file integrity monitoring (tripwire, AIDE)
+   - Use encrypted storage with transparent encryption (dm-crypt, AWS KMS)
+   - Implement role-based access control (RBAC) to limit who can read chains
+
+3. **Verification**:
+   - Verify the entire chain at application startup
+   - Perform periodic verification (daily or weekly)
+   - Log verification results for audit purposes
+   - Alert on verification failures
+
+4. **Archival**:
+   - Archive chains to immutable storage (S3 with versioning, Glacier, tape)
+   - Sign archived chains separately to prove they were not modified after archival
+   - Maintain chain integrity across long-term storage
+
+## 10. Compliance Mapping
+
+### 10.1 EU AI Act Article 12: Record-Keeping
+
+Article 12 requires that high-risk AI systems maintain records of operation. The audit chain satisfies this by:
+
+- Recording all agent actions with timestamps and outcomes
+- Creating tamper-evident records that cannot be modified after creation
+- Maintaining a complete trace of decision-making
+- Enabling auditor verification of chain integrity
+
+**Specification compliance**: Section 6 (verification) enables auditors to confirm records are intact and unaltered.
+
+### 10.2 GDPR Article 30: Records of Processing
+
+Article 30 requires organizations to maintain records of processing activities. The audit chain assists by:
+
+- Recording the data being processed (via the payload field)
+- Tracking authorization and approvals (authorized_by field)
+- Maintaining action history (action field)
+- Creating immutable evidence of processing
+
+**Specification compliance**: Section 5 (fields) includes optional fields for tracking data handling and authorization.
+
+### 10.3 ISO 42001: AI Management System
+
+ISO 42001 requires documented AI system operations and change tracking. The audit chain provides:
+
+- Model and framework tracking (model, framework fields)
+- Token usage records (tokens field)
+- Action classification (action field)
+- Chain verification for integrity assurance
+
+**Specification compliance**: Optional fields in Section 5 enable operational monitoring per ISO 42001.
+
+## 11. Examples
+
+### 11.1 Example Genesis Record
 
 ```json
 {
-  "version": "1.0.0",
   "run_id": "550e8400-e29b-41d4-a716-446655440000",
-  "trace_id": "a1b2c3d4e5f67890",
-  "timestamp": "2026-03-13T14:30:00.000Z",
-  "type": "llm_call",
-  "model": "gpt-4o-mini",
-  "provider": "openai",
-  "tokens": {
-    "prompt": 120,
-    "completion": 350,
-    "total": 470
-  },
-  "duration_ms": 2100,
-  "status": "success",
-  "pii_alerts": [],
-  "injection_alerts": [],
+  "timestamp": "2026-03-28T14:32:00.000Z",
+  "version": "1.0.0",
   "framework": "langchain",
-  "chain_hash": "a3f2b8c9d1e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0"
+  "model": "claude-3-opus",
+  "action": "agent_start",
+  "previous_hash": "genesis",
+  "chain_hash": "a7f3d8e4b2c6f1a9e5d3c8b4f7e2a1d6c4e8f1a3d5b7c9e2f4a6c8e1b3d5f7"
 }
 ```
 
-### 4.2 Tool Execution Records
+**chain_hash computation** (pseudocode):
+```
+signing_key = b"test-secret-key-32-bytes-minimum"
+record_json = '{"action":"agent_start","framework":"langchain","model":"claude-3-opus","previous_hash":"genesis","run_id":"550e8400-e29b-41d4-a716-446655440000","timestamp":"2026-03-28T14:32:00.000Z","version":"1.0.0"}'
+record_bytes = record_json.encode("utf-8")
+previous_hash_bytes = b"genesis"
+h = HMAC-SHA256(signing_key, previous_hash_bytes + record_bytes)
+chain_hash = h.hexdigest()
+```
 
-Type: `tool_call` (success) or `tool_error` (failure)
+### 11.2 Example Chain of 3 Records
 
-Generated after a tool completes execution. For Claude Agent SDK, this corresponds to the `PostToolUse` hook. For LangChain, the `on_tool_end` callback.
-
+**Record 1 (Genesis)**:
 ```json
 {
+  "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-03-28T14:32:00.000Z",
   "version": "1.0.0",
-  "run_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-  "trace_id": "a1b2c3d4e5f67890",
-  "session_id": "sess_abc123",
-  "timestamp": "2026-03-13T14:30:01.200Z",
-  "type": "tool_call",
-  "tool_name": "Bash",
-  "risk_level": "CRITICAL",
-  "status": "success",
-  "framework": "claude_agent_sdk",
-  "chain_hash": "b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3"
+  "action": "agent_start",
+  "previous_hash": "genesis",
+  "chain_hash": "aaaa000000000000000000000000000000000000000000000000000000000001"
 }
 ```
 
-### 4.3 Pre-Tool Scan Records
-
-Type: `pre_tool_call`
-
-Generated before tool execution (PreToolUse hook). Contains scan results including PII detection and injection analysis. This record type enables blocking dangerous operations before they execute.
-
+**Record 2**:
 ```json
 {
+  "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-03-28T14:32:05.000Z",
   "version": "1.0.0",
-  "run_id": "7ca8b920-aebd-21e2-91c5-11d15564110a",
-  "trace_id": "a1b2c3d4e5f67890",
-  "session_id": "sess_abc123",
-  "timestamp": "2026-03-13T14:30:01.000Z",
-  "type": "pre_tool_call",
-  "tool_name": "Write",
-  "risk_level": "HIGH",
-  "pii_alerts": [
-    {"type": "email", "count": 2, "timestamp": "2026-03-13T14:30:01.000Z"}
-  ],
-  "injection_alerts": [],
-  "injection_score": 0.0,
-  "status": "scanned",
-  "framework": "claude_agent_sdk"
+  "action": "tool_call",
+  "tool_name": "send_email",
+  "tokens": 150,
+  "previous_hash": "aaaa000000000000000000000000000000000000000000000000000000000001",
+  "chain_hash": "bbbb000000000000000000000000000000000000000000000000000000000002"
 }
 ```
 
-### 4.4 Permission Decision Records
-
-Type: `permission_decision`
-
-Generated when the trust layer's permission handler makes a risk-based access control decision.
-
+**Record 3**:
 ```json
 {
+  "run_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-03-28T14:32:10.000Z",
   "version": "1.0.0",
-  "run_id": "8db9c031-bfce-32f3-a2d6-22e26675221b",
-  "timestamp": "2026-03-13T14:30:00.800Z",
-  "type": "permission_decision",
-  "tool_name": "Bash",
-  "risk_level": "CRITICAL",
-  "status": "denied",
-  "framework": "claude_agent_sdk"
+  "action": "agent_complete",
+  "result": "success",
+  "tokens": 200,
+  "previous_hash": "bbbb000000000000000000000000000000000000000000000000000000000002",
+  "chain_hash": "cccc000000000000000000000000000000000000000000000000000000000003"
 }
 ```
 
-### 4.5 Injection Blocked Records
+**Chain linkage**:
+- Record 2 links to Record 1: previous_hash = "aaaa...001"
+- Record 3 links to Record 2: previous_hash = "bbbb...002"
+- If Record 2 is modified, its chain_hash changes, breaking Record 3's linkage
 
-Type: `injection_blocked`
-
-Generated when a prompt injection attempt is detected and blocked.
-
-```json
-{
-  "version": "1.0.0",
-  "run_id": "9ec0d142-c0df-43g4-b3e7-33f37786332c",
-  "trace_id": "f9e8d7c6b5a49382",
-  "timestamp": "2026-03-13T14:30:02.500Z",
-  "type": "injection_blocked",
-  "tool_name": "Bash",
-  "risk_level": "CRITICAL",
-  "injection_score": 0.9,
-  "injection_alerts": [
-    {"pattern": "ignore (?:all )?previous instructions", "weight": 0.9, "timestamp": "2026-03-13T14:30:02.500Z"}
-  ],
-  "status": "blocked",
-  "framework": "claude_agent_sdk"
-}
-```
-
-### 4.6 Human Override Records
-
-Type: `human_override`
-
-Generated when a human intervenes in agent execution — approving, denying, or modifying an agent action.
-
-```json
-{
-  "version": "1.0.0",
-  "run_id": "0fd1e253-d1e0-54h5-c4f8-44048897443d",
-  "session_id": "sess_abc123",
-  "timestamp": "2026-03-13T14:30:03.000Z",
-  "type": "human_override",
-  "tool_name": "Write",
-  "risk_level": "HIGH",
-  "status": "allowed",
-  "framework": "claude_agent_sdk"
-}
-```
-
-### 4.7 Session End Records
-
-Type: `session_end`
-
-Generated when an agent session terminates.
-
-```json
-{
-  "version": "1.0.0",
-  "run_id": "1ge2f364-e2f1-65i6-d5g9-55159908554e",
-  "session_id": "sess_abc123",
-  "timestamp": "2026-03-13T14:35:00.000Z",
-  "type": "session_end",
-  "status": "completed",
-  "framework": "claude_agent_sdk"
-}
-```
-
----
-
-## 5. EU AI Act Mapping
-
-### 5.1 Article 12 — Record-Keeping
-
-Article 12 requires automatic recording of events over the system's lifetime. The audit chain satisfies this through:
-
-| Requirement | How AIR Blackbox Satisfies It |
-|-------------|-------------------------------|
-| Automatic recording | Trust layers generate `.air.json` records without developer intervention |
-| Event logging over lifetime | Records persist in the runs directory across sessions |
-| Sufficient detail for verification | Each record captures model, tokens, duration, tool calls, PII alerts, injection alerts |
-| Protection against modification | HMAC-SHA256 chain makes any modification cryptographically detectable |
-| Traceability | `trace_id` and `session_id` link related records across a session |
-
-### 5.2 Article 14 — Human Oversight
-
-Article 14 requires that humans can effectively oversee the AI system. The audit chain supports this through:
-
-| Requirement | How AIR Blackbox Satisfies It |
-|-------------|-------------------------------|
-| Understand system capabilities | `llm_call` records show exactly which models and tools the agent uses |
-| Decide not to use the system | `permission_decision` records show risk-based gating with deny capability |
-| Intervene or interrupt | `human_override` records document human intervention points |
-| Real-time monitoring | Records are written in real-time as events occur |
-
-### 5.3 Cross-Article Traceability
-
-The audit chain provides evidence for multiple articles simultaneously:
-
-| Article | Evidence From Audit Chain |
-|---------|--------------------------|
-| Art. 9 (Risk Management) | `risk_level` classification on every tool call, `permission_decision` records |
-| Art. 10 (Data Governance) | `pii_alerts` showing PII detection, `request_vault_ref` showing data tokenization |
-| Art. 11 (Technical Documentation) | Full record schema with version, timestamps, and structured fields |
-| Art. 12 (Record-Keeping) | The entire chain, HMAC integrity, tamper detection |
-| Art. 14 (Human Oversight) | `human_override` and `permission_decision` records |
-| Art. 15 (Cybersecurity) | `injection_alerts`, `injection_score`, `injection_blocked` records |
-
----
-
-## 6. Evidence Bundle
-
-### 6.1 Bundle Format
-
-The evidence bundle is a signed JSON document that combines all AIR Blackbox data into one auditor-ready package. It is generated by the `air-blackbox export` command.
-
-```json
-{
-  "air_blackbox_evidence_bundle": {
-    "version": "1.0.0",
-    "generated_at": "2026-03-13T15:00:00.000Z",
-    "generator": "air-blackbox v1.2.6"
-  },
-  "gateway": {
-    "url": "http://localhost:8080",
-    "reachable": true,
-    "vault_enabled": true,
-    "guardrails_enabled": true,
-    "signing_key_configured": true
-  },
-  "compliance": {
-    "framework": "EU AI Act",
-    "articles_checked": [9, 10, 11, 12, 14, 15],
-    "results": "...",
-    "summary": {
-      "total_checks": 39,
-      "passing": 35,
-      "warnings": 3,
-      "failing": 1
-    }
-  },
-  "aibom": "...",
-  "audit_trail": {
-    "total_records": 1250,
-    "models": {"gpt-4o-mini": 800, "claude-3-5-sonnet": 450},
-    "chain_verification": {
-      "intact": true,
-      "records_verified": 1250,
-      "total_records": 1250
-    }
-  },
-  "attestation": {
-    "algorithm": "HMAC-SHA256",
-    "signature": "a3f2...f9a0",
-    "signed_at": "2026-03-13T15:00:00.000Z",
-    "verification": "Compute HMAC-SHA256 of the bundle (excluding attestation) with the signing key."
-  }
-}
-```
-
-### 6.2 Bundle Signing
-
-The bundle is signed using HMAC-SHA256 over the complete JSON content (excluding the `attestation` field):
+### 11.3 Example Verification Code in Python
 
 ```python
-bundle_bytes = json.dumps(bundle_without_attestation, sort_keys=True).encode("utf-8")
-signature = hmac.new(key.encode(), bundle_bytes, hashlib.sha256).hexdigest()
-```
-
-### 6.3 Bundle Verification
-
-To verify a bundle:
-
-1. Extract and remove the `attestation` field
-2. Serialize the remaining bundle with `json.dumps(bundle, sort_keys=True)`
-3. Compute `HMAC-SHA256(key, serialized_bundle)`
-4. Compare the computed hash to `attestation.signature`
-
-```python
-import json
-import hmac
-import hashlib
-
-def verify_bundle(bundle: dict, signing_key: str) -> bool:
-    """Verify an AIR Blackbox evidence bundle signature."""
-    attestation = bundle.pop("attestation", None)
-    if not attestation:
-        return False
-
-    bundle_bytes = json.dumps(bundle, sort_keys=True).encode("utf-8")
-    expected = hmac.new(
-        signing_key.encode(), bundle_bytes, hashlib.sha256
-    ).hexdigest()
-
-    return hmac.compare_digest(expected, attestation["signature"])
-```
-
----
-
-## 7. Implementation Notes
-
-### 7.1 Python Reference Implementation
-
-The reference implementation is in the `air-blackbox` PyPI package:
-
-```bash
-pip install air-blackbox
-```
-
-Key modules:
-
-| Module | Purpose |
-|--------|---------|
-| `air_blackbox.replay.engine` | Chain verification, record loading, filtering |
-| `air_blackbox.export.bundle` | Evidence bundle generation and signing |
-| `air_blackbox.trust.langchain` | LangChain trust layer (callback handler) |
-| `air_blackbox.trust.claude_agent` | Claude Agent SDK trust layer (hooks) |
-| `air_blackbox.trust.openai_agents` | OpenAI SDK trust layer (wrapper) |
-
-### 7.2 Storage Backends
-
-The default storage backend writes `.air.json` files to a local directory. The format is designed to be backend-agnostic:
-
-| Backend | Status | Notes |
-|---------|--------|-------|
-| Local filesystem (`./runs/`) | Supported | Default. One file per record. |
-| SQLite | Supported | Via `air_blackbox.compliance.history` for compliance scans |
-| S3-compatible object storage | Planned | One object per record, prefix by date |
-| PostgreSQL JSONB | Planned | Single table, JSONB column for record content |
-
-Records MUST be stored in a way that preserves insertion order (by timestamp) for chain verification.
-
-### 7.3 Performance Considerations
-
-- Record writing is non-blocking: if a write fails, the agent operation continues normally
-- Records are written synchronously to ensure ordering, but the write itself (file I/O) is fast (<1ms typical)
-- Chain verification is O(n) in the number of records — verify periodically, not on every write
-- For high-throughput systems (>1000 records/second), consider batching records and computing chain hashes in bulk
-
----
-
-## Appendix A: Complete JSON Schema
-
-The canonical JSON Schema is hosted at:
-
-```
-https://airblackbox.ai/spec/audit-record-v1.schema.json
-```
-
-See Section 2.4 for the full schema definition.
-
----
-
-## Appendix B: Annotated Example Chain
-
-A three-record chain demonstrating the linking:
-
-```
-Record 0 (LLM call):
-  run_id: "aaa-001"
-  timestamp: "2026-03-13T14:30:00.000Z"
-  type: "llm_call"
-  model: "gpt-4o-mini"
-  status: "success"
-  chain_hash: HMAC-SHA256(key, b"genesis" || JSON(record_0))
-              = "a1b2c3..."
-
-Record 1 (Tool call):
-  run_id: "aaa-002"
-  timestamp: "2026-03-13T14:30:01.000Z"
-  type: "tool_call"
-  tool_name: "Bash"
-  risk_level: "CRITICAL"
-  status: "success"
-  chain_hash: HMAC-SHA256(key, bytes("a1b2c3...") || JSON(record_1))
-              = "d4e5f6..."
-
-Record 2 (Session end):
-  run_id: "aaa-003"
-  timestamp: "2026-03-13T14:30:05.000Z"
-  type: "session_end"
-  status: "completed"
-  chain_hash: HMAC-SHA256(key, bytes("d4e5f6...") || JSON(record_2))
-              = "g7h8i9..."
-```
-
-If Record 1 is modified (e.g., changing `risk_level` from `"CRITICAL"` to `"LOW"`), the recomputed hash at Record 1 will differ from `"d4e5f6..."`, and Record 2's hash will also fail verification because it depends on Record 1's hash. This cascading failure is what makes the chain tamper-evident.
-
----
-
-## Appendix C: Verification Script
-
-A standalone script to verify an audit chain:
-
-```python
-#!/usr/bin/env python3
-"""Verify an AIR Blackbox audit chain.
-
-Usage:
-    python verify_chain.py ./runs --key your-signing-key
-    python verify_chain.py ./runs  # uses default key
-"""
-
-import argparse
-import glob
 import hashlib
 import hmac
 import json
-import os
-import sys
+from typing import List, Dict, Any
 
-
-def load_records(runs_dir: str) -> list[dict]:
-    """Load and sort .air.json records by timestamp."""
-    records = []
-    for fpath in glob.glob(os.path.join(runs_dir, "**/*.air.json"), recursive=True):
-        try:
-            with open(fpath) as f:
-                records.append(json.load(f))
-        except (json.JSONDecodeError, IOError):
-            print(f"  WARN: Could not read {fpath}", file=sys.stderr)
-    records.sort(key=lambda r: r.get("timestamp", ""))
-    return records
-
-
-def verify(records: list[dict], signing_key: str) -> tuple[bool, int, int]:
-    """Verify chain integrity. Returns (intact, verified, total)."""
-    key = signing_key.encode("utf-8")
-    prev_hash = b"genesis"
-
-    for i, record in enumerate(records):
-        record_clean = {k: v for k, v in record.items() if k != "chain_hash"}
-        record_bytes = json.dumps(record_clean, sort_keys=True).encode("utf-8")
-        expected = hmac.new(key, prev_hash + record_bytes, hashlib.sha256)
-
-        stored = record.get("chain_hash")
-        if stored and stored != expected.hexdigest():
-            return False, i, len(records)
-
-        prev_hash = expected.digest()
-
-    return True, len(records), len(records)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Verify AIR Blackbox audit chain")
-    parser.add_argument("runs_dir", help="Path to runs directory")
-    parser.add_argument("--key", default="air-blackbox-default", help="HMAC signing key")
-    args = parser.parse_args()
-
-    records = load_records(args.runs_dir)
-    if not records:
-        print("No .air.json records found.")
-        sys.exit(1)
-
-    print(f"Loaded {len(records)} records from {args.runs_dir}")
-    print(f"Date range: {records[0].get('timestamp', '?')} → {records[-1].get('timestamp', '?')}")
-    print()
-
-    intact, verified, total = verify(records, args.key)
-
-    if intact:
-        print(f"PASS: Chain intact. {verified}/{total} records verified.")
-        sys.exit(0)
+def compute_chain_hash(
+    signing_key: bytes,
+    previous_hash: str,
+    record: Dict[str, Any]
+) -> str:
+    """Compute HMAC-SHA256 chain hash for a record."""
+    record_copy = {k: v for k, v in record.items() if k != "chain_hash"}
+    record_json = json.dumps(record_copy, sort_keys=True, separators=(",", ":"))
+    record_bytes = record_json.encode("utf-8")
+    
+    if previous_hash == "genesis":
+        prev_bytes = b"genesis"
     else:
-        print(f"FAIL: Chain broken at record {verified} of {total}.")
-        print(f"  Record: {records[verified].get('run_id', '?')}")
-        print(f"  Timestamp: {records[verified].get('timestamp', '?')}")
-        sys.exit(1)
+        prev_bytes = bytes.fromhex(previous_hash)
+    
+    h = hmac.new(signing_key, prev_bytes + record_bytes, hashlib.sha256)
+    return h.hexdigest()
 
 
+def verify_chain(
+    records: List[Dict[str, Any]],
+    signing_key: bytes
+) -> Dict[str, Any]:
+    """Verify the integrity of an audit chain."""
+    errors = []
+    
+    if not records:
+        return {"valid": True, "events_checked": 0, "errors": []}
+    
+    for i, record in enumerate(records):
+        # Recompute chain hash
+        expected_hash = compute_chain_hash(
+            signing_key,
+            record["previous_hash"],
+            record
+        )
+        
+        if record.get("chain_hash") != expected_hash:
+            errors.append(
+                f"Record {i}: chain_hash mismatch. "
+                f"Expected {expected_hash}, got {record.get('chain_hash')}. "
+                f"TAMPERING DETECTED."
+            )
+        
+        # Verify linkage
+        if i == 0:
+            if record.get("previous_hash") != "genesis":
+                errors.append(
+                    f"Record 0: genesis record must have previous_hash='genesis'"
+                )
+        else:
+            expected_prev = records[i - 1]["chain_hash"]
+            if record.get("previous_hash") != expected_prev:
+                errors.append(
+                    f"Record {i}: chain broken. "
+                    f"Expected previous_hash={expected_prev}, "
+                    f"got {record.get('previous_hash')}"
+                )
+    
+    return {
+        "valid": len(errors) == 0,
+        "events_checked": len(records),
+        "errors": errors
+    }
+
+
+# Usage example
 if __name__ == "__main__":
-    main()
+    signing_key = b"test-secret-key-32-bytes-minimum"
+    
+    # Load records from JSONL
+    records = []
+    with open("chain.jsonl", "r") as f:
+        for line in f:
+            records.append(json.loads(line))
+    
+    # Verify
+    result = verify_chain(records, signing_key)
+    if result["valid"]:
+        print(f"Chain verified: {result['events_checked']} records intact")
+    else:
+        print("Chain verification FAILED:")
+        for error in result["errors"]:
+            print(f"  - {error}")
+```
+
+## 12. Implementation Notes
+
+### 12.1 Canonical JSON
+
+To ensure deterministic chain_hash computation:
+
+1. Sort all keys alphabetically
+2. Use compact formatting (no spaces or newlines)
+3. Use Unix line endings (LF, not CRLF)
+4. Encode UTF-8
+5. Never include the chain_hash field in the computation
+
+### 12.2 Timestamp Precision
+
+Use ISO 8601 format with millisecond precision and UTC timezone:
+
+**Correct**: `"2026-03-28T14:32:00.000Z"`
+
+**Incorrect**: `"2026-03-28T14:32:00"` (missing timezone)
+
+**Incorrect**: `"2026-03-28T14:32:00-07:00"` (local timezone; must convert to UTC)
+
+### 12.3 Thread Safety
+
+Applications writing to the audit chain from multiple threads MUST use a lock:
+
+```python
+import threading
+
+class AuditChain:
+    def __init__(self, signing_key):
+        self._lock = threading.Lock()
+        self._prev_hash = b"genesis"
+    
+    def write(self, record):
+        with self._lock:
+            # Compute and write atomically
+            record["chain_hash"] = compute_chain_hash(
+                self._signing_key,
+                self._prev_hash.hex() if self._prev_hash != b"genesis" else "genesis",
+                record
+            )
+            self._persist(record)
+            self._prev_hash = bytes.fromhex(record["chain_hash"])
 ```
 
 ---
 
-## Changelog
+**End of Specification**
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2026-03-13 | Initial specification. Covers record format, HMAC-SHA256 chaining, 7 entry types, EU AI Act mapping, evidence bundles, verification algorithm. |
+Document version: 1.0.0
+Last updated: 2026-03-28
+Status: Draft

@@ -46,12 +46,29 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
     except Exception:
         pass  # Graceful fallback if code scanner has issues
 
+    # Run GDPR scan
+    gdpr_findings = []
+    try:
+        from air_blackbox.compliance.gdpr_scanner import scan_gdpr
+        gdpr_findings = scan_gdpr(scan_path)
+    except Exception:
+        pass  # Graceful fallback if GDPR scanner has issues
+
+    # Run bias/fairness scan
+    bias_findings = []
+    try:
+        from air_blackbox.compliance.bias_scanner import scan_bias
+        bias_findings = scan_bias(scan_path)
+    except Exception:
+        pass  # Graceful fallback if bias scanner has issues
+
     # Group code findings by article number
     code_by_article = {}
     for f in code_findings:
         code_by_article.setdefault(f.article, []).append(f)
 
-    return [
+    # EU AI Act articles
+    results = [
         _check_article_9(status, doc_path, code_by_article.get(9, [])),
         _check_article_10(status, doc_path, code_by_article.get(10, [])),
         _check_article_11(status, doc_path, code_by_article.get(11, [])),
@@ -59,6 +76,26 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
         _check_article_14(status, doc_path, code_by_article.get(14, [])),
         _check_article_15(status, doc_path, code_by_article.get(15, [])),
     ]
+
+    # GDPR checks (grouped into a single section)
+    if gdpr_findings:
+        gdpr_checks = [_finding_to_dict(f) for f in gdpr_findings]
+        results.append({
+            "number": "GDPR",
+            "title": "GDPR Data Protection",
+            "checks": gdpr_checks,
+        })
+
+    # Bias/fairness checks
+    if bias_findings:
+        bias_checks = [_finding_to_dict(f) for f in bias_findings]
+        results.append({
+            "number": "BIAS",
+            "title": "Bias and Fairness",
+            "checks": bias_checks,
+        })
+
+    return results
 
 
 def _check_article_9(status, scan_path, code_findings=None):
