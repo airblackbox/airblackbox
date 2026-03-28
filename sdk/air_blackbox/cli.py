@@ -36,9 +36,9 @@ def print_banner():
     console.print(AIR_BANNER)
     console.print("  [dim]EU AI Act Compliance · AI-BOM · Audit Chain · Incident Replay[/dim]")
     console.print()
-    console.print(Rule(style="#1e2530"))
+    console.print("  " + "─" * 76, style="#1e2530")
     console.print("  [bold #f85149]⚠  Enforcement deadline: August 2, 2026  —  €35M or 7% global turnover[/bold #f85149]")
-    console.print(Rule(style="#1e2530"))
+    console.print("  " + "─" * 76, style="#1e2530")
     console.print("  [dim]pip install air-blackbox  ·  github.com/airblackbox/gateway  ·  airblackbox.ai[/dim]")
     console.print()
 
