@@ -21,11 +21,22 @@
 .DS_Store
 Thumbs.db
 
+# Python
 __pycache__/
 *.egg-info/
 *.pyc
 dist/
 build/
+.pytest_cache/
+pytest-cache-files-*/
 
-# Model files (too large for git — ship separately)
+# Model files (too large for git)
 model/*.gguf
+
+# Generated reports
+*.pdf
+
+# Scratch files
+code_scanner.py
+engine.py
+github_replies.md
