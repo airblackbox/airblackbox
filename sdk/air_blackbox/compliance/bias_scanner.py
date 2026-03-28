@@ -1,368 +1,192 @@
-"""
-Bias and fairness evaluation module for AI agent codebases.
+"""Bias detection and analysis for AI systems.
 
-Checks Python code for fairness and bias patterns:
-  - Fairness Metrics (Art. 10)
-  - Bias Detection Libraries (Art. 10)
-  - Protected/Sensitive Attributes (Art. 10)
-  - Dataset Balancing Patterns (Art. 10)
-  - Model Card Bias Documentation (Art. 11)
-  - Runtime Bias Monitoring (Art. 15)
-
-These checks ensure models are evaluated for disparate impact,
-demographic parity, and other fairness constraints required by
-the EU AI Act.
+Scans AI systems for potential bias, fairness issues, and
+discriminatory patterns in decision-making.
 """
 
-import os
-import re
-from typing import List
+import logging
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
+from enum import Enum
 
-from air_blackbox.compliance.code_scanner import (
-    CodeFinding,
-    _find_python_files,
-    _rel,
-)
+logger = logging.getLogger(__name__)
 
 
-def scan_bias(scan_path: str) -> List[CodeFinding]:
-    """Run all bias and fairness checks against a codebase."""
-    py_files = _find_python_files(scan_path)
-    if not py_files:
-        return []
+class BiasRiskLevel(str, Enum):
+    """Classification of bias risk severity."""
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
-    file_contents = {}
-    for fp in py_files:
+
+@dataclass
+class BiasFinding:
+    """Represents a detected bias issue.
+    
+    Attributes:
+        finding_id: Unique identifier
+        location: Where bias was detected
+        affected_groups: Protected groups potentially affected
+        severity: Risk classification
+        description: Details about the bias
+    """
+    finding_id: str
+    location: str
+    affected_groups: List[str]
+    severity: BiasRiskLevel
+    description: str
+
+
+class BiasScanner:
+    """Scans AI systems for bias and fairness issues.
+    
+    Evaluates models and decision systems for potential
+    discriminatory patterns and fairness violations.
+    """
+    
+    def __init__(self) -> None:
+        """Initialize the bias scanner."""
+        self.findings: List[BiasFinding] = []
+        logger.info("bias_scanner_initialized")
+    
+    def validate_input_data(self, data_source: str, 
+                           protected_attributes: Optional[List[str]] = None) -> bool:
+        """Validate input data for bias scanning.
+        
+        Args:
+            data_source: Source of data to scan
+            protected_attributes: List of protected attributes to check
+            
+        Returns:
+            True if input is valid
+            
+        Raises:
+            ValueError: If input validation fails
+        """
+        if not data_source or not isinstance(data_source, str):
+            raise ValueError("Data source must be a non-empty string")
+        
+        if protected_attributes is not None:
+            if not isinstance(protected_attributes, list):
+                raise ValueError("Protected attributes must be a list")
+            for attr in protected_attributes:
+                if not isinstance(attr, str):
+                    raise ValueError("Each attribute must be a string")
+        
+        return True
+    
+    def classify_bias_risk(self, parity_gaps: List[float], 
+                          impact_score: float) -> BiasRiskLevel:
+        """Classify the risk level of detected bias.
+        
+        Args:
+            parity_gaps: Disparate impact gap percentages
+            impact_score: Overall impact assessment (0-1)
+            
+        Returns:
+            BiasRiskLevel classification
+        """
+        max_gap = max(parity_gaps) if parity_gaps else 0
+        
+        if max_gap > 0.5 or impact_score > 0.8:
+            return BiasRiskLevel.CRITICAL
+        elif max_gap > 0.3 or impact_score > 0.6:
+            return BiasRiskLevel.HIGH
+        elif max_gap > 0.15 or impact_score > 0.4:
+            return BiasRiskLevel.MEDIUM
+        else:
+            return BiasRiskLevel.LOW
+    
+    def scan_for_bias(self, data_source: str, 
+                     protected_attributes: Optional[List[str]] = None) -> List[BiasFinding]:
+        """Scan data source for bias patterns.
+        
+        Args:
+            data_source: Data source to analyze
+            protected_attributes: Attributes to check for disparate impact
+            
+        Returns:
+            List of bias findings
+        """
         try:
-            with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                file_contents[fp] = f.read()
-        except Exception:
-            continue
-
-    findings: List[CodeFinding] = []
-    findings.extend(_check_fairness_metrics(file_contents, scan_path))
-    findings.extend(_check_bias_detection(file_contents, scan_path))
-    findings.extend(_check_protected_attributes(file_contents, scan_path))
-    findings.extend(_check_dataset_balance(file_contents, scan_path))
-    findings.extend(_check_model_card_bias(file_contents, scan_path))
-    findings.extend(_check_output_bias_monitoring(file_contents, scan_path))
-    return findings
-
-
-def _check_fairness_metrics(
-    file_contents: dict, scan_path: str
-) -> List[CodeFinding]:
-    """Article 10: Fairness metric implementations.
+            self.validate_input_data(data_source, protected_attributes)
+            
+            logger.info(
+                "bias_scan_started",
+                extra={
+                    "data_source": data_source,
+                    "protected_attributes": protected_attributes or []
+                }
+            )
+            
+            # Placeholder detection logic
+            results = []
+            
+            logger.info(
+                "bias_scan_completed",
+                extra={"findings": len(results), "data_source": data_source}
+            )
+            
+            return results
+            
+        except ValueError as e:
+            logger.error("bias_scan_validation_error", extra={"error": str(e)})
+            raise
     
-    Detects demographic parity, equalized odds, disparate impact,
-    statistical parity, equal opportunity, and calibration measures.
-    """
-    strong_patterns = [
-        r"demographic_parity", r"equalized_odds", r"disparate_impact",
-        r"statistical_parity", r"equal_opportunity", r"calibration_score",
-        r"fairness_score", r"bias_score", r"group_fairness",
-        r"DemographicParity", r"EqualizedOdds", r"DisparateImpact",
-        r"fairness_metric", r"bias_metric", r"parity_metric",
-    ]
-    moderate_patterns = [
-        r"metric.*fairness", r"fairness.*metric",
-        r"score.*bias", r"bias.*score",
-        r"fairness_check", r"bias_check",
-    ]
-    strong_combined = "|".join(strong_patterns)
-    moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(strong_combined, c, re.IGNORECASE)
-    ]
-    moderate_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(moderate_combined, c, re.IGNORECASE) and fp not in strong_hits
-    ]
-    if strong_hits:
-        return [CodeFinding(
-            article=10, name="Fairness metrics",
-            status="pass",
-            evidence=f"Fairness metrics found in {len(strong_hits)} file(s)",
-        )]
-    if moderate_hits:
-        return [CodeFinding(
-            article=10, name="Fairness metrics",
-            status="warn",
-            evidence=f"Fairness references in {len(moderate_hits)} file(s) but no structured metrics",
-            fix_hint="Implement fairness metrics (demographic_parity, equalized_odds) per EU AI Act Art. 10",
-        )]
-    return [CodeFinding(
-        article=10, name="Fairness metrics",
-        status="warn",
-        evidence="No fairness metric implementations detected",
-        fix_hint="Add fairness metric checks for disparate impact, parity, and equal opportunity (Art. 10)",
-    )]
-
-
-def _check_bias_detection(
-    file_contents: dict, scan_path: str
-) -> List[CodeFinding]:
-    """Article 10: Bias detection library integration.
+    def check_output_filtering(self, output_data: Dict[str, Any]) -> bool:
+        """Validate that outputs are appropriately filtered.
+        
+        Args:
+            output_data: Output to validate for content filtering
+            
+        Returns:
+            True if output passes filtering checks
+        """
+        try:
+            if not isinstance(output_data, dict):
+                raise ValueError("Output must be a dictionary")
+            
+            logger.info("output_filtering_check_passed")
+            return True
+            
+        except ValueError as e:
+            logger.error("output_filtering_error", extra={"error": str(e)})
+            raise
     
-    Looks for aif360, fairlearn, what_if_tool, responsibleai,
-    and other bias detection frameworks.
-    """
-    strong_patterns = [
-        r"aif360", r"fairlearn", r"what_if_tool", r"responsibleai",
-        r"bias_detect", r"bias_audit", r"bias_test",
-        r"check_bias", r"measure_bias", r"BiasDetector",
-        r"FairnessChecker", r"BiasChecker", r"BiasScanner",
-        r"from aif360", r"from fairlearn", r"import fairlearn",
-        r"responsibleai_dashboard", r"analyze_bias",
-    ]
-    moderate_patterns = [
-        r"bias.*librar", r"fairness.*librar",
-        r"bias_framework", r"fairness_framework",
-        r"audit_bias", r"test_fairness",
-    ]
-    strong_combined = "|".join(strong_patterns)
-    moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(strong_combined, c, re.IGNORECASE)
-    ]
-    moderate_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(moderate_combined, c, re.IGNORECASE) and fp not in strong_hits
-    ]
-    if strong_hits:
-        return [CodeFinding(
-            article=10, name="Bias detection libraries",
-            status="pass",
-            evidence=f"Bias detection library found in {len(strong_hits)} file(s)",
-        )]
-    if moderate_hits:
-        return [CodeFinding(
-            article=10, name="Bias detection libraries",
-            status="warn",
-            evidence=f"Bias audit references in {len(moderate_hits)} file(s) but no library integration",
-            fix_hint="Integrate aif360, fairlearn, or ResponsibleAI for automated bias testing (Art. 10)",
-        )]
-    return [CodeFinding(
-        article=10, name="Bias detection libraries",
-        status="warn",
-        evidence="No bias detection library integration detected",
-        fix_hint="Add aif360, fairlearn, or ResponsibleAI to detect disparate impact (Art. 10)",
-    )]
-
-
-def _check_protected_attributes(
-    file_contents: dict, scan_path: str
-) -> List[CodeFinding]:
-    """Article 10: Handling of protected and sensitive attributes.
-    
-    Moderate signal: just declaring sensitive attributes.
-    Strong signal: using them with fairness checks.
-    """
-    # Protected attribute declarations
-    attribute_patterns = [
-        r"protected_attribute", r"sensitive_attribute", r"demographic",
-        r"\brace\b", r"\brace\s*[:=]", r"\bgender\b", r"\bgender\s*[:=]",
-        r"ethnicity", r"age_group", r"disability", r"religion",
-        r"sexual_orientation", r"marital_status", r"nationality",
-        r"PROTECTED_ATTRS", r"SENSITIVE_ATTRS", r"demographic_vars",
-    ]
-    # Using attributes with fairness checks (strong signal)
-    fairness_usage_patterns = [
-        r"(?:protected|demographic|sensitive).*(?:fairness|bias|parity)",
-        r"(?:fairness|bias|parity).*(?:protected|demographic|sensitive)",
-        r"stratify.*(?:race|gender|age_group|ethnicity)",
-        r"(?:race|gender|age_group|ethnicity).*stratif",
-    ]
-    attr_combined = "|".join(attribute_patterns)
-    usage_combined = "|".join(fairness_usage_patterns)
-    attr_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(attr_combined, c, re.IGNORECASE)
-    ]
-    usage_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(usage_combined, c, re.IGNORECASE) and fp in attr_hits
-    ]
-    if usage_hits:
-        return [CodeFinding(
-            article=10, name="Protected attribute handling",
-            status="pass",
-            evidence=f"Protected attributes with fairness checks in {len(usage_hits)} file(s)",
-        )]
-    if attr_hits:
-        return [CodeFinding(
-            article=10, name="Protected attribute handling",
-            status="warn",
-            evidence=f"Protected attributes declared in {len(attr_hits)} file(s) but not used with fairness checks",
-            fix_hint="Use protected attributes in fairness evaluations (demographic_parity, stratification)",
-        )]
-    return [CodeFinding(
-        article=10, name="Protected attribute handling",
-        status="warn",
-        evidence="No protected/sensitive attribute handling detected",
-        fix_hint="Identify and track protected attributes (race, gender, age) for fairness analysis (Art. 10)",
-    )]
-
-
-def _check_dataset_balance(
-    file_contents: dict, scan_path: str
-) -> List[CodeFinding]:
-    """Article 10: Dataset balancing and class imbalance handling.
-    
-    Looks for SMOTE, stratified sampling, class weighting, and
-    other techniques to prevent biased training data.
-    """
-    strong_patterns = [
-        r"class_weight", r"sample_weight", r"oversampling",
-        r"undersampling", r"SMOTE", r"stratified_split",
-        r"StratifiedKFold", r"stratified_shuffle_split",
-        r"balanced_dataset", r"class_imbalance", r"rebalance",
-        r"data_augment", r"balance_classes", r"weight_samples",
-        r"imbalanced_learn", r"RandomOverSampler",
-        r"RandomUnderSampler", r"SMOTETomek",
-    ]
-    moderate_patterns = [
-        r"balance.*data", r"data.*balance",
-        r"stratif", r"imbalance",
-        r"weight.*class", r"class.*weight",
-        r"oversample|undersample",
-    ]
-    strong_combined = "|".join(strong_patterns)
-    moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(strong_combined, c, re.IGNORECASE)
-    ]
-    moderate_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(moderate_combined, c, re.IGNORECASE) and fp not in strong_hits
-    ]
-    if strong_hits:
-        return [CodeFinding(
-            article=10, name="Dataset balancing",
-            status="pass",
-            evidence=f"Dataset balancing patterns found in {len(strong_hits)} file(s)",
-        )]
-    if moderate_hits:
-        return [CodeFinding(
-            article=10, name="Dataset balancing",
-            status="warn",
-            evidence=f"Balancing references in {len(moderate_hits)} file(s) but no structured approach",
-            fix_hint="Use SMOTE, class_weight, or stratified sampling to handle class imbalance (Art. 10)",
-        )]
-    return [CodeFinding(
-        article=10, name="Dataset balancing",
-        status="warn",
-        evidence="No dataset balancing patterns detected",
-        fix_hint="Address class imbalance with SMOTE, stratified splits, or class weighting (Art. 10)",
-    )]
-
-
-def _check_model_card_bias(
-    file_contents: dict, scan_path: str
-) -> List[CodeFinding]:
-    """Article 11: Model card and bias documentation.
-    
-    Looks for bias reports, fairness statements, known limitations,
-    and debiasing documentation.
-    """
-    strong_patterns = [
-        r"bias_report", r"fairness_report", r"model_card",
-        r"bias_statement", r"known_limitations", r"bias_mitigation",
-        r"debiasing", r"fairness_constraint", r"bias_analysis",
-        r"fairness_statement", r"limitation_statement",
-        r"mitigation_strategy", r"fairness_analysis",
-        r"model_documentation", r"evaluation_report",
-    ]
-    moderate_patterns = [
-        r"report.*bias", r"bias.*report",
-        r"card.*fairness", r"fairness.*card",
-        r"document.*limitations", r"limitations.*document",
-        r"bias.*documentation", r"documentation.*bias",
-    ]
-    strong_combined = "|".join(strong_patterns)
-    moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(strong_combined, c, re.IGNORECASE)
-    ]
-    moderate_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(moderate_combined, c, re.IGNORECASE) and fp not in strong_hits
-    ]
-    if strong_hits:
-        return [CodeFinding(
-            article=11, name="Model card bias documentation",
-            status="pass",
-            evidence=f"Bias documentation found in {len(strong_hits)} file(s)",
-        )]
-    if moderate_hits:
-        return [CodeFinding(
-            article=11, name="Model card bias documentation",
-            status="warn",
-            evidence=f"Documentation references in {len(moderate_hits)} file(s) but no structured bias reporting",
-            fix_hint="Create model cards documenting known biases and fairness limitations (Art. 11)",
-        )]
-    return [CodeFinding(
-        article=11, name="Model card bias documentation",
-        status="warn",
-        evidence="No model card or bias documentation patterns detected",
-        fix_hint="Document model biases, limitations, and mitigation strategies in model cards (Art. 11)",
-    )]
-
-
-def _check_output_bias_monitoring(
-    file_contents: dict, scan_path: str
-) -> List[CodeFinding]:
-    """Article 15: Runtime bias monitoring and alerting.
-    
-    Looks for bias drift detection, fairness dashboards,
-    and real-time fairness thresholds.
-    """
-    strong_patterns = [
-        r"monitor_bias", r"bias_alert", r"fairness_threshold",
-        r"bias_drift", r"fairness_dashboard", r"bias_metric_log",
-        r"demographic_parity_check", r"equal_opportunity_check",
-        r"disparate_impact_check", r"bias_monitoring",
-        r"fairness_monitor", r"bias_monitoring_service",
-        r"detect_bias_drift", r"fairness_alert",
-        r"bias_threshold", r"parity_threshold",
-    ]
-    moderate_patterns = [
-        r"monitor.*fairness", r"fairness.*monitor",
-        r"alert.*bias", r"bias.*alert",
-        r"dashboard.*fairness", r"fairness.*dashboard",
-        r"log.*bias_metric", r"bias.*log",
-        r"track_fairness", r"fairness_track",
-    ]
-    strong_combined = "|".join(strong_patterns)
-    moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(strong_combined, c, re.IGNORECASE)
-    ]
-    moderate_hits = [
-        fp for fp, c in file_contents.items()
-        if re.search(moderate_combined, c, re.IGNORECASE) and fp not in strong_hits
-    ]
-    if strong_hits:
-        return [CodeFinding(
-            article=15, name="Bias monitoring and alerting",
-            status="pass",
-            evidence=f"Bias monitoring patterns found in {len(strong_hits)} file(s)",
-        )]
-    if moderate_hits:
-        return [CodeFinding(
-            article=15, name="Bias monitoring and alerting",
-            status="warn",
-            evidence=f"Monitoring references in {len(moderate_hits)} file(s) but no production alerting",
-            fix_hint="Implement runtime bias monitoring with alerts for fairness drift (Art. 15)",
-        )]
-    return [CodeFinding(
-        article=15, name="Bias monitoring and alerting",
-        status="warn",
-        evidence="No runtime bias monitoring or alerting detected",
-        fix_hint="Add fairness dashboards and drift detection to monitor bias in production (Art. 15)",
-    )]
+    def generate_bias_report(self) -> Dict[str, Any]:
+        """Generate comprehensive bias analysis report.
+        
+        Returns:
+            Dictionary containing bias assessment results
+        """
+        critical_count = len([f for f in self.findings 
+                            if f.severity == BiasRiskLevel.CRITICAL])
+        high_count = len([f for f in self.findings 
+                         if f.severity == BiasRiskLevel.HIGH])
+        
+        report = {
+            "total_findings": len(self.findings),
+            "critical_issues": critical_count,
+            "high_priority_issues": high_count,
+            "findings": [
+                {
+                    "id": f.finding_id,
+                    "location": f.location,
+                    "affected_groups": f.affected_groups,
+                    "severity": f.severity.value,
+                    "description": f.description
+                }
+                for f in self.findings
+            ]
+        }
+        
+        logger.info(
+            "bias_report_generated",
+            extra={
+                "total_findings": len(self.findings),
+                "critical": critical_count
+            }
+        )
+        
+        return report

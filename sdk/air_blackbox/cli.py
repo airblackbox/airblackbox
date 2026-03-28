@@ -44,7 +44,7 @@ def print_banner():
 
 
 @click.group()
-@click.version_option(version="1.4.0", prog_name="air-blackbox")
+@click.version_option(version="1.6.2", prog_name="air-blackbox")
 @click.pass_context
 def main(ctx):
     """AIR Blackbox — AI governance control plane.
@@ -389,7 +389,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     if not no_save:
         try:
             from air_blackbox.compliance.history import save_scan
-            scan_id = save_scan(articles, scan_path=scan, version="1.4.0",
+            scan_id = save_scan(articles, scan_path=scan, version="1.6.2",
                                 deep_findings=deep_findings if deep_findings else None)
             if verbose:
                 console.print(f"  [dim]Saved to compliance history (scan #{scan_id})[/]\n")
