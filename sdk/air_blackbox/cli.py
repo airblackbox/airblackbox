@@ -17,6 +17,7 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from air_blackbox import __version__ as _ab_version
 
 console = Console()
 
@@ -44,7 +45,7 @@ def print_banner():
 
 
 @click.group()
-@click.version_option(version="1.6.3", prog_name="air-blackbox")
+@click.version_option(version="1.7.0", prog_name="air-blackbox")
 @click.pass_context
 def main(ctx):
     """AIR Blackbox — AI governance control plane.
@@ -496,6 +497,29 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     if failing > 0 and not verbose:
         console.print("\n[dim]Run with -v to see fix hints for each failing check.[/]")
 
+    # --- Telemetry (anonymous, opt-out with AIR_BLACKBOX_TELEMETRY=off) ---
+    try:
+        from air_blackbox.telemetry import send_event
+        import os as _os
+        py_count = 0
+        if _os.path.isfile(scan) and scan.endswith(".py"):
+            py_count = 1
+        else:
+            for _root, _dirs, _files in _os.walk(scan):
+                py_count += sum(1 for f in _files if f.endswith(".py"))
+        all_checks = [c for a in articles for c in a.get("checks", [])]
+        send_event(
+            command="comply",
+            python_files=py_count,
+            checks_passing=sum(1 for c in all_checks if c.get("status") == "pass"),
+            checks_warning=sum(1 for c in all_checks if c.get("status") == "warn"),
+            checks_failing=sum(1 for c in all_checks if c.get("status") == "fail"),
+            total_checks=len(all_checks),
+            version=_ab_version,
+        )
+    except Exception:
+        pass  # Telemetry should never break the tool
+
 
 @main.command()
 @click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
@@ -608,6 +632,13 @@ def discover(gateway, runs_dir, approved, fmt, output, init_registry):
         border_style="blue",
     ))
 
+    # --- Telemetry ---
+    try:
+        from air_blackbox.telemetry import send_event
+        send_event(command="discover", version=_ab_version)
+    except Exception:
+        pass
+
 
 @main.command()
 @click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
@@ -695,6 +726,13 @@ def replay(gateway, runs_dir, episode, last, verify):
     console.print("[dim]Detail view: air-blackbox replay --episode=<run_id>[/]")
     console.print("[dim]Verify chain: air-blackbox replay --verify[/]\n")
 
+    # --- Telemetry ---
+    try:
+        from air_blackbox.telemetry import send_event
+        send_event(command="replay", version=_ab_version)
+    except Exception:
+        pass
+
 
 @main.command()
 @click.option("--gateway",  default="http://localhost:8080", help="Gateway URL")
@@ -771,6 +809,13 @@ def export(gateway, runs_dir, scan, time_range, fmt, output):
             title="[bold green]Export Complete[/]",
             border_style="green",
         ))
+
+    # --- Telemetry ---
+    try:
+        from air_blackbox.telemetry import send_event
+        send_event(command="export", version=_ab_version)
+    except Exception:
+        pass
 
 
 @main.command()
@@ -852,6 +897,13 @@ def demo(output):
         title="[bold blue]Demo Complete[/]",
         border_style="blue",
     ))
+
+    # --- Telemetry ---
+    try:
+        from air_blackbox.telemetry import send_event
+        send_event(command="demo", version=_ab_version)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
