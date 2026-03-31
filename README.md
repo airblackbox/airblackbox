@@ -1,18 +1,31 @@
 # AIR Blackbox
 
-**Open-source EU AI Act compliance scanner for Python AI agents. 39 automated checks. Prompt injection detection. GDPR scanning. Tamper-proof audit chains.**
+**The trust infrastructure between your team and AI. Verify. Filter. Stabilize. Protect.**
 
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
+[![Downloads](https://img.shields.io/badge/PyPI_Downloads-14%2C294%2B-brightgreen)](https://pypi.org/project/air-blackbox/)
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-compliance--ready-blue)](https://github.com/airblackbox)
-[![GDPR](https://img.shields.io/badge/GDPR-8--checks-green)](https://github.com/airblackbox)
-[![CI](https://github.com/airblackbox/gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/airblackbox/gateway/actions/workflows/ci.yml)
+[![Packages](https://img.shields.io/badge/PyPI_Packages-10-yellow)](https://pypi.org/search/?q=air+blackbox)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 ```
 pip install air-blackbox
 ```
 
-Your AI agent made 47 LLM calls, burned $12 in tokens, and returned "I don't know." Which call went wrong? And more importantly: is it compliant with EU AI Act, GDPR, and ISO 42001? AIR Blackbox records every LLM call, tool invocation, and agent decision as a tamper-proof, replayable trace — then scans it against 39 automated compliance checks across 6 EU AI Act articles, GDPR, bias/fairness, and industry standards.
+AI makes creation easier. AIR Blackbox handles what gets harder: **trust, accountability, traceability, and compliance.**
+
+The biggest opportunities aren't in making AI more powerful — they're in handling the damage, ambiguity, overload, and trust gaps created by AI abundance. AIR Blackbox is open-source trust infrastructure that sits *inside* every AI call, providing:
+
+- **Decision Traceability** — Cryptographic proof of what the AI said, what the human chose, and why. HMAC-SHA256 tamper-evident audit chains that prove the logic path behind every AI-assisted decision.
+- **Escalation Intelligence** — Trust layers that detect when AI output requires human judgment and route accordingly. Not everything should stay automated.
+- **Operational Drift Detection** — 39 compliance checks in CI/CD catch when your AI codebase drifts from EU AI Act, GDPR, ISO 42001, or your own policies — before it ships.
+- **Human Oversight Proof** — Art. 14 delegation logging creates cryptographic attestation that a human reviewed, approved, and signed off on AI-assisted actions.
+- **Liability Mapping** — Compliance reports that tell you exactly where your AI creates real-world legal exposure across 6 EU AI Act articles, GDPR, and bias/fairness.
+- **Context Collapse Protection** — Audit chains preserve the boundary between draft and final, speculative and approved, human and machine.
+
+Enterprise governance platforms audit after the fact. **AIR Blackbox sits inside the call.** That's a fundamentally different architecture.
+
+> *The future winners are products that verify, filter, stabilize, and protect — not generate. Compliance is the wedge. Trust infrastructure is the platform.*
 
 ## 30-Second Demo
 
@@ -246,7 +259,7 @@ pip install "air-blackbox[claude]"            # Claude Agent SDK
 pip install "air-blackbox[all]"               # Everything
 ```
 
-## Trust Layers: 7 Frameworks
+## Trust Layers: 7 Frameworks + Standalone SDK Packages
 
 Non-blocking observers that log to `.air.json` audit records. Zero blocking. Framework auto-detection.
 
@@ -464,7 +477,7 @@ git commit -m "Add agent decision logic"
 
 ## Why Not Langfuse / Helicone / Datadog?
 
-Those tools answer "how is the system performing?" AIR answers "is it compliant, and can we prove it?"
+Those tools answer "how is the system performing?" AIR answers "can we trust it, trace it, and prove it?"
 
 | | Langfuse / Helicone | Datadog | AIR Blackbox |
 |---|---|---|---|
@@ -650,16 +663,33 @@ See [airblackbox.ai](https://airblackbox.ai) for details.
 
 ## Key Statistics
 
+- **10 PyPI packages** in the ecosystem (14,294+ downloads)
 - **39 automated compliance checks** across 6 EU AI Act articles
-- **7 framework trust layers** (LangChain, CrewAI, AutoGen, OpenAI, Google, Haystack, Claude)
+- **7 framework trust layers** (LangChain, CrewAI, AutoGen, OpenAI, Google ADK, Haystack, Claude)
+- **3 standalone SDK trust layers** (air-openai-trust, air-anthropic-trust, air-adk-trust)
 - **20 prompt injection patterns** with weighted confidence scoring
 - **8 GDPR compliance checks** including consent, minimization, erasure
 - **6 bias/fairness checks** for demographic parity and equalized odds
 - **3 standards frameworks** (EU AI Act, ISO 42001, NIST AI RMF)
-- **HMAC-SHA256 audit chain** for tamper-proof compliance records
+- **HMAC-SHA256 audit chain** for tamper-proof decision traceability
 - **Evidence bundles** with SHA-256 manifest verification
 - **A2A compliance cards** for agent-to-agent verification
-- **4 pre-commit hook configurations** for CI/CD integration
+- **GitHub Actions + pre-commit hooks** for CI/CD drift detection
+
+## Full Ecosystem: 10 PyPI Packages
+
+| Package | Purpose |
+|---------|---------|
+| [`air-blackbox`](https://pypi.org/project/air-blackbox/) | Governance control plane |
+| [`air-compliance`](https://pypi.org/project/air-compliance/) | CLI scanner — `air-compliance scan .` |
+| [`air-blackbox-sdk`](https://pypi.org/project/air-blackbox-sdk/) | Python SDK |
+| [`air-blackbox-mcp`](https://pypi.org/project/air-blackbox-mcp/) | MCP server for AI editors |
+| [`air-langchain-trust`](https://pypi.org/project/air-langchain-trust/) | Trust layer for LangChain |
+| [`air-crewai-trust`](https://pypi.org/project/air-crewai-trust/) | Trust layer for CrewAI |
+| [`air-anthropic-trust`](https://pypi.org/project/air-anthropic-trust/) | Trust layer for Anthropic Claude SDK |
+| [`air-adk-trust`](https://pypi.org/project/air-adk-trust/) | Trust layer for Google ADK |
+| [`air-openai-trust`](https://pypi.org/project/air-openai-trust/) | Trust layer for OpenAI SDK |
+| [`air-haystack-trust`](https://pypi.org/project/air-haystack-trust/) | Trust layer for Haystack |
 
 ## Related Repositories
 
