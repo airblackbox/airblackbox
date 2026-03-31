@@ -60,10 +60,13 @@ Quick start: `pip install air-compliance && air-compliance scan .`
 
 Honest limitations: this checks technical requirements, not legal compliance. It's infrastructure, not a lawyer. The fine-tuned model is still being trained. And we don't yet cover every edge case in every framework.
 
+Interesting timing: researchers just published AEGIS (arXiv:2603.12621) this month — independently arriving at the same interception-layer architecture with hash-chained audit trails. When academia converges on your approach, it feels like validation.
+
 The thesis: AI made generation abundant. What becomes valuable now is the infrastructure that verifies, routes, constrains, and records machine-assisted work in real time.
 
 GitHub: https://github.com/airblackbox/gateway
 Demo: https://airblackbox.ai/demo
+Audit Chain Spec (open standard): https://airblackbox.ai/spec
 ```
 
 ---
@@ -89,9 +92,11 @@ The trust layers wrap your LLM client and intercept every request and response i
 
 Compliance is the wedge. Trust infrastructure is the platform.
 
+McKinsey's 2026 "State of AI Trust" report calls this the critical need for the agentic era. 28% of US firms have zero confidence in their AI data quality (AnalyticsWeek). Academic researchers just independently published the same interception-layer architecture we've been shipping (AEGIS, arXiv).
+
 We help teams put a trust layer between their people and their AI stack, so they can prove what happened, escalate risky outputs, detect policy drift, and maintain human oversight.
 
-10 open-source PyPI packages. Runs locally. Apache 2.0.
+10 open-source PyPI packages. 14,294+ downloads. Runs locally. Apache 2.0.
 
 Link in comments.
 

@@ -88,7 +88,24 @@ The trust layer intercepts every LLM request and response and gives you four thi
 → No. AI is a force multiplier inside the solution, not the product. The product is trust infrastructure — verifying, filtering, stabilizing, and protecting machine-assisted work. The fine-tuned model helps with contextual compliance analysis, but the core architecture is cryptographic (HMAC-SHA256 chains, audit records, attestation) and deterministic (regex-based PII detection, pattern-based injection scanning).
 
 **"What's your traction?"**
-→ 10 PyPI packages, 14,294+ downloads, trust layers for 7 frameworks plus standalone SDK packages. Open-source (Apache 2.0) with growing community adoption. Comparison blog post ranking for EU AI Act compliance keywords. CI/CD integration guide shipping this week.
+→ 10 PyPI packages, 14,294+ downloads, trust layers for 7 frameworks plus standalone SDK packages. Open-source (Apache 2.0) with growing community adoption. Comparison blog post ranking for EU AI Act compliance keywords. CI/CD integration guide shipping this week. Published open standard for the audit chain spec (ACS v1.0.0).
+
+**"Is anyone else doing this?"**
+→ Researchers at [institution] independently published the same interception-layer architecture in March 2026 (AEGIS, arXiv:2603.12621). That's academic validation, not competition — they're a paper, we're a shipping product with 10 packages. Arthur AI ($60M raised) and Lasso Security do AI firewalls — they filter threats, which is one of four things we do. McKinsey's 2026 "State of AI Trust" report names trust infrastructure as the critical category for the agentic era. We're the only open-source project that combines interception, cryptographic traceability, compliance scanning, and human oversight attestation in one ecosystem.
+
+---
+
+## Validation Points (use in conversations)
+
+**Academic:** "Researchers independently published the same architecture we've been shipping. That's not competition — that's peer review." (AEGIS, arXiv:2603.12621, March 2026)
+
+**Analyst:** "McKinsey's 2026 report calls trust infrastructure the critical need for the agentic AI era." (McKinsey: State of AI Trust in 2026)
+
+**Market data:** "28% of US firms have zero confidence in the data quality feeding their LLMs." (AnalyticsWeek: The Truth Layer Crisis, 2026)
+
+**Competitive:** "Arthur AI raised $60M to build an AI firewall. Lasso Security partners with Portkey on gateway security. They filter threats. We do four things: verify, filter, stabilize, protect. They're a firewall. We're infrastructure."
+
+**Open standard:** "We published the audit chain spec as an open standard. Any tool can implement it. Whoever defines the record format owns the category."
 
 ---
 
