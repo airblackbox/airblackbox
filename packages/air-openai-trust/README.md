@@ -169,7 +169,7 @@ All audit logging is non-blocking. If logging fails for any reason, your OpenAI 
 
 ## Full Ecosystem
 
-`air-openai-trust` is one of 10 PyPI packages in the AIR Blackbox ecosystem:
+`air-openai-trust` is one of 11 PyPI packages in the AIR Blackbox ecosystem:
 
 | Package | Purpose |
 |---------|---------|
@@ -182,6 +182,8 @@ All audit logging is non-blocking. If logging fails for any reason, your OpenAI 
 | `air-anthropic-trust` | Trust layer for Anthropic Claude SDK |
 | `air-adk-trust` | Trust layer for Google ADK |
 | `air-openai-trust` | Trust layer for OpenAI SDK (this package) |
+| `air-rag-trust` | Trust layer for RAG pipelines |
+| `air-gate` | HMAC-SHA256 audit chain engine with tool gating |
 
 ## Links
 

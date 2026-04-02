@@ -117,18 +117,18 @@ I also dug into every open-source EU AI Act tool available:
 |---------|-------------|----------------|----------|-----------|
 | Architecture | **Interception layer** | Retrospective scan | MCP only | Retrospective scan |
 | Language | Python | TypeScript | Python | Python |
-| Framework trust layers | 7 frameworks | None | None | None |
+| Framework trust layers | 6 frameworks | None | None | None |
 | Audit trail | HMAC-SHA256 chains | No | No | No |
 | PII detection | Real-time | No | No | No |
 | Injection scanning | Real-time | No | No | No |
 | CI/CD integration | GitHub Actions + pre-commit | GitHub Action | No | No |
-| PyPI packages | 10 | 0 | 0 | 1 |
+| PyPI packages | 11 | 0 | 0 | 1 |
 | Fine-tuned LLM | Yes (local) | No | No | No |
 | Runs offline | Yes | Yes | Yes | Yes |
 
 Full comparison with deeper analysis: [airblackbox.ai/blog/eu-ai-act-compliance-tools-compared](https://airblackbox.ai/blog/eu-ai-act-compliance-tools-compared)
 
-## The 10-Package Ecosystem
+## The 11-Package Ecosystem
 
 | Package | Purpose |
 |---------|---------|
@@ -141,7 +141,8 @@ Full comparison with deeper analysis: [airblackbox.ai/blog/eu-ai-act-compliance-
 | `air-openai-trust` | Trust layer for OpenAI SDK |
 | `air-anthropic-trust` | Trust layer for Anthropic Claude SDK |
 | `air-adk-trust` | Trust layer for Google ADK |
-| `air-haystack-trust` | Trust layer for Haystack |
+| `air-rag-trust` | Trust layer for RAG pipelines |
+| `air-gate` | HMAC-SHA256 audit chain engine with tool gating |
 
 ## The Thesis
 

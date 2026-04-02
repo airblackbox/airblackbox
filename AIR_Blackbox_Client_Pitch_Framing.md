@@ -40,7 +40,7 @@ The trust layer intercepts every LLM request and response and gives you four thi
 3. **Drift detection** — 39 compliance checks run on every commit, catching policy divergence before it ships
 4. **Human oversight proof** — cryptographic attestation that a human reviewed and approved AI-assisted output
 
-10 open-source packages. Runs locally. Your code never leaves your environment. EU AI Act compliant, GDPR-aware, ISO 42001 mapped.
+11 open-source packages. Runs locally. Your code never leaves your environment. EU AI Act compliant, GDPR-aware, ISO 42001 mapped.
 
 ---
 
@@ -65,7 +65,7 @@ The trust layer intercepts every LLM request and response and gives you four thi
 
 | Tier | Who | Price | What |
 |------|-----|-------|------|
-| Free | Individual devs, startups | $0 | Full scanner, all 10 PyPI packages, local only |
+| Free | Individual devs, startups | $0 | Full scanner, all 11 PyPI packages, local only |
 | Pro | Teams, mid-market | $299/mo | Managed infrastructure, team dashboards, priority support |
 | Enterprise | Regulated industries | Custom | Air-gapped deployment, fine-tuned model, dedicated infra, SLA |
 
@@ -79,7 +79,7 @@ The trust layer intercepts every LLM request and response and gives you four thi
 → Those audit after the fact. We sit inside the call. You can use both — they're complementary. We catch issues at the point of use; they provide board-level reporting. But ask yourself: would you rather know about a compliance gap before it ships, or after an auditor finds it?
 
 **"We'll build this ourselves"**
-→ Of course you can build audit logging. But will you build HMAC-SHA256 tamper-evident chains? PII scanning across 4 categories? Prompt injection detection across 7 attack patterns? Framework-specific trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Haystack, and Claude Agent SDK? We're 10 packages and 14,000+ downloads in. This is our entire focus.
+→ Of course you can build audit logging. But will you build HMAC-SHA256 tamper-evident chains? PII scanning across 4 categories? Prompt injection detection across 7 attack patterns? Framework-specific trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, and Claude Agent SDK? We're 11 packages and 14,000+ downloads in. This is our entire focus.
 
 **"We don't need compliance yet"**
 → The deadline is August 2026. The lead time for compliance infrastructure is 6-12 months. Companies that start now get to iterate. Companies that start in July panic-buy. Also — compliance is just the wedge. The real value is decision traceability, escalation routing, and drift detection. Those matter whether or not you have a regulatory deadline.
@@ -88,10 +88,10 @@ The trust layer intercepts every LLM request and response and gives you four thi
 → No. AI is a force multiplier inside the solution, not the product. The product is trust infrastructure — verifying, filtering, stabilizing, and protecting machine-assisted work. The fine-tuned model helps with contextual compliance analysis, but the core architecture is cryptographic (HMAC-SHA256 chains, audit records, attestation) and deterministic (regex-based PII detection, pattern-based injection scanning).
 
 **"What's your traction?"**
-→ 10 PyPI packages, 14,294+ downloads, trust layers for 7 frameworks plus standalone SDK packages. Open-source (Apache 2.0) with growing community adoption. Comparison blog post ranking for EU AI Act compliance keywords. CI/CD integration guide shipping this week. Published open standard for the audit chain spec (ACS v1.0.0).
+→ 11 PyPI packages, 14,294+ downloads, trust layers for 6 frameworks plus standalone SDK packages. Open-source (Apache 2.0) with growing community adoption. Comparison blog post ranking for EU AI Act compliance keywords. CI/CD integration guide shipping this week. Published open standard for the audit chain spec (ACS v1.0.0).
 
 **"Is anyone else doing this?"**
-→ Researchers at [institution] independently published the same interception-layer architecture in March 2026 (AEGIS, arXiv:2603.12621). That's academic validation, not competition — they're a paper, we're a shipping product with 10 packages. Arthur AI ($60M raised) and Lasso Security do AI firewalls — they filter threats, which is one of four things we do. McKinsey's 2026 "State of AI Trust" report names trust infrastructure as the critical category for the agentic era. We're the only open-source project that combines interception, cryptographic traceability, compliance scanning, and human oversight attestation in one ecosystem.
+→ Researchers at [institution] independently published the same interception-layer architecture in March 2026 (AEGIS, arXiv:2603.12621). That's academic validation, not competition — they're a paper, we're a shipping product with 11 packages. Arthur AI ($60M raised) and Lasso Security do AI firewalls — they filter threats, which is one of four things we do. McKinsey's 2026 "State of AI Trust" report names trust infrastructure as the critical category for the agentic era. We're the only open-source project that combines interception, cryptographic traceability, compliance scanning, and human oversight attestation in one ecosystem.
 
 ---
 
