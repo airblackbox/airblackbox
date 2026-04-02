@@ -64,7 +64,7 @@ Would love feedback on the approach. The thesis: compliance is the wedge, trust 
 2. Architecture diagram: interception layer between Your Code → Trust Layer → LLM Provider
 3. Terminal screenshot: `air-compliance scan .` output
 4. Comparison table: security players vs. AIR Blackbox (verify/filter/stabilize/protect)
-5. Stats: 9 packages, 14K+ downloads, 39 checks, 6 trust layer frameworks
+5. Stats: 12 packages, 14K+ downloads, 39 checks, 5 trust layer frameworks
 
 ### Launch Prep Checklist
 - [ ] Schedule for Tuesday 12:01am PT (best launch day)
