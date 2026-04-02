@@ -31,6 +31,60 @@ def _finding_to_dict(finding) -> dict:
             "tier": "static"}
 
 
+TRUST_LAYER_MAP = {
+    "langchain": "air-langchain-trust",
+    "crewai": "air-crewai-trust",
+    "openai": "air-openai-trust",
+    "anthropic": "air-anthropic-trust",
+    "google.adk": "air-adk-trust",
+    "google_adk": "air-adk-trust",
+    "vertexai": "air-adk-trust",
+}
+
+FRAMEWORK_IMPORTS = {
+    "langchain": ["from langchain", "import langchain"],
+    "crewai": ["from crewai", "import crewai"],
+    "openai": ["from openai", "import openai", "OpenAI("],
+    "anthropic": ["from anthropic", "import anthropic", "Anthropic("],
+    "google.adk": ["from google.adk", "import google.adk", "from google_adk", "from vertexai"],
+}
+
+
+def detect_frameworks(scan_path: str) -> list[str]:
+    """Detect which AI frameworks are used in the scanned codebase."""
+    detected = set()
+    py_files = []
+    if os.path.isfile(scan_path) and scan_path.endswith(".py"):
+        py_files = [scan_path]
+    elif os.path.isdir(scan_path):
+        for root, _dirs, files in os.walk(scan_path):
+            for f in files:
+                if f.endswith(".py"):
+                    py_files.append(os.path.join(root, f))
+    for fp in py_files[:200]:  # cap to avoid scanning huge repos
+        try:
+            with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                content = fh.read(16000)  # first 16KB is enough
+            for framework, patterns in FRAMEWORK_IMPORTS.items():
+                if framework not in detected:
+                    for pattern in patterns:
+                        if pattern in content:
+                            detected.add(framework)
+                            break
+        except (OSError, UnicodeDecodeError):
+            pass
+    return sorted(detected)
+
+
+def get_trust_layer_recommendation(scan_path: str) -> str:
+    """Return the best pip install command based on detected frameworks."""
+    detected = detect_frameworks(scan_path)
+    if detected:
+        first = detected[0]
+        return TRUST_LAYER_MAP.get(first, "air-langchain-trust")
+    return "air-langchain-trust"
+
+
 def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
     # Support single-file scanning: code scanner gets the file,
     # but doc checks use the parent directory
@@ -62,6 +116,10 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
     except Exception:
         pass  # Graceful fallback if bias scanner has issues
 
+    # Detect frameworks for smart trust layer recommendations
+    detected = detect_frameworks(scan_path)
+    rec_pkg = TRUST_LAYER_MAP.get(detected[0], "air-langchain-trust") if detected else "air-langchain-trust"
+
     # Group code findings by article number
     code_by_article = {}
     for f in code_findings:
@@ -69,12 +127,12 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
 
     # EU AI Act articles
     results = [
-        _check_article_9(status, doc_path, code_by_article.get(9, [])),
-        _check_article_10(status, doc_path, code_by_article.get(10, [])),
-        _check_article_11(status, doc_path, code_by_article.get(11, [])),
-        _check_article_12(status, doc_path, code_by_article.get(12, [])),
-        _check_article_14(status, doc_path, code_by_article.get(14, [])),
-        _check_article_15(status, doc_path, code_by_article.get(15, [])),
+        _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg),
+        _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg),
+        _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg),
+        _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg),
+        _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg),
+        _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg),
     ]
 
     # GDPR checks (grouped into a single section)
@@ -95,10 +153,11 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
             "checks": bias_checks,
         })
 
-    return results
+    # Attach detected frameworks for CLI recommendation display
+    return results, detected, rec_pkg
 
 
-def _check_article_9(status, scan_path, code_findings=None):
+def _check_article_9(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
     checks = []
     risk_files = ["RISK_ASSESSMENT.md", "risk_assessment.md", "risk_register.json", "RISK_MANAGEMENT.md"]
     has_risk = any(os.path.exists(os.path.join(scan_path, f)) for f in risk_files)
@@ -124,7 +183,7 @@ def _check_article_9(status, scan_path, code_findings=None):
     return result
 
 
-def _check_article_10(status, scan_path, code_findings=None):
+def _check_article_10(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
     checks = []
     if status.reachable or (status.total_runs > 0 and status.audit_chain_intact):
         src = "Gateway" if status.reachable else "Trust layer"
@@ -141,7 +200,7 @@ def _check_article_10(status, scan_path, code_findings=None):
         checks.append(ComplianceCheck(name="PII detection in prompts", article=10, detection="auto",
             status="warn" if status.total_runs > 0 else "fail",
             evidence=f"Gateway not reachable. {'Found ' + str(status.total_runs) + ' logged runs.' if status.total_runs > 0 else 'No data.'}",
-            fix_hint="Start gateway or install a trust layer package (pip install air-langchain-trust)",
+            fix_hint=f"Start gateway or install a trust layer package (pip install {rec_pkg})",
             tier="runtime"))
     dg_files = ["DATA_GOVERNANCE.md", "data_governance.md"]
     has_dg = any(os.path.exists(os.path.join(scan_path, f)) for f in dg_files)
@@ -161,7 +220,7 @@ def _check_article_10(status, scan_path, code_findings=None):
     return result
 
 
-def _check_article_11(status, scan_path, code_findings=None):
+def _check_article_11(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
     checks = []
     readme = os.path.exists(os.path.join(scan_path, "README.md"))
     checks.append(ComplianceCheck(name="System description (README)", article=11, detection="hybrid",
@@ -178,7 +237,7 @@ def _check_article_11(status, scan_path, code_findings=None):
     else:
         checks.append(ComplianceCheck(name="Runtime system inventory (AI-BOM data)", article=11, detection="auto", status="fail",
             evidence="No traffic data. Route AI calls through gateway or install a trust layer.",
-            fix_hint="pip install air-langchain-trust  # or start gateway: docker compose up",
+            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
             tier="runtime"))
     mc_files = ["MODEL_CARD.md", "model_card.md", "SYSTEM_CARD.md"]
     has_mc = any(os.path.exists(os.path.join(scan_path, f)) for f in mc_files)
@@ -197,7 +256,7 @@ def _check_article_11(status, scan_path, code_findings=None):
     return result
 
 
-def _check_article_12(status, scan_path, code_findings=None):
+def _check_article_12(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
     checks = []
     if status.reachable and status.total_runs > 0:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="pass",
@@ -214,7 +273,7 @@ def _check_article_12(status, scan_path, code_findings=None):
     else:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="fail",
             evidence=f"Gateway not reachable. Install a trust layer for inline logging.",
-            fix_hint="pip install air-langchain-trust  # or start gateway: docker compose up",
+            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
             tier="runtime"))
     if status.audit_chain_intact and status.audit_chain_length > 0:
         checks.append(ComplianceCheck(name="Tamper-evident audit chain", article=12, detection="auto", status="pass",
@@ -254,7 +313,7 @@ def _check_article_12(status, scan_path, code_findings=None):
     return result
 
 
-def _check_article_14(status, scan_path, code_findings=None):
+def _check_article_14(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
     checks = []
     if status.total_runs > 0:
         checks.append(ComplianceCheck(name="Human-in-the-loop mechanism", article=14, detection="auto", status="warn",
@@ -276,7 +335,7 @@ def _check_article_14(status, scan_path, code_findings=None):
     else:
         checks.append(ComplianceCheck(name="Kill switch / stop mechanism", article=14, detection="auto", status="fail",
             evidence="Gateway not running. No kill switch.",
-            fix_hint="pip install air-langchain-trust  # or start gateway: docker compose up",
+            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
             tier="runtime"))
     op_files = ["OPERATOR_GUIDE.md", "operator_guide.md", "RUNBOOK.md"]
     has_ops = any(os.path.exists(os.path.join(scan_path, f)) for f in op_files)
@@ -291,7 +350,7 @@ def _check_article_14(status, scan_path, code_findings=None):
     return result
 
 
-def _check_article_15(status, scan_path, code_findings=None):
+def _check_article_15(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
     checks = []
     if status.reachable:
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="pass",
@@ -305,7 +364,7 @@ def _check_article_15(status, scan_path, code_findings=None):
     else:
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="fail",
             evidence="No runtime injection protection. Install a trust layer for inline scanning.",
-            fix_hint="pip install air-langchain-trust  # or start gateway: docker compose up",
+            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
             tier="runtime"))
     if status.total_runs > 0:
         er = (status.error_count / status.total_runs * 100)

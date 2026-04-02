@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
 [![Downloads](https://img.shields.io/badge/PyPI_Downloads-14%2C294%2B-brightgreen)](https://pypi.org/project/air-blackbox/)
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-compliance--ready-blue)](https://github.com/airblackbox)
-[![Packages](https://img.shields.io/badge/PyPI_Packages-10-yellow)](https://pypi.org/search/?q=air+blackbox)
+[![Packages](https://img.shields.io/badge/PyPI_Packages-11-yellow)](https://pypi.org/search/?q=air+blackbox)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 ```
@@ -663,7 +663,7 @@ See [airblackbox.ai](https://airblackbox.ai) for details.
 
 ## Key Statistics
 
-- **10 PyPI packages** in the ecosystem (14,294+ downloads)
+- **11 PyPI packages** in the ecosystem (14,294+ downloads)
 - **39 automated compliance checks** across 6 EU AI Act articles
 - **7 framework trust layers** (LangChain, CrewAI, AutoGen, OpenAI, Google ADK, Haystack, Claude)
 - **3 standalone SDK trust layers** (air-openai-trust, air-anthropic-trust, air-adk-trust)
@@ -676,7 +676,7 @@ See [airblackbox.ai](https://airblackbox.ai) for details.
 - **A2A compliance cards** for agent-to-agent verification
 - **GitHub Actions + pre-commit hooks** for CI/CD drift detection
 
-## Full Ecosystem: 10 PyPI Packages
+## Full Ecosystem: 11 PyPI Packages
 
 | Package | Purpose |
 |---------|---------|
@@ -689,7 +689,8 @@ See [airblackbox.ai](https://airblackbox.ai) for details.
 | [`air-anthropic-trust`](https://pypi.org/project/air-anthropic-trust/) | Trust layer for Anthropic Claude SDK |
 | [`air-adk-trust`](https://pypi.org/project/air-adk-trust/) | Trust layer for Google ADK |
 | [`air-openai-trust`](https://pypi.org/project/air-openai-trust/) | Trust layer for OpenAI SDK |
-| [`air-haystack-trust`](https://pypi.org/project/air-haystack-trust/) | Trust layer for Haystack |
+| [`air-rag-trust`](https://pypi.org/project/air-rag-trust/) | Trust layer for RAG pipelines |
+| [`air-gate`](https://pypi.org/project/air-gate/) | HMAC-SHA256 audit chain engine with tool gating |
 
 ## Related Repositories
 
