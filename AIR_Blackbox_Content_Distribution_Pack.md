@@ -54,7 +54,7 @@ What that gives you:
 - Drift detection: 39 compliance checks in CI/CD catch when your codebase diverges from EU AI Act, GDPR, or your own policies
 - Human oversight proof: Art. 14 delegation logging creates cryptographic attestation of human review
 
-10 PyPI packages. Trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Haystack, Claude Agent SDK. Fine-tuned local LLM. Everything runs locally — your code never leaves your machine.
+11 PyPI packages. Trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Claude Agent SDK. Fine-tuned local LLM. Everything runs locally — your code never leaves your machine.
 
 Quick start: `pip install air-compliance && air-compliance scan .`
 
@@ -96,7 +96,7 @@ McKinsey's 2026 "State of AI Trust" report calls this the critical need for the 
 
 We help teams put a trust layer between their people and their AI stack, so they can prove what happened, escalate risky outputs, detect policy drift, and maintain human oversight.
 
-10 open-source PyPI packages. 14,294+ downloads. Runs locally. Apache 2.0.
+11 open-source PyPI packages. 14,294+ downloads. Runs locally. Apache 2.0.
 
 Link in comments.
 
@@ -154,7 +154,7 @@ That's a fundamentally different architecture.
 → 39 compliance checks in CI/CD (drift detection)
 → Art. 14 delegation logging (human oversight proof)
 
-10 PyPI packages. Runs locally. Apache 2.0.
+11 PyPI packages. Runs locally. Apache 2.0.
 
 pip install air-compliance && air-compliance scan .
 
@@ -205,7 +205,7 @@ These are infrastructure problems. Not scanning problems.
 
 **The architecture:**
 
-The ecosystem is 10 PyPI packages. The trust layers wrap your LLM client using a proxy pattern — they intercept `chat.completions.create()` and add:
+The ecosystem is 11 PyPI packages. The trust layers wrap your LLM client using a proxy pattern — they intercept `chat.completions.create()` and add:
 
 - HMAC-SHA256 tamper-evident audit chains (cryptographic decision traceability)
 - PII detection (email, SSN, phone, credit card scanning in prompts and responses)
@@ -213,7 +213,7 @@ The ecosystem is 10 PyPI packages. The trust layers wrap your LLM client using a
 - Token usage and latency tracking
 - Human delegation verification (Art. 14 oversight attestation)
 
-Framework-specific layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Haystack, and Claude Agent SDK. Plus a standalone `air-openai-trust` package that wraps the OpenAI Python SDK directly.
+Framework-specific layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, and Claude Agent SDK. Plus a standalone `air-openai-trust` package that wraps the OpenAI Python SDK directly.
 
 All non-blocking. If logging fails, your API calls still work. The trust layer never crashes your application.
 
@@ -273,7 +273,7 @@ Fine-tuning Llama 3.2 1B (Unsloth + QLoRA, 4-bit, LoRA r=16) on 2,000+ complianc
 
 AI made generation abundant. The next infrastructure layer is not about making AI more powerful — it's about verifying, routing, constraining, and recording machine-assisted work in real time. Compliance is the wedge. Trust infrastructure is the platform.
 
-10 PyPI packages. Framework trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Haystack, Claude Agent SDK.
+11 PyPI packages. Framework trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Claude Agent SDK.
 
 Apache 2.0: https://github.com/airblackbox/gateway
 

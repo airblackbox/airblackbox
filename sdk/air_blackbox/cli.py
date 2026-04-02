@@ -166,7 +166,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     else:
         console.print(f"  [yellow]●[/] No traffic data found")
     console.print(f"  [dim]Scanning: {scan}[/]\n")
-    articles = run_all_checks(status, scan)
+    articles, detected_frameworks, rec_pkg = run_all_checks(status, scan)
 
     # Hybrid mode: auto-run LLM analysis unless --no-llm
     deep_findings = []
@@ -487,7 +487,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         deep_warn = sum(1 for f in deep_findings if f.get("status") == "warn")
         parts += f"\n  [magenta]AI model[/]:          [bold]{deep_pass}[/] pass, [bold]{deep_warn}[/] warn, [bold]{deep_fail}[/] fail (supplementary, not counted above)"
     if r_total > 0 and r_pass < r_total:
-        parts += f"\n\n  [dim]Unlock runtime checks: pip install air-langchain-trust[/]"
+        parts += f"\n\n  [dim]Unlock runtime checks: pip install {rec_pkg}[/]"
     if verbose:
         auto = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "auto")
         hybrid = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "hybrid")
@@ -496,6 +496,23 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     console.print(Panel(parts, title="[bold]Compliance Summary[/]", border_style="blue"))
     if failing > 0 and not verbose:
         console.print("\n[dim]Run with -v to see fix hints for each failing check.[/]")
+
+    # --- Trust layer recommendation ---
+    from air_blackbox.compliance.engine import TRUST_LAYER_MAP
+    if detected_frameworks:
+        rec_lines = []
+        for fw in detected_frameworks:
+            pkg = TRUST_LAYER_MAP.get(fw, None)
+            if pkg:
+                rec_lines.append(f"  pip install {pkg}")
+        if rec_lines:
+            console.print(f"\n[bold yellow]Detected frameworks:[/] {', '.join(detected_frameworks)}")
+            console.print("[dim]Add trust layers for runtime compliance:[/]")
+            for line in rec_lines:
+                console.print(f"[bold green]{line}[/]")
+    else:
+        console.print(f"\n[dim]Add a trust layer for runtime compliance: pip install {rec_pkg}[/]")
+    console.print(f"[dim]All 10 trust layer packages: https://airblackbox.ai[/]\n")
 
     # --- Telemetry (anonymous, opt-out with AIR_BLACKBOX_TELEMETRY=off) ---
     try:
