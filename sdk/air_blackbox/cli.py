@@ -45,7 +45,7 @@ def print_banner():
 
 
 @click.group()
-@click.version_option(version="1.7.0", prog_name="air-blackbox")
+@click.version_option(version="1.8.0", prog_name="air-blackbox")
 @click.pass_context
 def main(ctx):
     """AIR Blackbox — AI governance control plane.
@@ -886,7 +886,7 @@ def demo(output):
     console.print(f"  [green]●[/] [bold]{status.total_runs}[/] events loaded")
     console.print()
 
-    articles = run_all_checks(status, output)
+    articles, _, _ = run_all_checks(status, output)
 
     for article in articles:
         for check in article["checks"]:
@@ -1301,7 +1301,7 @@ def test(gateway, verbose):
             recent_runs=[{"run_id": "test-1", "model": "gpt-4o", "timestamp": "2026-03-13", "status": "success"}]
         )
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles = run_all_checks(status, tmpdir)
+            articles, _, _ = run_all_checks(status, tmpdir)
             assert len(articles) == 6, f"Should have 6 articles, got {len(articles)}"
             total_checks = sum(len(a["checks"]) for a in articles)
             assert total_checks > 0, "Should have checks"
@@ -1514,7 +1514,7 @@ def test(gateway, verbose):
         from air_blackbox.gateway_client import GatewayStatus
         status = GatewayStatus(reachable=False, total_runs=0)
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles = run_all_checks(status, tmpdir)
+            articles, _, _ = run_all_checks(status, tmpdir)
             all_checks = [c for a in articles for c in a["checks"]]
             # Every check must have a tier
             for c in all_checks:
@@ -1534,7 +1534,7 @@ def test(gateway, verbose):
         from air_blackbox.gateway_client import GatewayStatus
         status = GatewayStatus(reachable=False, total_runs=0)
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles = run_all_checks(status, tmpdir)
+            articles, _, _ = run_all_checks(status, tmpdir)
             all_checks = {c["name"]: c for a in articles for c in a["checks"]}
             runtime_expected = [
                 "Risk mitigations active", "PII detection in prompts",
@@ -1553,7 +1553,7 @@ def test(gateway, verbose):
     def test_version_consistency():
         """Verify version is consistent across pyproject.toml, __init__.py, and cli."""
         import air_blackbox
-        cli_version = "1.3.0"  # from @click.version_option
+        cli_version = "1.8.0"  # from @click.version_option
         init_version = air_blackbox.__version__
         assert init_version == cli_version, f"__init__ ({init_version}) != cli ({cli_version})"
         return True, f"Version {init_version} consistent across modules"
