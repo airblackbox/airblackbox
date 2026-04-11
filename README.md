@@ -1,132 +1,146 @@
-# air-platform
+# air-blackbox
 
-Docker Compose orchestration for the AIR Blackbox stack. Run EU AI Act compliance scanning and audit logging in one command.
+**EU AI Act compliance scanner for Python AI agents.**
 
-## What is air-platform?
+[![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
+[![Python](https://img.shields.io/pypi/pyversions/air-blackbox)](https://pypi.org/project/air-blackbox/)
+[![License](https://img.shields.io/github/license/airblackbox/gateway)](LICENSE)
 
-air-platform is a local development and testing environment that spins up the full AIR Blackbox compliance toolkit using Docker Compose. It bundles:
+```bash
+pip install air-blackbox
+air-blackbox scan agent.py
+```
 
-- **air-blackbox**: EU AI Act compliance scanner (Articles 9-15 checks)
-- **air-trust**: Cryptographic audit chain with HMAC-SHA256 logging and Ed25519 signed handoffs
-- **air-blackbox-mcp**: MCP server for Claude Desktop, Cursor, and Claude Code integration
+## Highlights
 
-Think of it as a self-contained sandbox for testing AI agent compliance before deployment.
+- **39 compliance checks** across 6 EU AI Act articles (9, 10, 11, 12, 14, 15)
+- **GDPR scanner** — 8 checks for consent, minimization, erasure, retention, DPIA
+- **Bias & fairness** — 6 checks for demographic parity, equalized odds, calibration
+- **Prompt injection detection** — 20 weighted patterns across 5 attack categories
+- **Standards crosswalk** — one scan maps to EU AI Act + ISO 42001 + NIST AI RMF
+- **Evidence bundles** — signed ZIP exports for auditors (SHA-256 manifest + HMAC)
+- **7 framework trust layers** — drop-in compliance for LangChain, CrewAI, OpenAI, and more
+- **No cloud, no API keys** — everything runs on your machine
 
 ## Quick Start
 
-```bash
-git clone https://github.com/airblackbox/air-platform.git
-cd air-platform
-
-# Copy and customize environment
-cp .env.example .env
-
-# Start the stack
-docker-compose up -d
-
-# Run a compliance scan
-make demo
-
-# View the dashboard
-open http://localhost:8000
-```
-
-## Project Status
-
-**Alpha** - air-platform and its components are in active development. APIs may change. Not production-ready.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Your Application                      │
-└────────────────────┬────────────────────────────────────┘
-                     │
-        ┌────────────┴────────────┐
-        │                         │
-    ┌───▼─────────────────┐  ┌──▼──────────────────┐
-    │  air-blackbox-mcp   │  │   air-blackbox      │
-    │  (Claude Desktop)   │  │   (CLI Scanner)     │
-    └───┬─────────────────┘  └──┬──────────────────┘
-        │                       │
-        └───────────┬───────────┘
-                    │
-         ┌──────────▼──────────┐
-         │   air-trust Core    │
-         │  HMAC + Ed25519     │
-         │  Audit Chain        │
-         └─────────────────────┘
-                    │
-         ┌──────────▼──────────┐
-         │  Docker Compose     │
-         │  (air-platform)     │
-         └─────────────────────┘
-```
-
-## What air-trust Does
-
-The cryptographic backbone of the stack:
-
-- **HMAC-SHA256 Audit Chain**: Every compliance check is logged with keyed hashes for tamper detection
-- **Ed25519 Signed Handoffs**: Agent actions are cryptographically signed before execution
-- **Article 14 Compliance**: Implements human oversight and audit trail requirements per EU AI Act
-
-See [air-trust on PyPI](https://pypi.org/project/air-trust/) for details.
-
-## File Structure
-
-```
-air-platform/
-├── docker-compose.yml      # Service definitions
-├── Makefile                # Common tasks
-├── .env.example            # Environment template
-├── requirements.txt        # Python dependencies
-├── pyproject.toml          # Project metadata
-├── demo.py                 # Sample compliance scan
-├── dashboard.html          # Audit dashboard UI
-├── docs/                   # EU AI Act mapping docs
-├── tests/                  # Integration tests
-└── README.md               # This file
-```
-
-## Running Demos
-
-See what air-blackbox can scan:
+Scan your codebase:
 
 ```bash
-# Interactive demo with compliance checks
-make demo
-
-# Run test suite
-make test
-
-# View hosted demo scenarios
-open hosted-demo.html
+pip install air-blackbox
+air-blackbox scan agent.py          # 39 EU AI Act checks
+air-blackbox comply -v              # per-article breakdown
 ```
 
-## Contributing
+Wrap your client for runtime tracing:
 
-Pull requests welcome. Please ensure tests pass:
+```python
+from air_blackbox import AirBlackbox
+
+air = AirBlackbox()
+client = air.wrap(openai.OpenAI())
+response = client.chat.completions.create(...)  # traced + scanned
+```
+
+Drop-in framework trust layer (no code changes):
+
+```python
+from air_blackbox.trust.langchain import AirLangChainHandler
+
+chain.invoke(input, config={"callbacks": [AirLangChainHandler()]})
+```
+
+## What It Checks
+
+| Area | Checks | What It Finds |
+|------|--------|--------------|
+| EU AI Act (Arts 9–15) | 39 | Risk management, data governance, record-keeping, human oversight, robustness |
+| GDPR | 8 | Consent, minimization, erasure, retention, DPIA, breach notification |
+| Bias & Fairness | 6 | Demographic parity, equalized odds, calibration, explainability |
+| Prompt Injection | 20 patterns | Role override, delimiter injection, privilege escalation, data exfiltration |
+| Standards | 3 frameworks | Maps to EU AI Act + ISO 42001 + NIST AI RMF simultaneously |
+
+## CLI
 
 ```bash
-make test
+air-blackbox scan [file]          # Full compliance scan
+air-blackbox comply -v            # EU AI Act articles 9–15
+air-blackbox scan-injection       # Prompt injection detection
+air-blackbox scan-gdpr            # GDPR gap analysis
+air-blackbox scan-bias            # Fairness checks
+air-blackbox standards [file]     # Cross-framework mapping
+air-blackbox evidence-export      # Signed ZIP for auditors
+air-blackbox demo                 # Interactive walkthrough
 ```
 
-## Related Projects
+## Trust Layers
 
-- **[air-trust](https://github.com/airblackbox/air-trust)** - HMAC audit chains + Ed25519 signing
-- **[air-blackbox](https://github.com/airblackbox/air-blackbox)** - Compliance scanner CLI
-- **[air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp)** - Claude Desktop integration
-- **[airblackbox.ai](https://airblackbox.ai)** - Project website
+Drop-in compliance for your existing agent code. Non-blocking — logs to `.air.json` audit records.
+
+| Framework | Install |
+|-----------|---------|
+| LangChain / LangGraph | `pip install "air-blackbox[langchain]"` |
+| CrewAI | `pip install "air-blackbox[crewai]"` |
+| AutoGen | `pip install "air-blackbox[autogen]"` |
+| OpenAI Agents SDK | `pip install "air-blackbox[openai]"` |
+| Google ADK | `pip install "air-blackbox[google]"` |
+| Haystack | `pip install "air-blackbox[haystack]"` |
+| Claude Agent SDK | `pip install "air-blackbox[claude]"` |
+
+Or install everything: `pip install "air-blackbox[all]"`
+
+## Evidence Bundles
+
+Export everything an auditor needs as a cryptographically signed ZIP:
+
+```bash
+air-blackbox evidence-export
+
+# Creates: audit_2026-04-11.zip
+# ├── compliance_report.json   (EU AI Act + GDPR + Bias)
+# ├── audit_chain.hmac         (tamper-proof record chain)
+# ├── aibom.json               (CycloneDX AI Bill of Materials)
+# ├── manifest.sha256          (file hashes)
+# └── signature.hmac           (bundle-level HMAC)
+```
+
+## How It Fits Together
+
+`air-blackbox` is the scanner. `air-trust` is the cryptographic proof layer underneath.
+
+```
+Your AI Agent
+       │
+       ├── air-blackbox scan     →  finds compliance gaps
+       ├── air-trust             →  proves what happened (HMAC + Ed25519)
+       ├── air-gate              →  human approval before dangerous tool calls
+       └── air-blackbox-mcp      →  all of the above inside Claude Desktop / Cursor
+```
+
+| Package | What It Does |
+|---------|-------------|
+| [air-trust](https://github.com/airblackbox/air-trust) | Tamper-evident audit chain + Ed25519 signed handoffs |
+| [air-gate](https://github.com/airblackbox/air-gate) | Human-in-the-loop tool gating (Article 14) |
+| [air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp) | MCP server for Claude Desktop, Cursor, Claude Code |
+| [air-platform](https://github.com/airblackbox/air-platform) | Docker Compose — full stack in one command |
+| [compliance-action](https://github.com/airblackbox/compliance-action) | GitHub Action — checks on every pull request |
+
+## Who Made This
+
+Built by [Jason Shotwell](https://github.com/shotwellj). EU AI Act enforcement begins **August 2, 2026** — this is the scanner that tells you where you stand.
+
+## Learn More
+
+- [airblackbox.ai](https://airblackbox.ai) — project homepage
+- [Interactive demo](https://airblackbox.ai/demo/signed-handoff) — signed handoffs in action
+- [PyPI](https://pypi.org/project/air-blackbox/) — package page
+- [ARCHITECTURE.md](ARCHITECTURE.md) — how the ecosystem fits together
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to help
 
 ## License
 
-Apache License 2.0
-
-## Author
-
-Jason Shotwell ([jason@airblackbox.ai](mailto:jason@airblackbox.ai))
+Apache-2.0. See [LICENSE](LICENSE).
 
 ---
 
-**Questions?** Check the [docs/](docs/) folder or open an issue on GitHub.
+If this helps your team prepare for EU AI Act enforcement, ⭐ **star the repo** — it helps other teams find it.
