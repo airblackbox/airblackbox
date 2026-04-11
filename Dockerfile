@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -8,7 +8,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /gateway ./cmd/gateway
 RUN CGO_ENABLED=0 go build -o /replayctl ./cmd/replayctl
 
-FROM alpine:3.19
+FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /gateway /usr/local/bin/gateway
 COPY --from=builder /replayctl /usr/local/bin/replayctl
