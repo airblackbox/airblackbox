@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in AIR Blackbox Gateway, please report it responsibly.
 
-**Email:** jason.j.shotwell@gmail.com
+**Email:** jason@airblackbox.ai
 **Subject line:** `[SECURITY] AIR Blackbox Gateway — <brief description>`
 
 We will acknowledge your report within 48 hours and aim to provide a fix or mitigation within 7 days for critical issues.
