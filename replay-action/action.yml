@@ -1,0 +1,157 @@
+name: 'AIR Blackbox Replay Regression'
+description: 'Replay recorded AI traces and detect behavioral drift. Catches model regressions before they reach production.'
+branding:
+  icon: 'repeat'
+  color: 'blue'
+
+inputs:
+  traces-dir:
+    description: 'Directory containing .air.json trace files'
+    required: true
+  last:
+    description: 'Replay only the N most recent traces (0 = all)'
+    required: false
+    default: '0'
+  format:
+    description: 'Output format: text or json'
+    required: false
+    default: 'text'
+  provider-url:
+    description: 'LLM provider endpoint for replay'
+    required: false
+    default: 'https://api.openai.com'
+  vault-endpoint:
+    description: 'MinIO/S3 vault endpoint'
+    required: true
+  vault-access-key:
+    description: 'Vault access key'
+    required: true
+  vault-secret-key:
+    description: 'Vault secret key'
+    required: true
+  vault-bucket:
+    description: 'Vault bucket name'
+    required: false
+    default: 'air-runs'
+
+outputs:
+  total:
+    description: 'Total traces found'
+    value: ${{ steps.replay.outputs.total }}
+  replayed:
+    description: 'Traces successfully replayed'
+    value: ${{ steps.replay.outputs.replayed }}
+  drifted:
+    description: 'Traces with detected drift'
+    value: ${{ steps.replay.outputs.drifted }}
+  pass-rate:
+    description: 'Pass rate (0.0–1.0)'
+    value: ${{ steps.replay.outputs.pass_rate }}
+  mean-similarity:
+    description: 'Mean similarity across replayed traces'
+    value: ${{ steps.replay.outputs.mean_similarity }}
+  status:
+    description: 'Overall status: pass or drift'
+    value: ${{ steps.replay.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Build replayctl
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}/..
+        go build -o replayctl ./cmd/replayctl/
+        echo "Built replayctl"
+
+    - name: Run batch replay
+      id: replay
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+        PROVIDER_URL: ${{ inputs.provider-url }}
+        VAULT_ENDPOINT: ${{ inputs.vault-endpoint }}
+        VAULT_ACCESS_KEY: ${{ inputs.vault-access-key }}
+        VAULT_SECRET_KEY: ${{ inputs.vault-secret-key }}
+        VAULT_BUCKET: ${{ inputs.vault-bucket }}
+      run: |
+        ARGS="batch ${{ inputs.traces-dir }}"
+
+        if [ "${{ inputs.last }}" != "0" ]; then
+          ARGS="$ARGS --last ${{ inputs.last }}"
+        fi
+
+        # Always get JSON for parsing outputs.
+        ${{ github.action_path }}/../replayctl $ARGS --format json > replay-result.json 2>&1 || true
+
+        # Parse outputs from JSON.
+        echo "total=$(jq -r '.total_traces' replay-result.json)" >> $GITHUB_OUTPUT
+        echo "replayed=$(jq -r '.replayed' replay-result.json)" >> $GITHUB_OUTPUT
+        echo "drifted=$(jq -r '.drifted' replay-result.json)" >> $GITHUB_OUTPUT
+        echo "pass_rate=$(jq -r '.pass_rate' replay-result.json)" >> $GITHUB_OUTPUT
+        echo "mean_similarity=$(jq -r '.mean_similarity' replay-result.json)" >> $GITHUB_OUTPUT
+
+        DRIFT=$(jq -r '.overall_drift' replay-result.json)
+        if [ "$DRIFT" = "true" ]; then
+          echo "status=drift" >> $GITHUB_OUTPUT
+        else
+          echo "status=pass" >> $GITHUB_OUTPUT
+        fi
+
+        # Print human-readable output.
+        if [ "${{ inputs.format }}" = "json" ]; then
+          cat replay-result.json
+        else
+          ${{ github.action_path }}/../replayctl $ARGS --format text || true
+        fi
+
+    - name: Generate step summary
+      shell: bash
+      if: always()
+      run: |
+        TOTAL="${{ steps.replay.outputs.total }}"
+        REPLAYED="${{ steps.replay.outputs.replayed }}"
+        DRIFTED="${{ steps.replay.outputs.drifted }}"
+        PASS_RATE="${{ steps.replay.outputs.pass_rate }}"
+        MEAN_SIM="${{ steps.replay.outputs.mean_similarity }}"
+        STATUS="${{ steps.replay.outputs.status }}"
+
+        if [ "$STATUS" = "drift" ]; then
+          ICON="🔴"
+        else
+          ICON="🟢"
+        fi
+
+        cat >> $GITHUB_STEP_SUMMARY << EOF
+        ## $ICON AIR Blackbox — Replay Regression Report
+
+        | Metric | Value |
+        |--------|-------|
+        | Total traces | $TOTAL |
+        | Replayed | $REPLAYED |
+        | Drifted | $DRIFTED |
+        | Pass rate | $(echo "$PASS_RATE * 100" | bc)% |
+        | Mean similarity | $MEAN_SIM |
+        | **Status** | **$STATUS** |
+
+        <details>
+        <summary>Full JSON report</summary>
+
+        \`\`\`json
+        $(cat replay-result.json)
+        \`\`\`
+
+        </details>
+        EOF
+
+    - name: Fail on drift
+      shell: bash
+      if: steps.replay.outputs.status == 'drift'
+      run: |
+        echo "::error::Behavioral drift detected in ${{ steps.replay.outputs.drifted }} trace(s)"
+        exit 1
