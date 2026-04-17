@@ -54,7 +54,7 @@ def verify_chain(records, signing_key):
 
 If someone changes a `risk_level` from `"CRITICAL"` to `"LOW"` in Record 5, every hash from Record 5 onward fails verification. That's the property that makes it audit-ready.
 
-Full spec: [audit-chain-v1.md on GitHub](https://github.com/airblackbox/gateway/blob/main/docs/spec/audit-chain-v1.md)
+Full spec: [audit-chain-v1.md on GitHub](https://github.com/airblackbox/airblackbox/blob/main/docs/spec/audit-chain-v1.md)
 
 **2. Anthropic Claude Agent SDK trust layer**
 
@@ -180,9 +180,9 @@ air-blackbox history
 air-blackbox demo
 ```
 
-GitHub: [github.com/airblackbox/gateway](https://github.com/airblackbox/gateway)
+GitHub: [github.com/airblackbox/airblackbox](https://github.com/airblackbox/airblackbox)
 Website: [airblackbox.ai](https://airblackbox.ai)
 PyPI: [pypi.org/project/air-blackbox](https://pypi.org/project/air-blackbox/)
-Audit Chain Spec: [audit-chain-v1.md](https://github.com/airblackbox/gateway/blob/main/docs/spec/audit-chain-v1.md)
+Audit Chain Spec: [audit-chain-v1.md](https://github.com/airblackbox/airblackbox/blob/main/docs/spec/audit-chain-v1.md)
 
 Apache 2.0. Star it, try it, break it. PRs welcome.

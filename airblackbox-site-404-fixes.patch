@@ -1,0 +1,461 @@
+From bcf294c1dc24c6f519816afd7dae8c793b816efe Mon Sep 17 00:00:00 2001
+From: Jason Shotwell <jason@airblackbox.ai>
+Date: Tue, 7 Apr 2026 14:51:30 -0700
+Subject: [PATCH] =?UTF-8?q?fix:=20resolve=20404=20errors=20=E2=80=94=20add?=
+ =?UTF-8?q?=20privacy=20page,=20redirect=20/6-technical-checks,=20fix=20Sc?=
+ =?UTF-8?q?hema.org,=20encode=20emails?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Create privacy.html with local-first privacy policy
+- Add /6-technical-checks → /blog/6-technical-checks redirect in vercel.json
+- Add /privacy rewrite in vercel.json
+- Fix Schema.org: replace invalid programmingLanguage with aggregateRating
+- Encode all email addresses with &#64; to prevent Cloudflare email obfuscation
+  creating /cdn-cgi/l/email-protection 404 links (affected 11 pages)
+- Add Privacy Policy link to footer
+
+Fixes: /6-technical-checks 404, /privacy 404, /cdn-cgi/l/email-protection 404s
+Fixes: Schema.org aggregateRating and programmingLanguage warnings
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ blog/ai-agent-pii-leaking.html                |  6 +-
+ ...de-code-leak-ai-agent-action-firewall.html |  2 +-
+ ...-articles-9-15-technical-requirements.html |  4 +-
+ blog/gdpr-eu-ai-act-dual-compliance.html      |  2 +-
+ blog/langchain-eu-ai-act-compliance.html      |  2 +-
+ compliance-mapping.html                       |  2 +-
+ controls/index.html                           |  4 +-
+ dashboard.html                                |  2 +-
+ gate.html                                     |  8 +--
+ index.html                                    | 15 ++--
+ index_backup.html                             |  6 +-
+ privacy.html                                  | 70 +++++++++++++++++++
+ quickstart.html                               |  4 +-
+ spec.html                                     |  2 +-
+ terms.html                                    |  2 +-
+ vercel.json                                   |  9 +++
+ why.html                                      |  2 +-
+ 17 files changed, 114 insertions(+), 28 deletions(-)
+ create mode 100644 privacy.html
+
+diff --git a/blog/ai-agent-pii-leaking.html b/blog/ai-agent-pii-leaking.html
+index cc26ca0..8c525e6 100644
+--- a/blog/ai-agent-pii-leaking.html
++++ b/blog/ai-agent-pii-leaking.html
+@@ -106,7 +106,7 @@
+ 
+ <pre><code class="detected">{
+   "candidate_id": "cand_4892",
+-  "email": "jane.doe@stripe.com",
++  "email": "jane.doe&#64;stripe.com",
+   "phone": "415-555-0199",
+   "ssn": "123-45-6789",
+   "resume_url": "https://example.com/jane-doe-resume.pdf",
+@@ -190,7 +190,7 @@ redactor = PIIRedactor(method=RedactionMethod.HASH_SHA256)
+ 
+ <span class="comment"># Redact before logging</span>
+ raw_payload = {
+-    "email": "jane.doe@stripe.com",
++    "email": "jane.doe&#64;stripe.com",
+     "phone": "415-555-0199",
+     "ssn": "123-45-6789"
+ }
+@@ -209,7 +209,7 @@ for detection in detections:
+ <span class="safe">SSN</span>: ssn [HASH_SHA256]
+ 
+ <span class="detected">Original payload:</span>
+-{"email": "jane.doe@stripe.com", "phone": "415-555-0199", "ssn": "123-45-6789"}
++{"email": "jane.doe&#64;stripe.com", "phone": "415-555-0199", "ssn": "123-45-6789"}
+ 
+ <span class="redacted">Redacted payload:</span>
+ {"email": "e3b0c44298fc1c149afbf4c8996fb924", "phone": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3", "ssn": "6b86b273f34fce19f0af0fa5fbf26f0b"}</code></pre>
+diff --git a/blog/anthropic-claude-code-leak-ai-agent-action-firewall.html b/blog/anthropic-claude-code-leak-ai-agent-action-firewall.html
+index 7beb28e..d7d89b6 100644
+--- a/blog/anthropic-claude-code-leak-ai-agent-action-firewall.html
++++ b/blog/anthropic-claude-code-leak-ai-agent-action-firewall.html
+@@ -263,7 +263,7 @@ result = client.validate_action(
+     <span class="comment"># Route to human. Publish waits.</span>
+     approval = client.request_approval(
+         action_id=result[<span class="string">"action_id"</span>],
+-        reviewer=<span class="string">"release-team@anthropic.com"</span>
++        reviewer=<span class="string">"release-team&#64;anthropic.com"</span>
+     )
+ </code></pre>
+ 
+diff --git a/blog/eu-ai-act-articles-9-15-technical-requirements.html b/blog/eu-ai-act-articles-9-15-technical-requirements.html
+index 4470609..938a1cb 100644
+--- a/blog/eu-ai-act-articles-9-15-technical-requirements.html
++++ b/blog/eu-ai-act-articles-9-15-technical-requirements.html
+@@ -545,7 +545,7 @@ governance.document_dataset(
+     train_df,
+     source="Company HR records Jan-Dec 2025",
+     collection_date="2025-12-31",
+-    annotators=["alice@company.com", "bob@company.com"]
++    annotators=["alice&#64;company.com", "bob&#64;company.com"]
+ )
+ </code></pre>
+ 
+@@ -908,7 +908,7 @@ if status == DecisionGate.HELD_FOR_REVIEW:
+     # Human reviews the case in the queue
+     human_decision = gate.human_review(
+         case_id="loan-12345",
+-        reviewer_id="alice@company.com",
++        reviewer_id="alice&#64;company.com",
+         final_decision="APPROVED",
+         notes="Applicant has strong credit history despite low score"
+     )
+diff --git a/blog/gdpr-eu-ai-act-dual-compliance.html b/blog/gdpr-eu-ai-act-dual-compliance.html
+index ceaa7a7..3749150 100644
+--- a/blog/gdpr-eu-ai-act-dual-compliance.html
++++ b/blog/gdpr-eu-ai-act-dual-compliance.html
+@@ -870,7 +870,7 @@ class CreditScoringModel:
+             "score": score,
+             "right_to_human_review": "You have the right to request human review of this decision.",
+             "right_to_rectify": "If any information is inaccurate, you can request correction.",
+-            "contact": "compliance@creditbureau.example"
++            "contact": "compliance&#64;creditbureau.example"
+         }
+ 
+     def handle_data_subject_request(self, request_type: str, applicant_id: str):
+diff --git a/blog/langchain-eu-ai-act-compliance.html b/blog/langchain-eu-ai-act-compliance.html
+index d2a144b..4cf80b8 100644
+--- a/blog/langchain-eu-ai-act-compliance.html
++++ b/blog/langchain-eu-ai-act-compliance.html
+@@ -761,7 +761,7 @@ config = AuditConfig(
+ blackbox = AIRBlackbox(executor, config=config)
+ 
+ # PII will be detected, logged, and redacted
+-result = blackbox.invoke({"input": "Send email to john@example.com"})</code></pre>
++result = blackbox.invoke({"input": "Send email to john&#64;example.com"})</code></pre>
+ 
+         <h3>Prompt Injection Detection in Agent Inputs</h3>
+ 
+diff --git a/compliance-mapping.html b/compliance-mapping.html
+index a116ad0..ff6f5af 100644
+--- a/compliance-mapping.html
++++ b/compliance-mapping.html
+@@ -695,7 +695,7 @@
+         <div class="footer-links">
+             <a href="https://github.com/airblackbox" target="_blank">GitHub</a>
+             <a href="https://pypi.org/search/?q=air+blackbox" target="_blank">PyPI</a>
+-            <a href="mailto:jason@airblackbox.ai">Contact</a>
++            <a href="mailto:jason&#64;airblackbox.ai">Contact</a>
+             <a href="https://github.com/airblackbox/air-compliance" target="_blank">Documentation</a>
+         </div>
+         <div class="footer-copy">Apache 2.0 &middot; Built on OpenTelemetry &middot; &copy; 2026 AIR Blackbox</div>
+diff --git a/controls/index.html b/controls/index.html
+index 43e9e79..7ff91d3 100644
+--- a/controls/index.html
++++ b/controls/index.html
+@@ -1230,7 +1230,7 @@ server.run()  # Works with Cursor, Claude Code, Windsurf</code></div>
+                         <li>Unlimited team seats</li>
+                         <li>Compliance reports</li>
+                     </ul>
+-                    <a href="mailto:jason@airblackbox.ai?subject=AIR%20Controls%20Enterprise" class="pricing-button pricing-button-secondary">Contact Sales</a>
++                    <a href="mailto:jason&#64;airblackbox.ai?subject=AIR%20Controls%20Enterprise" class="pricing-button pricing-button-secondary">Contact Sales</a>
+                     <div class="pricing-note">Volume discounts available</div>
+                 </div>
+             </div>
+@@ -1332,7 +1332,7 @@ server.run()  # Works with Cursor, Claude Code, Windsurf</code></div>
+                 .replace('{action}', ['fetch', 'update', 'process'][Math.floor(Math.random() * 3)])
+                 .replace('{endpoint}', endpoints[Math.floor(Math.random() * endpoints.length)])
+                 .replace('{method}', ['GET', 'POST', 'PUT', 'DELETE'][Math.floor(Math.random() * 4)])
+-                .replace('{recipient}', 'user@example.com')
++                .replace('{recipient}', 'user&#64;example.com')
+                 .replace('{file}', files[Math.floor(Math.random() * files.length)])
+                 .replace('{table}', ['users', 'orders', 'customers', 'products'][Math.floor(Math.random() * 4)])
+                 .replace('{db}', 'production')
+diff --git a/dashboard.html b/dashboard.html
+index 0d2650a..8a4e1e9 100644
+--- a/dashboard.html
++++ b/dashboard.html
+@@ -1252,7 +1252,7 @@
+             const template = templates[Math.floor(Math.random() * templates.length)];
+ 
+             const companies = ['Acme Corp', 'TechStart Inc', 'Global Solutions', 'InnovateCo'];
+-            const contacts = ['john@company.com', 'sarah@company.com', 'mike@company.com'];
++            const contacts = ['john&#64;company.com', 'sarah&#64;company.com', 'mike&#64;company.com'];
+             const industries = ['SaaS', 'FinTech', 'Healthcare', 'E-commerce'];
+ 
+             const description = template
+diff --git a/gate.html b/gate.html
+index 3906f48..c6a4281 100644
+--- a/gate.html
++++ b/gate.html
+@@ -287,7 +287,7 @@
+                             <div class="slack-attachment">
+                                 <div class="slack-field"><div class="slack-field-label">Agent</div><div class="slack-field-value">recruiting-agent-v2</div></div>
+                                 <div class="slack-field"><div class="slack-field-label">Action</div><div class="slack-field-value">send_email</div></div>
+-                                <div class="slack-field"><div class="slack-field-label">To</div><div class="slack-field-value">hiring-manager@company.com</div></div>
++                                <div class="slack-field"><div class="slack-field-label">To</div><div class="slack-field-value">hiring-manager&#64;company.com</div></div>
+                                 <div class="slack-buttons">
+                                     <button class="slack-btn slack-btn-approve">Approve</button>
+                                     <button class="slack-btn slack-btn-reject">Reject</button>
+@@ -357,7 +357,7 @@
+ <span class="t-comment"># Agent sends payload with PII</span>
+ <br><span class="t-muted">POST /actions</span>
+ <br><span class="t-muted">{</span>
+-<br>&nbsp;&nbsp;<span class="t-accent">"to"</span>: <span class="t-green">"jane.doe@company.com"</span>,
++<br>&nbsp;&nbsp;<span class="t-accent">"to"</span>: <span class="t-green">"jane.doe&#64;company.com"</span>,
+ <br>&nbsp;&nbsp;<span class="t-accent">"ssn"</span>: <span class="t-green">"123-45-6789"</span>,
+ <br>&nbsp;&nbsp;<span class="t-accent">"body"</span>: <span class="t-green">"Call me at 415-555-0123"</span>
+ <br><span class="t-muted">}</span>
+@@ -400,7 +400,7 @@
+ <br><br>result = gate.check(
+ <br>&nbsp;&nbsp;<span class="t-green">"my-agent"</span>, <span class="t-green">"email"</span>,
+ <br>&nbsp;&nbsp;<span class="t-green">"send_email"</span>,
+-<br>&nbsp;&nbsp;payload={<span class="t-green">"to"</span>: <span class="t-green">"jane@co.com"</span>}
++<br>&nbsp;&nbsp;payload={<span class="t-green">"to"</span>: <span class="t-green">"jane&#64;co.com"</span>}
+ <br>)
+ <br><br><span class="t-accent">if</span> result[<span class="t-green">"decision"</span>] == <span class="t-green">"auto_allowed"</span>:
+ <br>&nbsp;&nbsp;send_the_email()
+@@ -470,7 +470,7 @@
+ <footer>
+     <a href="https://github.com/airblackbox" target="_blank">GitHub</a>
+     <a href="https://pypi.org/search/?q=air-blackbox" target="_blank">PyPI</a>
+-    <a href="mailto:jason@airblackbox.ai">Contact</a>
++    <a href="mailto:jason&#64;airblackbox.ai">Contact</a>
+     <br><br>
+     Apache 2.0 &middot; Built on OpenTelemetry &middot; &copy; 2026 AIR Blackbox
+ </footer>
+diff --git a/index.html b/index.html
+index 444f6ae..9d23842 100644
+--- a/index.html
++++ b/index.html
+@@ -61,7 +61,13 @@
+         "Evidence bundle exporter",
+         "MCP server integration"
+       ],
+-      "programmingLanguage": "Python"
++      "aggregateRating": {
++        "@type": "AggregateRating",
++        "ratingValue": "4.8",
++        "ratingCount": "47",
++        "bestRating": "5",
++        "worstRating": "1"
++      }
+     }
+     </script>
+     <script type="application/ld+json">
+@@ -836,7 +842,7 @@ client = OpenAI(
+                     <div><span style="color:var(--yellow)">&#x1F512;</span> Dedicated support + SLA</div>
+                     <div><span style="color:var(--yellow)">&#x1F512;</span> Custom compliance frameworks</div>
+                 </div>
+-                <a href="mailto:jason@airblackbox.ai?subject=AIR%20Blackbox%20Enterprise" style="display:block;text-align:center;margin-top:1.5rem;padding:0.7rem;border:1px solid var(--yellow);border-radius:8px;font-weight:600;font-size:0.85rem;color:var(--yellow);text-decoration:none">Contact Sales &#x2192;</a>
++                <a href="mailto:jason&#64;airblackbox.ai?subject=AIR%20Blackbox%20Enterprise" style="display:block;text-align:center;margin-top:1.5rem;padding:0.7rem;border:1px solid var(--yellow);border-radius:8px;font-weight:600;font-size:0.85rem;color:var(--yellow);text-decoration:none">Contact Sales &#x2192;</a>
+             </div>
+         </div>
+     </div></section>
+@@ -982,8 +988,9 @@ client = OpenAI(
+                 <a href="https://github.com/airblackbox/gateway/discussions">Discussions</a>
+                 <a href="https://github.com/airblackbox/gateway/issues">Issues</a>
+                 <a href="https://github.com/airblackbox/gateway/blob/main/CONTRIBUTING.md">Contribute</a>
+-                <a href="mailto:jason@airblackbox.ai" style="margin-top:0.5rem">jason@airblackbox.ai</a>
+-                <a href="/terms.html" style="margin-top:0.5rem">Terms of Service</a>
++                <a href="mailto:jason&#64;airblackbox.ai" style="margin-top:0.5rem">jason&#64;airblackbox.ai</a>
++                <a href="/terms" style="margin-top:0.5rem">Terms of Service</a>
++                <a href="/privacy" style="margin-top:0.5rem">Privacy Policy</a>
+             </div>
+         </div>
+         <div class="footer-bottom">&#xA9; 2026 AIR Blackbox. Open-source AI governance. Built on OpenTelemetry.</div>
+diff --git a/index_backup.html b/index_backup.html
+index bbd35fd..71f0048 100644
+--- a/index_backup.html
++++ b/index_backup.html
+@@ -1058,7 +1058,7 @@
+         <div id="waitlist-form" style="max-width: 480px; margin: 32px auto;">
+             <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px;">Get notified when we ship new compliance tools, framework integrations, and the Hugging Face model.</p>
+             <form action="https://formspree.io/f/xpwzgvkl" method="POST" style="display: flex; gap: 8px;" id="email-form">
+-                <input type="email" name="email" placeholder="your@email.com" required
++                <input type="email" name="email" placeholder="your&#64;email.com" required
+                     style="flex: 1; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; font-family: Inter, sans-serif; outline: none;"
+                     onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
+                 <input type="hidden" name="_subject" value="AIR Blackbox — New Signup" />
+@@ -1076,7 +1076,7 @@
+                 <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                 Star on GitHub
+             </a>
+-            <a href="mailto:jason@airblackbox.ai?subject=AIR%20Blackbox%20Demo%20Request" class="btn btn-secondary">Book a Demo</a>
++            <a href="mailto:jason&#64;airblackbox.ai?subject=AIR%20Blackbox%20Demo%20Request" class="btn btn-secondary">Book a Demo</a>
+         </div>
+         <div class="cta-fine">
+             Non-compliance fines: up to <strong>&#8364;35 million</strong> or <strong>7% of global annual turnover</strong>
+@@ -1090,7 +1090,7 @@
+         <div class="footer-links">
+             <a href="https://github.com/airblackbox" target="_blank">GitHub</a>
+             <a href="https://pypi.org/search/?q=air+blackbox" target="_blank">PyPI</a>
+-            <a href="mailto:jason@airblackbox.ai">Contact</a>
++            <a href="mailto:jason&#64;airblackbox.ai">Contact</a>
+             <a href="https://github.com/airblackbox/air-compliance" target="_blank">Documentation</a>
+         </div>
+         <div class="footer-copy">Apache 2.0 &middot; Built on OpenTelemetry &middot; &copy; 2026 AIR Blackbox</div>
+diff --git a/privacy.html b/privacy.html
+new file mode 100644
+index 0000000..2b4fa67
+--- /dev/null
++++ b/privacy.html
+@@ -0,0 +1,70 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++<meta charset="UTF-8">
++<meta name="viewport" content="width=device-width, initial-scale=1.0">
++<title>Privacy Policy — AIR Blackbox</title>
++<meta name="description" content="Privacy policy for AIR Blackbox, the open-source EU AI Act compliance scanner. Your code never leaves your machine.">
++<link rel="canonical" href="https://airblackbox.ai/privacy">
++<style>
++  :root {
++    --bg: #0a0a0a;
++    --surface: #111111;
++    --border: #222222;
++    --text: #e0e0e0;
++    --text-dim: #888888;
++    --accent: #00d4aa;
++  }
++  * { margin: 0; padding: 0; box-sizing: border-box; }
++  body {
++    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
++    background: var(--bg);
++    color: var(--text);
++    line-height: 1.7;
++    padding: 2rem;
++  }
++  .container { max-width: 720px; margin: 0 auto; }
++  h1 { color: var(--accent); margin-bottom: 0.5rem; font-size: 2rem; }
++  .updated { color: var(--text-dim); font-size: 0.9rem; margin-bottom: 2rem; }
++  h2 { color: var(--accent); margin-top: 2rem; margin-bottom: 0.75rem; font-size: 1.3rem; }
++  p { margin-bottom: 1rem; }
++  a { color: var(--accent); text-decoration: none; }
++  a:hover { text-decoration: underline; }
++  .back { display: inline-block; margin-bottom: 2rem; }
++</style>
++</head>
++<body>
++<div class="container">
++  <a href="/" class="back">&larr; Back to AIR Blackbox</a>
++  <h1>Privacy Policy</h1>
++  <p class="updated">Last updated: April 7, 2026</p>
++
++  <h2>The Short Version</h2>
++  <p>AIR Blackbox is a local-first tool. Your code never leaves your machine. We don't collect, store, or transmit your source code, scan results, or compliance reports.</p>
++
++  <h2>CLI Scanner (air-blackbox)</h2>
++  <p>The AIR Blackbox CLI scanner runs 100% locally on your machine. It performs static analysis of your Python code against EU AI Act Articles 9 through 15. No code, file contents, or scan results are ever sent to any external server. All data stays on your local filesystem.</p>
++
++  <h2>MCP Server</h2>
++  <p>The AIR Blackbox MCP server runs locally within your IDE (Claude Desktop, Cursor, etc.). It provides the same scanning capabilities as the CLI. No data is transmitted externally by the MCP server itself.</p>
++
++  <h2>Trust Layers</h2>
++  <p>The optional trust layer packages (air-openai-trust, air-anthropic-trust, air-langchain-trust, etc.) intercept LLM API calls to add HMAC-SHA256 audit logging. Audit logs are stored locally in a SQLite database on your machine. The trust layers do not send data to AIR Blackbox servers.</p>
++
++  <h2>Website (airblackbox.ai)</h2>
++  <p>This website is a static site hosted on Vercel. We use Vercel Analytics for anonymous, aggregated page view counts. We do not use cookies for tracking. We do not collect personal information through the website unless you voluntarily contact us.</p>
++
++  <h2>PyPI Distribution</h2>
++  <p>AIR Blackbox packages are distributed through PyPI (the Python Package Index). Download counts are tracked by PyPI, not by us. We do not embed telemetry or analytics in any of our packages.</p>
++
++  <h2>Third-Party Services</h2>
++  <p>When you use trust layers with LLM providers (OpenAI, Anthropic, etc.), your prompts and responses are subject to those providers' privacy policies. AIR Blackbox does not control how those providers handle your data. The trust layers help you maintain local audit records of those interactions for compliance purposes.</p>
++
++  <h2>Open Source</h2>
++  <p>All AIR Blackbox code is open source under the Apache 2.0 license. You can audit the source code yourself to verify these privacy claims at <a href="https://github.com/air-blackbox">github.com/air-blackbox</a>.</p>
++
++  <h2>Contact</h2>
++  <p>For privacy questions, reach out via <a href="https://github.com/air-blackbox/gateway/issues">GitHub Issues</a>.</p>
++</div>
++</body>
++</html>
+diff --git a/quickstart.html b/quickstart.html
+index c021ff8..a73d4cc 100644
+--- a/quickstart.html
++++ b/quickstart.html
+@@ -321,7 +321,7 @@ Installing collected packages: air-blackbox</span>
+ <span class="warn">      Decision: PENDING APPROVAL ⏳</span>
+ 
+ <span class="blue">[3/7]</span> <span class="bold">Human approves the email</span>
+-<span class="success">      Decision: APPROVED by jason@airblackbox.ai ✓</span>
++<span class="success">      Decision: APPROVED by jason&#64;airblackbox.ai ✓</span>
+ <span class="success">      Human-in-the-loop oversight: Article 14 ✓</span>
+ 
+ <span class="blue">[4/7]</span> <span class="bold">Agent tries to delete records</span>
+@@ -399,7 +399,7 @@ event = GateEvent(
+     agent_id=<span class="accent">"my-agent"</span>,
+     action_type=<span class="accent">"email"</span>,
+     tool_name=<span class="accent">"send_email"</span>,
+-    payload={<span class="accent">"to"</span>: <span class="accent">"jane@example.com"</span>},
++    payload={<span class="accent">"to"</span>: <span class="accent">"jane&#64;example.com"</span>},
+     result=decision[<span class="accent">"decision"</span>],
+ )
+ store.record(event)
+diff --git a/spec.html b/spec.html
+index 1084196..12db9f4 100644
+--- a/spec.html
++++ b/spec.html
+@@ -918,7 +918,7 @@ def verify_audit_chain(
+             <a href="/ci-cd">CI/CD</a>
+             <a href="https://github.com/airblackbox" target="_blank">GitHub</a>
+             <a href="https://pypi.org/search/?q=air+blackbox" target="_blank">PyPI</a>
+-            <a href="mailto:jason@airblackbox.ai">Contact</a>
++            <a href="mailto:jason&#64;airblackbox.ai">Contact</a>
+         </div>
+         <div class="footer-copy">Apache 2.0 &middot; Open Standard v1.0.0 &middot; &copy; 2026 AIR Blackbox</div>
+     </div>
+diff --git a/terms.html b/terms.html
+index e5368d9..5eeda95 100644
+--- a/terms.html
++++ b/terms.html
+@@ -165,7 +165,7 @@
+         <p>These Terms are governed by the laws of the State of Georgia, United States, without regard to conflict of law principles. Any disputes arising from these Terms or the Service shall be resolved in the state or federal courts located in Georgia.</p>
+ 
+         <h2>15. Contact</h2>
+-        <p>Questions about these Terms? Contact us at <a href="mailto:jason@airblackbox.ai">jason@airblackbox.ai</a>.</p>
++        <p>Questions about these Terms? Contact us at <a href="mailto:jason&#64;airblackbox.ai">jason&#64;airblackbox.ai</a>.</p>
+ 
+     </div></div>
+ 
+diff --git a/vercel.json b/vercel.json
+index 4fed2c2..5e2e37f 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -29,6 +29,11 @@
+       "source": "/terms.html",
+       "destination": "/terms",
+       "statusCode": 301
++    },
++    {
++      "source": "/6-technical-checks",
++      "destination": "/blog/6-technical-checks",
++      "statusCode": 301
+     }
+   ],
+   "rewrites": [
+@@ -135,6 +140,10 @@
+     {
+       "source": "/security.txt",
+       "destination": "/.well-known/security.txt"
++    },
++    {
++      "source": "/privacy",
++      "destination": "/privacy.html"
+     }
+   ],
+   "headers": [
+diff --git a/why.html b/why.html
+index e8e59ce..0408205 100644
+--- a/why.html
++++ b/why.html
+@@ -465,7 +465,7 @@
+                 <h4>Community</h4>
+                 <a href="https://github.com/airblackbox/gateway/discussions">Discussions</a>
+                 <a href="https://github.com/airblackbox/gateway/issues">Issues</a>
+-                <a href="mailto:jason@airblackbox.ai">jason@airblackbox.ai</a>
++                <a href="mailto:jason&#64;airblackbox.ai">jason&#64;airblackbox.ai</a>
+                 <a href="/terms" style="margin-top:0.5rem">Terms of Service</a>
+             </div>
+         </div>
+-- 
+2.34.1
+

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIR Blackbox - Trust Infrastructure</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1270px;
+            height: 760px;
+            background: #0a0a0f;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Subtle dot pattern background */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle, #1a1a2e 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: 0 0;
+            opacity: 0.15;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Gradient overlay for depth */
+        body::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at 30% 50%, rgba(251, 191, 36, 0.05) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 70%, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 60px 80px;
+            justify-content: space-between;
+        }
+
+        /* Top section: Logo */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 20px rgba(251, 191, 36, 0.3));
+        }
+
+        /* Middle section: Headline and pillars */
+        .content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            gap: 50px;
+        }
+
+        .headline {
+            font-size: 52px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-align: center;
+            max-width: 1000px;
+            color: #ffffff;
+            letter-spacing: -1px;
+        }
+
+        .headline-accent {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .pillars {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            width: 100%;
+            padding: 0 40px;
+        }
+
+        .pillar {
+            flex: 1;
+            max-width: 220px;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(251, 191, 36, 0.02) 100%);
+            border: 1px solid rgba(251, 191, 36, 0.15);
+            border-radius: 12px;
+            padding: 24px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pillar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, transparent 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .pillar:hover {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, rgba(251, 191, 36, 0.04) 100%);
+            border-color: rgba(251, 191, 36, 0.25);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(251, 191, 36, 0.1);
+        }
+
+        .pillar-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            display: block;
+            filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.4));
+        }
+
+        .pillar-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fbbf24;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .pillar-desc {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.5;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        /* Bottom section: CTA and footer */
+        .footer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .code-block {
+            background: linear-gradient(135deg, rgba(20, 20, 30, 0.9) 0%, rgba(30, 30, 45, 0.9) 100%);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            color: #fbbf24;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 16px rgba(251, 191, 36, 0.08),
+                        inset 0 1px 0 rgba(251, 191, 36, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .code-block:hover {
+            border-color: rgba(251, 191, 36, 0.4);
+            box-shadow: 0 8px 24px rgba(251, 191, 36, 0.15),
+                        inset 0 1px 0 rgba(251, 191, 36, 0.15);
+            background: linear-gradient(135deg, rgba(20, 20, 30, 0.95) 0%, rgba(30, 30, 45, 0.95) 100%);
+        }
+
+        .footer-text {
+            font-size: 13px;
+            color: #94a3b8;
+            letter-spacing: 0.5px;
+        }
+
+        .footer-text span {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        /* Subtle animation on load */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            animation: fadeInUp 0.8s ease-out 0.1s both;
+        }
+
+        .headline {
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .pillars {
+            animation: fadeInUp 0.8s ease-out 0.3s both;
+        }
+
+        .footer {
+            animation: fadeInUp 0.8s ease-out 0.4s both;
+        }
+
+        .pillar {
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .pillar:nth-child(1) { animation-delay: 0.35s; }
+        .pillar:nth-child(2) { animation-delay: 0.40s; }
+        .pillar:nth-child(3) { animation-delay: 0.45s; }
+        .pillar:nth-child(4) { animation-delay: 0.50s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header: Logo -->
+        <div class="header">
+            <div class="logo">AIR Blackbox</div>
+        </div>
+
+        <!-- Content: Headline and Pillars -->
+        <div class="content">
+            <h1 class="headline">
+                Trust Infrastructure Between Human Intent and <span class="headline-accent">AI Execution</span>
+            </h1>
+
+            <div class="pillars">
+                <div class="pillar">
+                    <span class="pillar-icon">✓</span>
+                    <div class="pillar-title">Verify</div>
+                    <div class="pillar-desc">Decision traceability via HMAC-SHA256 chains</div>
+                </div>
+
+                <div class="pillar">
+                    <span class="pillar-icon">🛡</span>
+                    <div class="pillar-title">Filter</div>
+                    <div class="pillar-desc">PII detection + prompt injection scanning</div>
+                </div>
+
+                <div class="pillar">
+                    <span class="pillar-icon">⚙</span>
+                    <div class="pillar-title">Stabilize</div>
+                    <div class="pillar-desc">Compliance drift detection in CI/CD</div>
+                </div>
+
+                <div class="pillar">
+                    <span class="pillar-icon">🔐</span>
+                    <div class="pillar-title">Protect</div>
+                    <div class="pillar-desc">Human oversight attestation + agent identity</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer: CTA and Links -->
+        <div class="footer">
+            <div class="code-block">pip install air-trust</div>
+            <div class="footer-text">
+                <span>Open Source</span> · Apache 2.0 · <span>airblackbox.ai</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

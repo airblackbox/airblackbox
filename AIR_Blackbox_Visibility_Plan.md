@@ -93,7 +93,7 @@ Would love feedback on the approach. The thesis: compliance is the wedge, trust 
 ```markdown
 ## AIR Blackbox
 Open-source trust infrastructure for Python AI agents. Sits inside every AI call to provide decision traceability (HMAC-SHA256 audit chains), PII detection, prompt injection scanning, and compliance drift detection. 11 PyPI packages. Trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Claude SDK.
-- [GitHub](https://github.com/airblackbox/gateway)
+- [GitHub](https://github.com/airblackbox/airblackbox)
 - [Website](https://airblackbox.ai)
 - [Audit Chain Spec (Open Standard)](https://airblackbox.ai/spec)
 ```

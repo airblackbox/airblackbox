@@ -64,7 +64,7 @@ Interesting timing: researchers just published AEGIS (arXiv:2603.12621) this mon
 
 The thesis: AI made generation abundant. What becomes valuable now is the infrastructure that verifies, routes, constrains, and records machine-assisted work in real time.
 
-GitHub: https://github.com/airblackbox/gateway
+GitHub: https://github.com/airblackbox/airblackbox
 Demo: https://airblackbox.ai/demo
 Audit Chain Spec (open standard): https://airblackbox.ai/spec
 ```
@@ -111,7 +111,7 @@ Quick start: pip install air-compliance && air-compliance scan .
 
 CI/CD integration (GitHub Actions + pre-commit): https://airblackbox.ai/ci-cd
 
-GitHub: https://github.com/airblackbox/gateway
+GitHub: https://github.com/airblackbox/airblackbox
 ```
 
 ---
@@ -165,7 +165,7 @@ What becomes valuable now is infrastructure that verifies, routes, constrains, a
 Compliance is the wedge. Trust infrastructure is the platform.
 
 Full breakdown: https://airblackbox.ai/blog/eu-ai-act-compliance-tools-compared
-GitHub: https://github.com/airblackbox/gateway
+GitHub: https://github.com/airblackbox/airblackbox
 ```
 
 ---
@@ -234,7 +234,7 @@ AI made generation abundant. What becomes valuable now is infrastructure that ve
 
 Compliance is the wedge. Trust infrastructure is the platform.
 
-GitHub: https://github.com/airblackbox/gateway
+GitHub: https://github.com/airblackbox/airblackbox
 Website: https://airblackbox.ai
 Apache 2.0. PRs welcome.
 ```
@@ -275,7 +275,7 @@ AI made generation abundant. The next infrastructure layer is not about making A
 
 11 PyPI packages. Framework trust layers for LangChain, CrewAI, OpenAI, Anthropic, Google ADK, Claude Agent SDK.
 
-Apache 2.0: https://github.com/airblackbox/gateway
+Apache 2.0: https://github.com/airblackbox/airblackbox
 
 Would love feedback on the architecture. Anyone else building trust/governance infrastructure at the call level rather than retrospectively?
 ```

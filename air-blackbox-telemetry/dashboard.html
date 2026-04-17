@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIR Blackbox — Usage Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117; color: #c9d1d9;
+            padding: 2rem;
+        }
+        h1 { color: #00d4aa; font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .subtitle { color: #8b949e; margin-bottom: 2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .card {
+            background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+            padding: 1.5rem; text-align: center;
+        }
+        .card .number { font-size: 2.5rem; font-weight: 700; color: #00d4aa; }
+        .card .label { color: #8b949e; font-size: 0.85rem; margin-top: 0.25rem; }
+        .chart-container {
+            background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+            padding: 1.5rem; margin-bottom: 1.5rem;
+        }
+        .chart-container h3 { color: #c9d1d9; font-size: 1rem; margin-bottom: 1rem; }
+        .chart-row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        .events-table {
+            width: 100%; border-collapse: collapse;
+            background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+        }
+        .events-table th, .events-table td {
+            padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #21262d;
+            font-size: 0.85rem;
+        }
+        .events-table th { color: #8b949e; font-weight: 600; }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 12px;
+            font-size: 0.75rem; font-weight: 600;
+        }
+        .badge-comply { background: #1f6feb33; color: #58a6ff; }
+        .badge-discover { background: #3fb95033; color: #56d364; }
+        .badge-demo { background: #d2992233; color: #e3b341; }
+        .login {
+            max-width: 400px; margin: 4rem auto; text-align: center;
+        }
+        .login input {
+            background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+            padding: 0.75rem 1rem; border-radius: 6px; width: 100%; margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        .login button {
+            background: #00d4aa; color: #0d1117; border: none; padding: 0.75rem 2rem;
+            border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 1rem;
+        }
+        .login button:hover { background: #00b894; }
+        #dashboard { display: none; }
+        .error { color: #f85149; text-align: center; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+
+<div class="login" id="loginForm">
+    <h1>AIR Blackbox Dashboard</h1>
+    <p class="subtitle">Enter your dashboard key to view usage analytics</p>
+    <input type="password" id="keyInput" placeholder="Dashboard key" />
+    <button onclick="loadDashboard()">View Dashboard</button>
+    <p class="error" id="loginError"></p>
+</div>
+
+<div id="dashboard">
+    <h1>AIR Blackbox — Usage Dashboard</h1>
+    <p class="subtitle">Anonymous telemetry from real users (not PyPI download counts)</p>
+
+    <div class="grid">
+        <div class="card">
+            <div class="number" id="uniqueUsers">—</div>
+            <div class="label">Unique Users (All Time)</div>
+        </div>
+        <div class="card">
+            <div class="number" id="todayUsers">—</div>
+            <div class="label">Unique Users Today</div>
+        </div>
+        <div class="card">
+            <div class="number" id="totalScans">—</div>
+            <div class="label">Total Scans (30 Days)</div>
+        </div>
+        <div class="card">
+            <div class="number" id="topCommand">—</div>
+            <div class="label">Most Used Command</div>
+        </div>
+    </div>
+
+    <div class="chart-row">
+        <div class="chart-container">
+            <h3>Daily Scans (Last 30 Days)</h3>
+            <canvas id="dailyChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>OS Distribution</h3>
+            <canvas id="osChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Python Versions</h3>
+            <canvas id="pyChart"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <h3>Recent Events</h3>
+        <table class="events-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Command</th>
+                    <th>Files</th>
+                    <th>Passing</th>
+                    <th>Failing</th>
+                    <th>Version</th>
+                    <th>OS</th>
+                    <th>Python</th>
+                </tr>
+            </thead>
+            <tbody id="eventsBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+let dashboardKey = '';
+
+async function loadDashboard() {
+    dashboardKey = document.getElementById('keyInput').value;
+    if (!dashboardKey) return;
+
+    try {
+        const res = await fetch(`/api/dashboard?key=${encodeURIComponent(dashboardKey)}`);
+        if (res.status === 401) {
+            document.getElementById('loginError').textContent = 'Invalid key';
+            return;
+        }
+        const data = await res.json();
+        if (data.error) {
+            document.getElementById('loginError').textContent = data.error;
+            return;
+        }
+
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        renderDashboard(data);
+    } catch (err) {
+        document.getElementById('loginError').textContent = 'Failed to connect';
+    }
+}
+
+function renderDashboard(data) {
+    // Summary cards
+    document.getElementById('uniqueUsers').textContent = data.unique_users_all_time || 0;
+    document.getElementById('todayUsers').textContent = data.unique_users_today || 0;
+
+    const totalScans = Object.values(data.daily_scans || {}).reduce((a, b) => a + b, 0);
+    document.getElementById('totalScans').textContent = totalScans;
+
+    const cmds = data.commands || {};
+    const topCmd = Object.entries(cmds).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('topCommand').textContent = topCmd ? topCmd[0] : '—';
+
+    // Daily chart
+    const dates = Object.keys(data.daily_scans || {}).sort();
+    const counts = dates.map(d => data.daily_scans[d]);
+    new Chart(document.getElementById('dailyChart'), {
+        type: 'bar',
+        data: {
+            labels: dates.map(d => d.slice(5)),
+            datasets: [{
+                data: counts,
+                backgroundColor: '#00d4aa44',
+                borderColor: '#00d4aa',
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+                y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' }, beginAtZero: true }
+            }
+        }
+    });
+
+    // OS chart
+    const osData = data.os_distribution || {};
+    new Chart(document.getElementById('osChart'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(osData),
+            datasets: [{
+                data: Object.values(osData),
+                backgroundColor: ['#00d4aa', '#58a6ff', '#f85149'],
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom', labels: { color: '#8b949e' } } }
+        }
+    });
+
+    // Python version chart
+    const pyData = data.python_versions || {};
+    new Chart(document.getElementById('pyChart'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(pyData).map(v => `Python ${v}`),
+            datasets: [{
+                data: Object.values(pyData),
+                backgroundColor: ['#d2992233', '#3fb95066', '#1f6feb66', '#00d4aa66', '#f8514966', '#da3633'],
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom', labels: { color: '#8b949e' } } }
+        }
+    });
+
+    // Recent events table
+    const tbody = document.getElementById('eventsBody');
+    (data.recent_events || []).forEach(evt => {
+        const tr = document.createElement('tr');
+        const ts = evt.server_timestamp ? new Date(evt.server_timestamp).toLocaleString() : '—';
+        const cmdClass = evt.command === 'comply' ? 'badge-comply' :
+                         evt.command === 'discover' ? 'badge-discover' : 'badge-demo';
+        tr.innerHTML = `
+            <td>${ts}</td>
+            <td><span class="badge ${cmdClass}">${evt.command || '—'}</span></td>
+            <td>${evt.python_files || 0}</td>
+            <td style="color:#56d364">${evt.checks_passing || 0}</td>
+            <td style="color:#f85149">${evt.checks_failing || 0}</td>
+            <td>${evt.version || '—'}</td>
+            <td>${evt.os || '—'}</td>
+            <td>${evt.python_version || '—'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Auto-submit on Enter
+document.getElementById('keyInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') loadDashboard();
+});
+</script>
+</body>
+</html>
