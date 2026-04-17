@@ -61,9 +61,9 @@ air-blackbox-comply-strict = "air_blackbox.precommit:main"
 
 [project.urls]
 Homepage = "https://airblackbox.ai"
-Repository = "https://github.com/airblackbox/gateway"
-Documentation = "https://github.com/airblackbox/gateway/tree/main/docs"
-Issues = "https://github.com/airblackbox/gateway/issues"
+Repository = "https://github.com/airblackbox/airblackbox"
+Documentation = "https://github.com/airblackbox/airblackbox/tree/main/docs"
+Issues = "https://github.com/airblackbox/airblackbox/issues"
 
 [tool.setuptools.packages.find]
 where = ["sdk"]

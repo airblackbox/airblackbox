@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIR Blackbox - Compliance Scanner Terminal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1270px;
+            height: 760px;
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Courier New", monospace;
+            padding: 40px 20px;
+        }
+
+        .title {
+            color: #ffffff;
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+
+        .terminal-container {
+            width: 100%;
+            max-width: 900px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8),
+                        0 0 40px rgba(34, 197, 94, 0.1);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .terminal-header {
+            background: linear-gradient(to bottom, #2a2a3e, #1f1f2e);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .traffic-lights {
+            display: flex;
+            gap: 8px;
+        }
+
+        .traffic-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .traffic-light.red {
+            background: #ef4444;
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+        }
+
+        .traffic-light.yellow {
+            background: #fbbf24;
+            box-shadow: 0 0 4px rgba(251, 191, 36, 0.6);
+        }
+
+        .traffic-light.green {
+            background: #22c55e;
+            box-shadow: 0 0 4px rgba(34, 197, 94, 0.6);
+        }
+
+        .terminal-title {
+            color: #94a3b8;
+            font-size: 13px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            margin-left: 12px;
+            font-weight: 500;
+        }
+
+        .terminal-content {
+            padding: 24px 28px;
+            font-size: 13px;
+            line-height: 1.6;
+            font-family: "Menlo", "Monaco", "Courier New", monospace;
+            color: #e0e0e0;
+            background: #0f0f1e;
+            min-height: 500px;
+            overflow: hidden;
+        }
+
+        .command {
+            color: #22c55e;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .output {
+            color: #cbd5e1;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            color: #f1f5f9;
+            margin: 20px 0 12px 0;
+            font-weight: 600;
+        }
+
+        .section-divider {
+            color: #475569;
+            margin: 16px 0;
+        }
+
+        .info-line {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkmark {
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .pass-text {
+            color: #22c55e;
+            font-weight: 500;
+        }
+
+        .warn-text {
+            color: #fbbf24;
+            font-weight: 500;
+        }
+
+        .fail-text {
+            color: #ef4444;
+            font-weight: 500;
+        }
+
+        .article-line {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+
+        .article-label {
+            width: 140px;
+            color: #cbd5e1;
+            font-weight: 500;
+        }
+
+        .progress-bar-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .progress-bar {
+            width: 120px;
+            height: 6px;
+            background: #334155;
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            display: flex;
+            border-radius: 2px;
+        }
+
+        .progress-fill.pass {
+            background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+        }
+
+        .progress-fill.warn {
+            background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%);
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+        }
+
+        .progress-fill.fail {
+            background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+        }
+
+        .status-badge {
+            color: #cbd5e1;
+            font-weight: 500;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        .status-badge.pass {
+            color: #22c55e;
+        }
+
+        .status-badge.warn {
+            color: #fbbf24;
+        }
+
+        .status-badge.fail {
+            color: #ef4444;
+        }
+
+        .note {
+            color: #64748b;
+            font-size: 11px;
+            margin-left: 272px;
+        }
+
+        .score-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .score-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #22c55e;
+            margin-bottom: 8px;
+            letter-spacing: 2px;
+        }
+
+        .score-bar-container {
+            display: flex;
+            justify-content: center;
+        }
+
+        .overall-progress-bar {
+            width: 240px;
+            height: 8px;
+            background: #334155;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .overall-progress-fill {
+            width: 63%;
+            height: 100%;
+            background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+            border-radius: 4px;
+            box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+        }
+
+        .summary-line {
+            color: #cbd5e1;
+            margin: 12px 0;
+            font-size: 12px;
+        }
+
+        .summary-stats {
+            color: #cbd5e1;
+            font-size: 12px;
+        }
+
+        .stat-pass {
+            color: #22c55e;
+        }
+
+        .stat-warn {
+            color: #fbbf24;
+        }
+
+        .stat-fail {
+            color: #ef4444;
+        }
+
+        .footer-lines {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #334155;
+        }
+
+        .footer-line {
+            color: #cbd5e1;
+            margin: 6px 0;
+            font-size: 12px;
+        }
+
+        .checkmark-footer {
+            color: #22c55e;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">Scan Any Python AI Agent in Seconds</div>
+
+    <div class="terminal-container">
+        <div class="terminal-header">
+            <div class="traffic-lights">
+                <div class="traffic-light red"></div>
+                <div class="traffic-light yellow"></div>
+                <div class="traffic-light green"></div>
+            </div>
+            <div class="terminal-title">Terminal — air-compliance scan</div>
+        </div>
+
+        <div class="terminal-content">
+            <div class="command">$ pip install air-compliance</div>
+            <div class="output">Successfully installed air-compliance-1.6.1</div>
+
+            <div class="command">$ air-compliance scan agent.py</div>
+
+            <div style="margin: 20px 0;">
+                <div style="color: #cbd5e1; font-weight: 600; font-size: 13px;">AIR Blackbox — EU AI Act Compliance Scanner</div>
+                <div class="section-divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+            </div>
+
+            <div class="info-line">
+                <span style="color: #cbd5e1;">Detected: langchain + air-trust</span>
+                <span class="checkmark">✓</span>
+            </div>
+
+            <div style="margin: 16px 0;">
+                <div class="article-line">
+                    <div class="article-label">Article 9  — Risk Management</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill pass" style="width: 83%;"></div>
+                        </div>
+                        <div class="status-badge pass">PASS</div>
+                    </div>
+                </div>
+
+                <div class="article-line">
+                    <div class="article-label">Article 10 — Data Governance</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill warn" style="width: 67%;"></div>
+                        </div>
+                        <div class="status-badge warn">WARN</div>
+                    </div>
+                </div>
+
+                <div class="article-line">
+                    <div class="article-label">Article 11 — Technical Docs</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill pass" style="width: 83%;"></div>
+                        </div>
+                        <div class="status-badge pass">PASS</div>
+                    </div>
+                </div>
+
+                <div class="article-line">
+                    <div class="article-label">Article 12 — Record-Keeping</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill pass" style="width: 100%;"></div>
+                        </div>
+                        <div class="status-badge pass">PASS</div>
+                        <span class="note">← HMAC chain</span>
+                    </div>
+                </div>
+
+                <div class="article-line">
+                    <div class="article-label">Article 14 — Human Oversight</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill pass" style="width: 83%;"></div>
+                        </div>
+                        <div class="status-badge pass">PASS</div>
+                        <span class="note">← AgentIdentity</span>
+                    </div>
+                </div>
+
+                <div class="article-line">
+                    <div class="article-label">Article 15 — Security</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill warn" style="width: 67%;"></div>
+                        </div>
+                        <div class="status-badge warn">WARN</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="score-container">
+                <div class="score-value">Overall Score: 63%</div>
+                <div class="score-bar-container">
+                    <div class="overall-progress-bar">
+                        <div class="overall-progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin: 16px 0; text-align: center;">
+                <div class="summary-stats">
+                    <span class="stat-pass">12 Pass</span>
+                    <span style="color: #475569;">·</span>
+                    <span class="stat-warn">4 Warn</span>
+                    <span style="color: #475569;">·</span>
+                    <span class="stat-fail">0 Fail</span>
+                </div>
+            </div>
+
+            <div class="footer-lines">
+                <div class="footer-line"><span class="checkmark-footer">✓</span> Trust layer detected: air-trust v0.2.0</div>
+                <div class="footer-line"><span class="checkmark-footer">✓</span> Agent identity bound: fingerprint a3f2...9c01</div>
+                <div class="footer-line"><span class="checkmark-footer">✓</span> HMAC audit chain: tamper-evident <span class="checkmark-footer">✓</span></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

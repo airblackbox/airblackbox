@@ -40,3 +40,6 @@ model/*.gguf
 code_scanner.py
 engine.py
 github_replies.md
+
+# Training data (too large for GitHub)
+training/training_data_*.jsonl

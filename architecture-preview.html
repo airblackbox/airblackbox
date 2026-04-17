@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AIR Blackbox — Architecture</title>
+    <style>
+        body { background: #080b14; margin: 0; padding: 2rem; display: flex; justify-content: center; }
+        .mermaid { max-width: 100%; }
+    </style>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#fbbf24',
+                primaryTextColor: '#e6edf3',
+                primaryBorderColor: '#fbbf24',
+                lineColor: '#8b949e',
+                secondaryColor: '#161b22',
+                tertiaryColor: '#0d1117'
+            }
+        });
+    </script>
+</head>
+<body>
+<pre class="mermaid">
+graph TB
+    subgraph AGENTS["ANY AI SYSTEM"]
+        direction LR
+        LC["LangChain / LangGraph"]
+        CR["CrewAI"]
+        OA["OpenAI SDK"]
+        AN["Claude SDK"]
+        GK["Google ADK"]
+        RAG["RAG Pipelines"]
+        LOCAL["Local Models · Ollama · vLLM"]
+        CUSTOM["Custom Agents · raw Python"]
+    end
+
+    subgraph TRUST["AIR TRUST · pip install air-trust · ONE PACKAGE"]
+        direction TB
+        subgraph DETECT["Auto-Detection"]
+            AUTODETECT["Framework Auto-Detect"]
+        end
+        subgraph ADAPTERS["Adapters · activated automatically"]
+            direction LR
+            AD_CALLBACK["Callback Adapter · LangChain, Haystack"]
+            AD_DECORATOR["Decorator Adapter · CrewAI, custom"]
+            AD_PROXY["Proxy Adapter · OpenAI, Anthropic, Google"]
+            AD_OTEL["OTel Adapter · any instrumented system"]
+        end
+        AUTODETECT --> AD_CALLBACK
+        AUTODETECT --> AD_DECORATOR
+        AUTODETECT --> AD_PROXY
+        AUTODETECT --> AD_OTEL
+    end
+
+    LC --> AUTODETECT
+    CR --> AUTODETECT
+    OA --> AUTODETECT
+    AN --> AUTODETECT
+    GK --> AUTODETECT
+    RAG --> AUTODETECT
+    LOCAL --> AUTODETECT
+    CUSTOM --> AUTODETECT
+
+    subgraph CORE["CORE ENGINE · air-gate"]
+        direction TB
+        subgraph CAPTURE["Event Capture"]
+            WRAP["Universal Wrapper · traces all calls"]
+            INJ["Injection Detector · 20 patterns"]
+        end
+        subgraph SIGN["Cryptographic Signing"]
+            HMAC["HMAC-SHA256 Signing · local keys"]
+            CHAIN["Tamper-Evident Audit Chain"]
+        end
+        subgraph ENFORCE["Policy Enforcement"]
+            GATING["Tool Gating · allow/deny/alert"]
+            A2A["A2A Protocol · agent verification"]
+        end
+        WRAP --> HMAC
+        HMAC --> CHAIN
+        INJ --> GATING
+    end
+
+    AD_CALLBACK --> WRAP
+    AD_DECORATOR --> WRAP
+    AD_PROXY --> WRAP
+    AD_OTEL --> WRAP
+
+    subgraph SCAN["COMPLIANCE SCANNERS · air-blackbox"]
+        direction TB
+        subgraph STATIC["Static · 26 checks"]
+            direction LR
+            ART9["Art 9 Risk"]
+            ART10["Art 10 Data"]
+            ART11["Art 11 Docs"]
+        end
+        subgraph RUNTIME["Runtime · 13 checks"]
+            direction LR
+            ART12["Art 12 Records"]
+            ART14["Art 14 Oversight"]
+            ART15["Art 15 Accuracy"]
+        end
+        subgraph EXTRA["Additional"]
+            direction LR
+            GDPR["GDPR · 8 checks"]
+            BIAS["Bias · 6 checks"]
+            XWALK["Crosswalk · ISO + NIST"]
+        end
+    end
+
+    subgraph STORE["EVIDENCE LAYER · Your Infrastructure"]
+        direction TB
+        subgraph PRIMARY["Primary"]
+            direction LR
+            AIRJSON[".air.json HMAC chain"]
+            SQLITE["SQLite EventStore"]
+        end
+        subgraph OUTPUTS["Outputs"]
+            direction LR
+            BUNDLE["Signed Evidence Bundle"]
+            AIBOM["AI-BOM CycloneDX"]
+            REPORT["Compliance Reports"]
+            CARD["A2A Cards"]
+        end
+        subgraph OPTIONAL["Optional"]
+            direction LR
+            S3["S3 / MinIO"]
+            OTEL["OpenTelemetry"]
+            JAEGER["Jaeger"]
+        end
+    end
+
+    CHAIN --> AIRJSON
+    CHAIN --> SQLITE
+    SCAN --> REPORT
+    SCAN --> BUNDLE
+    A2A --> CARD
+    AIRJSON --> AIBOM
+    AIRJSON --> S3
+    SQLITE --> OTEL
+    OTEL --> JAEGER
+
+    subgraph UI["INTERFACES"]
+        direction TB
+        subgraph CLI_T["CLI"]
+            direction LR
+            CLI_SCAN["scan · 39 checks"]
+            CLI_INJ["scan-injection"]
+            CLI_EXPORT["evidence-export"]
+        end
+        subgraph CONTROLS["AIR Controls · :7420"]
+            direction LR
+            CLI_SERVE["HTTP API"]
+            TIMELINE["Timeline"]
+            KILLSW["Kill Switch"]
+            TOKENLIM["Token Limit"]
+        end
+        subgraph MCP_S["MCP Server · 14 tools"]
+            direction LR
+            MCP_SCAN["scan_code"]
+            MCP_RISK["classify_risk"]
+            MCP_INJ["check_injection"]
+            MCP_FIX["suggest_fix"]
+        end
+        CLI_SERVE --> TIMELINE
+        CLI_SERVE --> KILLSW
+        CLI_SERVE --> TOKENLIM
+    end
+
+    SQLITE --> CLI_SERVE
+    SCAN --> CLI_SCAN
+    INJ --> MCP_INJ
+    SCAN --> MCP_SCAN
+
+    subgraph INTEGRATE["INTEGRATIONS"]
+        direction TB
+        subgraph EDITORS["Editors"]
+            direction LR
+            CLAUDE_DESK["Claude Desktop"]
+            CURSOR["Cursor"]
+            CLAUDE_CODE["Claude Code"]
+        end
+        subgraph CICD["CI/CD"]
+            direction LR
+            PRECOMMIT["Pre-Commit Hooks"]
+            GHA["GitHub Action"]
+            CIPIPE["CI Runner"]
+        end
+    end
+
+    MCP_S --> CLAUDE_DESK
+    MCP_S --> CURSOR
+    MCP_S --> CLAUDE_CODE
+    SCAN --> PRECOMMIT
+    SCAN --> GHA
+
+    subgraph MODEL["AI ANALYSIS · Optional"]
+        direction LR
+        FINETUNED["air-compliance-model · LLaMA LoRA"]
+        OLLAMA["Ollama · local inference"]
+    end
+
+    FINETUNED --> OLLAMA
+    OLLAMA --> SCAN
+
+    subgraph DEPLOY["DEPLOYMENT"]
+        direction LR
+        PIP["pip install air-trust · one package"]
+        FULL["pip install air-blackbox · full suite"]
+        DOCKER["air-platform · Docker Compose"]
+        MANAGED["Pro · managed VPS $299/mo"]
+    end
+
+    classDef agentStyle fill:#1a1e2e,stroke:#58a6ff,stroke-width:2px,color:#e6edf3
+    classDef trustStyle fill:#1a2e1a,stroke:#3fb950,stroke-width:2px,color:#e6edf3
+    classDef coreStyle fill:#2e2a1a,stroke:#fbbf24,stroke-width:2px,color:#e6edf3
+    classDef scanStyle fill:#2e1a1a,stroke:#f85149,stroke-width:2px,color:#e6edf3
+    classDef storeStyle fill:#1a1e2e,stroke:#8b949e,stroke-width:2px,color:#e6edf3
+    classDef uiStyle fill:#1e1a2e,stroke:#a78bfa,stroke-width:2px,color:#e6edf3
+    classDef intStyle fill:#1a2e2e,stroke:#58a6ff,stroke-width:2px,color:#e6edf3
+    classDef modelStyle fill:#2e1a2e,stroke:#c864ff,stroke-width:2px,color:#e6edf3
+    classDef deployStyle fill:#161b22,stroke:#484f58,stroke-width:2px,color:#e6edf3
+
+    class LC,CR,OA,AN,GK,RAG,LOCAL,CUSTOM agentStyle
+    class AUTODETECT,AD_CALLBACK,AD_DECORATOR,AD_PROXY,AD_OTEL trustStyle
+    class WRAP,INJ,HMAC,CHAIN,GATING,A2A coreStyle
+    class ART9,ART10,ART11,ART12,ART14,ART15,GDPR,BIAS,XWALK scanStyle
+    class AIRJSON,SQLITE,S3,OTEL,JAEGER,BUNDLE,AIBOM,REPORT,CARD storeStyle
+    class CLI_SCAN,CLI_INJ,CLI_EXPORT,CLI_SERVE,TIMELINE,KILLSW,TOKENLIM,MCP_SCAN,MCP_RISK,MCP_INJ,MCP_FIX uiStyle
+    class CLAUDE_DESK,CURSOR,CLAUDE_CODE,PRECOMMIT,GHA,CIPIPE intStyle
+    class FINETUNED,OLLAMA modelStyle
+    class PIP,FULL,DOCKER,MANAGED deployStyle
+</pre>
+</body>
+</html>
