@@ -3,7 +3,7 @@
 **AI governance control plane — compliance, inventory, incident response, and audit for AI agents.**
 
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/airblackbox/gateway/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/airblackbox/airblackbox/blob/main/LICENSE)
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-ready-green)](https://airblackbox.ai)
 
 ## Install
@@ -62,6 +62,6 @@ trust.attach(your_langchain_agent)
 ## Links
 
 - **Website**: [airblackbox.ai](https://airblackbox.ai)
-- **Gateway**: [github.com/airblackbox/gateway](https://github.com/airblackbox/gateway)
-- **Docs**: [gateway/docs](https://github.com/airblackbox/gateway/tree/main/docs)
+- **Gateway**: [github.com/airblackbox/airblackbox](https://github.com/airblackbox/airblackbox)
+- **Docs**: [gateway/docs](https://github.com/airblackbox/airblackbox/tree/main/docs)
 - **License**: Apache-2.0

@@ -8,10 +8,10 @@ set -euo pipefail
 ## This script installs Docker, pulls the repo, and starts all services.
 ##
 ## Usage:
-##   ssh root@your-vps "bash <(curl -sL https://raw.githubusercontent.com/airblackbox/gateway/main/deploy-enterprise.sh)"
+##   ssh root@your-vps "bash <(curl -sL https://raw.githubusercontent.com/airblackbox/airblackbox/main/deploy-enterprise.sh)"
 ##
 ## Or clone and run locally:
-##   git clone https://github.com/airblackbox/gateway.git
+##   git clone https://github.com/airblackbox/airblackbox.git
 ##   cd gateway
 ##   bash deploy-enterprise.sh
 ##
@@ -41,7 +41,7 @@ fi
 # ── 2. Clone repo if not in gateway directory ─────────────────
 if [ ! -f "docker-compose.enterprise.yaml" ]; then
     echo "→ Cloning AIR Blackbox gateway..."
-    git clone https://github.com/airblackbox/gateway.git /opt/air-blackbox
+    git clone https://github.com/airblackbox/airblackbox.git /opt/air-blackbox
     cd /opt/air-blackbox
 else
     echo "→ Already in gateway directory."

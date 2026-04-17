@@ -1,7 +1,8 @@
-# Contributing to AIR Blackbox Gateway
+# Contributing to AIR Blackbox
 
-Thank you for your interest in contributing to AIR Blackbox! We welcome contributions from developers of all experience levels. This document provides guidance on how to contribute effectively.
+Thank you for your interest in contributing to AIR Blackbox! We welcome contributions from developers of all experience levels.
 
+<<<<<<< Updated upstream
 ## Welcome
 
 AIR Blackbox is building the standard for EU AI Act compliance scanning. Whether you are fixing a bug, adding a feature, improving documentation, or proposing new ideas, your contribution matters. We are committed to fostering an inclusive, welcoming community.
@@ -54,111 +55,152 @@ Clone the repository and install in development mode with all dependencies:
 ```bash
 git clone https://github.com/jasonjshotwell/air-blackbox.git
 cd air-blackbox
+=======
+## Quick Setup
+
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/gateway.git
+cd gateway
+
+# Install in dev mode with all framework extras
+>>>>>>> Stashed changes
 pip install -e ".[all]"
+
+# Verify
+air-blackbox --version        # Should print 1.10.0
+pytest tests/ -q              # Should pass 1,500+ tests
+ruff check sdk/air_blackbox/  # Should print "All checks passed!"
 ```
 
-This installs the package in editable mode with test, documentation, and development dependencies.
+## Development Workflow
 
-### Running Tests
+1. Create a branch: `git checkout -b feature/your-feature`
+2. Make your changes
+3. Run the quality checks (see below)
+4. Submit a pull request
+
+### Quality Checks (must pass before submitting)
 
 ```bash
-pytest
+# Lint (zero warnings required)
+ruff check sdk/air_blackbox/
+
+# Format check
+ruff format sdk/air_blackbox/ --check
+
+# Unit tests
+pytest tests/ --ignore=tests/integration -q
+
+# Integration tests (requires framework extras)
+pytest tests/integration/ -q
+
+# Coverage (must stay above 70%)
+pytest tests/ --ignore=tests/integration --cov=air_blackbox --cov-fail-under=70
 ```
 
-For verbose output:
+All of these run automatically in CI on every push and pull request.
 
-```bash
-pytest -v
+## Project Structure
+
+```
+gateway/
+  sdk/air_blackbox/          # The Python package (56 modules, ~13,000 LOC)
+    compliance/              # EU AI Act compliance engine (Articles 9-15)
+    trust/                   # Framework trust layers (LangChain, OpenAI, CrewAI, etc.)
+    a2a/                     # Agent-to-agent compliance protocol
+    attestation/             # ML-DSA-65 signing and attestation records
+    evidence/                # Cryptographic evidence bundles
+    aibom/                   # AI Bill of Materials + shadow AI detection
+    injection/               # Prompt injection detection
+    validate/                # Runtime validation engine
+    cli.py                   # The `air-blackbox` CLI (14 commands)
+  tests/                     # 1,500+ tests (74% coverage)
+    integration/             # Framework integration tests (LangChain, OpenAI, CrewAI)
+    conftest.py              # Shared fixtures
+  .github/workflows/         # CI: lint, test matrix (Python 3.10-3.12), coverage gate
+  pyproject.toml             # Package config, ruff config, coverage config
 ```
 
-To run a specific test file:
+## Code Style
 
-```bash
-pytest tests/test_compliance.py
-```
+We use **ruff** for both linting and formatting. The config lives in `pyproject.toml`:
 
-## Current Priorities for v1.7.0
+- Rules: `E`, `F`, `W`, `I` (errors, pyflakes, warnings, isort)
+- Line length: 120
+- Target: Python 3.10+
+- isort: `air_blackbox` as first-party
 
-We are actively working on the following areas and welcome contributions:
-
-1. Expanded GDPR patterns: Additional detection rules for consent, data minimization, and erasure workflows
-2. More injection patterns: Enhanced prompt injection detection with updated ML-backed pattern refinement
-3. NIST Cybersecurity Framework (CSF) mapping: Standards crosswalk documentation and compliance checks
-4. Documentation improvements: Enhanced API docs, integration guides, and compliance runbooks
-5. Trust layer for DSPy: Integration with the DSPy agent framework
-
-Please open an issue if you are interested in working on any of these areas.
-
-## Code Style and Standards
-
-### Python Version
-
-We require Python 3.10+. Use modern Python features and avoid legacy patterns.
+Do **not** use `black` or `isort` separately. Ruff handles both. Run `ruff format sdk/air_blackbox/` to auto-format.
 
 ### Type Hints
 
-All functions and methods must include type hints:
+All public functions and methods should include type hints:
 
 ```python
-def scan_code(filepath: str) -> ComplianceResult:
+def scan_code(filepath: str, framework: str = "langchain") -> ComplianceResult:
     """Scan a Python file for EU AI Act compliance issues."""
     ...
 ```
 
 ### Docstrings
 
-Use docstrings for all functions, classes, and modules. Follow Google-style docstrings:
+Use Google-style docstrings for all public functions, classes, and modules.
 
-```python
-def analyze_prompt(text: str, framework: str = "langchain") -> AnalysisReport:
-    """Analyze a prompt for injection patterns and compliance risks.
-    
-    Args:
-        text: The prompt text to analyze.
-        framework: The AI framework being used (langchain, crewai, etc.).
-    
-    Returns:
-        AnalysisReport: Findings including risk level and remediation guidance.
-    """
-    ...
+### Imports
+
+Always use `from air_blackbox...` for imports, never `from sdk.air_blackbox...`. The `sdk/` prefix is the package source directory, not part of the import path.
+
+## Testing
+
+### Writing Tests
+
+- Put unit tests in `tests/test_*.py`
+- Put integration tests (requiring real framework installs) in `tests/integration/`
+- Use `pytest.importorskip()` for optional framework dependencies
+- Use `tmp_path` for any file I/O
+- Use `unittest.mock` for network calls and external dependencies
+- Target: every new module should have a corresponding test file
+
+### Running Specific Tests
+
+```bash
+pytest tests/test_compliance.py -v          # One file
+pytest tests/ -k "test_pii"                 # By keyword
+pytest tests/integration/ -x --tb=short     # Integration, stop on first failure
 ```
 
-### Formatting
+## Current Priorities
 
-- Use 4-space indentation
-- Maximum line length: 100 characters
-- Run `black` and `isort` before committing
-- Use meaningful variable and function names
+We are actively working toward v1.11.0. Contributions are welcome in these areas:
 
-## Contributor License Agreement
+1. **Test coverage**: We're at 74%. Help us reach 80%+ by testing `cli.py`, `export/pdf_report.py`, or trust layer edge cases.
+2. **Documentation**: Integration guides, API reference improvements, and tutorials.
+3. **New framework trust layers**: DSPy, Semantic Kernel, or other emerging agent frameworks.
+4. **GDPR scanner patterns**: Additional detection rules for consent, data minimization, and erasure workflows.
+5. **Injection detection**: New prompt injection patterns and evasion techniques.
 
-By submitting a pull request, you agree to license your contribution under the same license as this project. If your contribution is substantial, we may ask you to sign a Contributor License Agreement (CLA) to clarify rights and obligations.
+Open an issue before starting major work so we can coordinate.
 
-The CLA ensures that:
+## Submitting a Pull Request
 
-1. You own or have the right to submit the contribution
-2. Your contribution does not infringe third-party intellectual property rights
-3. The project can use your contribution under its existing license
-4. Your contribution is original work
+1. Push your branch: `git push origin feature/your-feature`
+2. Open a PR against `main`
+3. Fill out the PR template
+4. Ensure CI passes (lint + tests + coverage gate)
+5. A maintainer will review within a few days
 
-## Code of Conduct
+### What makes a good PR
 
-We are committed to providing a welcoming and inclusive environment for all contributors and community members. Please see our [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for our community standards and expectations.
+- Focused: one feature or fix per PR
+- Tested: new code has tests, existing tests still pass
+- Linted: `ruff check` and `ruff format --check` pass
+- Documented: public APIs have docstrings, complex logic has comments
 
-All community members are expected to:
-
-- Treat each other with respect and professionalism
-- Welcome contributors of all backgrounds and experience levels
-- Give and receive constructive feedback gracefully
-- Focus on what is best for the community
-- Report conduct violations to the project maintainers
-
-## Questions or Need Help?
-
-If you have questions about contributing, please reach out:
+## Questions?
 
 - Email: jason.j.shotwell@gmail.com
-- Open a discussion in the GitHub Discussions tab
-- Check the README and documentation for additional resources
+- Open a [GitHub Discussion](https://github.com/airblackbox/airblackbox/discussions)
+- Check the [README](README.md) and [airblackbox.ai](https://airblackbox.ai) for docs
 
-Thank you for contributing to making AI compliance accessible and standardized across the industry.
+Thank you for helping make AI compliance accessible and standardized.

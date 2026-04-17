@@ -349,7 +349,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
          P("Verifies the HMAC-SHA256 audit chain integrity. If any record was tampered with after the scan, the chain breaks and this command reports it.")],
         [P("3"), P("air-blackbox discover"),
          P("Independently generates the AI-BOM (model inventory). Cross-check the models listed in the audit trail above against what your team knows is deployed.")],
-        [P("4"), P("github.com/airblackbox/gateway"),
+        [P("4"), P("github.com/airblackbox/airblackbox"),
          P("All scanner patterns are open source. Review sdk/air_blackbox/compliance/code_scanner.py to see exactly which regex patterns correspond to each check in this report.")],
     ]
     vfy_tbl = Table(vfy_rows, colWidths=[0.3*inch, 1.9*inch, 4.8*inch], repeatRows=1)
@@ -374,7 +374,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
         "tests in the scanner. Semantic Kernel results shared with Microsoft via issue #13657. "
         "LlamaIndex results validated against framework documentation. "
         "All pattern changes are traceable to git commits v1.2.2 (729433b) through v1.4.0 (476b157) "
-        "at github.com/airblackbox/gateway.",
+        "at github.com/airblackbox/airblackbox.",
         val_s
     ))
     story.append(Spacer(1, 14))
