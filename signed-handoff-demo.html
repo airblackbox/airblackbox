@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIR Trust — Signed Handoff Demo</title>
+<meta name="description" content="Interactive demo: Ed25519 signed handoffs between AI agents with tamper-evident audit chain verification.">
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --surface2: #16213e;
+    --border: #2a2a4a;
+    --text: #e0e0f0;
+    --dim: #6a6a8a;
+    --green: #4ade80;
+    --green-dim: #166534;
+    --red: #f87171;
+    --red-dim: #7f1d1d;
+    --yellow: #fbbf24;
+    --yellow-dim: #78350f;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --cyan: #22d3ee;
+    --agent-a: #818cf8;
+    --agent-b: #f472b6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  header {
+    text-align: center;
+    padding: 40px 0 30px;
+  }
+
+  header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  header h1 span { color: var(--green); }
+
+  header p {
+    color: var(--dim);
+    font-size: 14px;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* Agent cards */
+  .agents {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin: 30px 0;
+    position: relative;
+  }
+
+  .agent-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    width: 280px;
+    position: relative;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .agent-card.active {
+    box-shadow: 0 0 20px rgba(130, 140, 248, 0.15);
+  }
+
+  .agent-card.active-a { border-color: var(--agent-a); }
+  .agent-card.active-b { border-color: var(--agent-b); }
+
+  .agent-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .agent-a-color { color: var(--agent-a); }
+  .agent-b-color { color: var(--agent-b); }
+
+  .agent-role { color: var(--dim); font-size: 12px; margin-bottom: 12px; }
+
+  .agent-key {
+    font-size: 11px;
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  .key-label { color: var(--dim); }
+  .key-value { color: var(--cyan); }
+  .key-private { color: var(--yellow); }
+
+  /* Arrow between agents */
+  .handoff-arrow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  .handoff-arrow.visible { opacity: 1; }
+
+  .arrow-line {
+    width: 60px;
+    height: 2px;
+    background: var(--green);
+    position: relative;
+  }
+
+  .arrow-line::after {
+    content: '▶';
+    position: absolute;
+    right: -8px;
+    top: -8px;
+    color: var(--green);
+    font-size: 12px;
+  }
+
+  .arrow-line.reverse::after {
+    content: '◀';
+    left: -8px;
+    right: auto;
+  }
+
+  .arrow-label {
+    font-size: 10px;
+    color: var(--green);
+    white-space: nowrap;
+  }
+
+  /* Chain visualization */
+  .chain-section {
+    margin: 30px 0;
+  }
+
+  .section-label {
+    font-size: 12px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+
+  .chain-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    min-height: 120px;
+    position: relative;
+  }
+
+  .chain-records {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .chain-record {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+    min-width: 180px;
+    transition: all 0.3s;
+    animation: recordAppear 0.4s ease-out;
+    cursor: default;
+  }
+
+  @keyframes recordAppear {
+    from { opacity: 0; transform: translateY(10px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .chain-record.tampered {
+    border-color: var(--red) !important;
+    background: var(--red-dim) !important;
+    animation: tamperShake 0.5s ease-in-out;
+  }
+
+  @keyframes tamperShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    40% { transform: translateX(4px); }
+    60% { transform: translateX(-3px); }
+    80% { transform: translateX(3px); }
+  }
+
+  .record-type {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .record-type.request { color: var(--agent-a); }
+  .record-type.ack { color: var(--agent-b); }
+  .record-type.result { color: var(--agent-b); }
+  .record-type.session { color: var(--cyan); }
+
+  .record-detail {
+    color: var(--dim);
+    font-size: 10px;
+    line-height: 1.6;
+  }
+
+  .record-hash {
+    font-family: inherit;
+    color: var(--yellow);
+    font-size: 10px;
+    margin-top: 4px;
+  }
+
+  .record-sig {
+    color: var(--green);
+    font-size: 10px;
+  }
+
+  .chain-link {
+    display: flex;
+    align-items: center;
+    color: var(--dim);
+    font-size: 16px;
+    align-self: center;
+  }
+
+  /* Verification panel */
+  .verify-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    font-size: 13px;
+    line-height: 1.8;
+  }
+
+  .verify-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: lineAppear 0.3s ease-out;
+  }
+
+  @keyframes lineAppear {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .verify-pass { color: var(--green); }
+  .verify-fail { color: var(--red); }
+  .verify-warn { color: var(--yellow); }
+  .verify-info { color: var(--dim); }
+  .verify-header { color: var(--yellow); font-weight: 600; }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin: 24px 0;
+    flex-wrap: wrap;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+
+  .btn-primary {
+    background: var(--green);
+    color: var(--bg);
+    border-color: var(--green);
+  }
+
+  .btn-primary:hover { background: #5eead4; }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border-color: var(--red);
+  }
+
+  .btn-danger:hover { background: var(--red-dim); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .btn-secondary:hover { background: var(--surface2); }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+
+  /* Step indicator */
+  .steps {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin: 20px 0 10px;
+  }
+
+  .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+
+  .step-dot.active { background: var(--green); }
+  .step-dot.done { background: var(--green-dim); }
+
+  /* Narrative text */
+  .narrative {
+    text-align: center;
+    color: var(--text);
+    font-size: 14px;
+    margin: 16px 0;
+    min-height: 44px;
+    line-height: 1.6;
+  }
+
+  .narrative strong { color: var(--green); font-weight: 600; }
+  .narrative em { color: var(--yellow); font-style: normal; }
+  .narrative .bad { color: var(--red); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 30px 0;
+    color: var(--dim);
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  footer a {
+    color: var(--blue);
+    text-decoration: none;
+  }
+
+  footer a:hover { text-decoration: underline; }
+
+  .install-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 20px;
+    display: inline-block;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+
+  .install-box code {
+    color: var(--green);
+  }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .agents { flex-direction: column; align-items: center; gap: 16px; }
+    .handoff-arrow { display: none; }
+    .agent-card { width: 100%; max-width: 320px; }
+    .chain-records { flex-direction: column; }
+    .chain-link { display: none; }
+    header h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>air-trust <span>signed handoffs</span></h1>
+    <p>Two AI agents. One task. Cryptographic proof of every step.<br>
+    Click through to see the Ed25519 handoff protocol in action — then try to tamper with it.</p>
+  </header>
+
+  <div class="steps" id="steps"></div>
+
+  <div class="narrative" id="narrative">
+    Press <strong>Start Demo</strong> to begin.
+  </div>
+
+  <div class="agents" id="agents-container">
+    <div class="agent-card" id="agent-a">
+      <div class="agent-name agent-a-color">research-bot</div>
+      <div class="agent-role">Agent A — Researcher</div>
+      <div class="agent-key" id="key-a" style="display:none">
+        <span class="key-label">pub:</span> <span class="key-value" id="pub-a"></span><br>
+        <span class="key-label">priv:</span> <span class="key-private">~/.air-trust/keys/5a3a.key</span>
+      </div>
+    </div>
+
+    <div class="handoff-arrow" id="arrow">
+      <div class="arrow-label" id="arrow-label"></div>
+      <div class="arrow-line" id="arrow-line"></div>
+    </div>
+
+    <div class="agent-card" id="agent-b">
+      <div class="agent-name agent-b-color">writer-bot</div>
+      <div class="agent-role">Agent B — Writer</div>
+      <div class="agent-key" id="key-b" style="display:none">
+        <span class="key-label">pub:</span> <span class="key-value" id="pub-b"></span><br>
+        <span class="key-label">priv:</span> <span class="key-private">~/.air-trust/keys/b72e.key</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chain-section">
+    <div class="section-label">HMAC-SHA256 Audit Chain</div>
+    <div class="chain-container">
+      <div class="chain-records" id="chain"></div>
+    </div>
+  </div>
+
+  <div id="verify-container"></div>
+
+  <div class="controls">
+    <button class="btn-primary" id="btn-next" onclick="nextStep()">Start Demo</button>
+    <button class="btn-danger" id="btn-tamper" onclick="tamperChain()" disabled>Tamper with Chain</button>
+    <button class="btn-secondary" id="btn-reset" onclick="resetDemo()">Reset</button>
+  </div>
+
+  <footer>
+    <div class="install-box"><code>pip install air-trust[handoffs]</code></div>
+    <br>
+    <a href="https://github.com/airblackbox/air-trust">GitHub</a> ·
+    <a href="https://pypi.org/project/air-trust/">PyPI</a> ·
+    <a href="https://airblackbox.ai">airblackbox.ai</a>
+    <br><br>
+    air-trust v0.6.1 · Spec v1.2 · Apache-2.0
+  </footer>
+</div>
+
+<script>
+// Simulated cryptographic values
+const KEYS = {
+  a: { pub: 'ed25519:3f8a91c2d4e5b6...', priv: '5a3a4caf651ae75d' },
+  b: { pub: 'ed25519:7b2e91df08c4a3...', priv: 'b72e91df08c4a3e1' }
+};
+
+function randomHex(n) {
+  let h = '';
+  for (let i = 0; i < n; i++) h += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+  return h;
+}
+
+const HASHES = Array.from({length: 8}, () => randomHex(16));
+const SIGS = Array.from({length: 6}, () => 'ed25519:' + randomHex(24) + '...');
+const NONCES = Array.from({length: 3}, () => randomHex(16));
+const INTERACTION_ID = randomHex(8);
+const PAYLOAD_HASH = 'sha256:' + randomHex(16) + '...';
+const RESULT_HASH = 'sha256:' + randomHex(16) + '...';
+
+let step = 0;
+const TOTAL_STEPS = 9;
+let chainRecords = [];
+let tampered = false;
+
+const STEPS = [
+  // Step 1: Generate keypairs
+  {
+    narrative: '<strong>Step 1:</strong> Each agent generates an Ed25519 keypair. Private keys stay local (0600 permissions). Public keys are shared.',
+    action() {
+      document.getElementById('key-a').style.display = 'block';
+      document.getElementById('key-b').style.display = 'block';
+      document.getElementById('pub-a').textContent = KEYS.a.pub;
+      document.getElementById('pub-b').textContent = KEYS.b.pub;
+      document.getElementById('agent-a').classList.add('active', 'active-a');
+      document.getElementById('agent-b').classList.add('active', 'active-b');
+    }
+  },
+  // Step 2: Session start
+  {
+    narrative: '<strong>Step 2:</strong> A session begins. Every event gets a sequence number for <em>completeness tracking</em> — if any record is dropped, the verifier catches it.',
+    action() {
+      addRecord('session_start', 'session', 'Session: research-to-write', HASHES[0], null, null);
+    }
+  },
+  // Step 3: Handoff request
+  {
+    narrative: '<strong>Step 3:</strong> Agent A writes a <em>handoff_request</em> — "Here\'s the task, here\'s the payload hash, and here\'s my Ed25519 signature proving I sent it."',
+    action() {
+      showArrow('→ handoff_request', false);
+      document.getElementById('agent-a').classList.add('active', 'active-a');
+      addRecord('handoff_request', 'request',
+        `interaction: ${INTERACTION_ID}\ncounterparty: ${KEYS.b.priv.slice(0,8)}...\npayload: ${PAYLOAD_HASH}\nnonce: ${NONCES[0]}`,
+        HASHES[1], SIGS[0], 'research-bot');
+    }
+  },
+  // Step 4: Handoff ack
+  {
+    narrative: '<strong>Step 4:</strong> Agent B writes a <em>handoff_ack</em> — "I received the task, I accept it. Here\'s my signature and the same payload hash proving I got the right data."',
+    action() {
+      showArrow('← handoff_ack', true);
+      document.getElementById('agent-a').classList.remove('active', 'active-a');
+      document.getElementById('agent-b').classList.add('active', 'active-b');
+      addRecord('handoff_ack', 'ack',
+        `interaction: ${INTERACTION_ID}\ncounterparty: ${KEYS.a.priv.slice(0,8)}...\npayload: ${PAYLOAD_HASH}\nnonce: ${NONCES[1]}`,
+        HASHES[2], SIGS[1], 'writer-bot');
+    }
+  },
+  // Step 5: Agent B does work
+  {
+    narrative: '<strong>Step 5:</strong> Agent B does its work — writing, editing, processing. Regular events are recorded in the chain with session sequence numbers.',
+    action() {
+      hideArrow();
+      addRecord('llm_call', 'session', 'model: gpt-4o\ntokens: 2,847\nstatus: success', HASHES[3], null, null);
+      setTimeout(() => {
+        addRecord('checkpoint', 'session', 'Draft complete\nrisk_level: low', HASHES[4], null, null);
+      }, 300);
+    }
+  },
+  // Step 6: Handoff result
+  {
+    narrative: '<strong>Step 6:</strong> Agent B writes a <em>handoff_result</em> — "Here\'s my output hash. My signature proves I produced this result, and it\'s linked to the original request."',
+    action() {
+      showArrow('← handoff_result', true);
+      addRecord('handoff_result', 'result',
+        `interaction: ${INTERACTION_ID}\ncounterparty: ${KEYS.a.priv.slice(0,8)}...\npayload: ${RESULT_HASH}\nnonce: ${NONCES[2]}`,
+        HASHES[5], SIGS[2], 'writer-bot');
+    }
+  },
+  // Step 7: Session end
+  {
+    narrative: '<strong>Step 7:</strong> Session ends. The chain now has 7 records — each HMAC-linked to the previous one, handoffs Ed25519-signed by the acting agent.',
+    action() {
+      hideArrow();
+      document.getElementById('agent-a').classList.remove('active', 'active-a');
+      document.getElementById('agent-b').classList.remove('active', 'active-b');
+      addRecord('session_end', 'session', 'duration: 4,230ms\nevents: 7\nstatus: success', HASHES[6], null, null);
+    }
+  },
+  // Step 8: Verify
+  {
+    narrative: '<strong>Step 8:</strong> Run <em>python3 -m air_trust verify</em>. The verifier replays the HMAC chain, checks session sequences, and validates every Ed25519 signature.',
+    action() {
+      showVerification(false);
+      document.getElementById('btn-tamper').disabled = false;
+    }
+  },
+  // Step 9: Done
+  {
+    narrative: 'That\'s the protocol. <strong>Three types of proof in one chain:</strong> integrity (HMAC), completeness (sequences), identity (Ed25519). Now try the <span class="bad">Tamper</span> button.',
+    action() {
+      document.getElementById('btn-next').disabled = true;
+    }
+  }
+];
+
+function updateStepDots() {
+  const container = document.getElementById('steps');
+  container.innerHTML = '';
+  for (let i = 0; i < TOTAL_STEPS; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'step-dot';
+    if (i < step) dot.classList.add('done');
+    if (i === step) dot.classList.add('active');
+    container.appendChild(dot);
+  }
+}
+
+function nextStep() {
+  if (step >= TOTAL_STEPS) return;
+  const s = STEPS[step];
+  document.getElementById('narrative').innerHTML = s.narrative;
+  s.action();
+  step++;
+  updateStepDots();
+
+  const btn = document.getElementById('btn-next');
+  if (step >= TOTAL_STEPS) {
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Next Step →';
+  }
+}
+
+function addRecord(type, cssClass, detail, hash, sig, signer) {
+  const chain = document.getElementById('chain');
+
+  if (chainRecords.length > 0) {
+    const link = document.createElement('div');
+    link.className = 'chain-link';
+    link.textContent = '→';
+    chain.appendChild(link);
+  }
+
+  const record = document.createElement('div');
+  record.className = 'chain-record';
+  record.dataset.index = chainRecords.length;
+
+  let html = `<div class="record-type ${cssClass}">${type}</div>`;
+  html += `<div class="record-detail">${detail.replace(/\n/g, '<br>')}</div>`;
+  html += `<div class="record-hash">hmac: ${hash}...</div>`;
+  if (sig) {
+    html += `<div class="record-sig">sig: ${sig}<br>signer: ${signer}</div>`;
+  }
+
+  record.innerHTML = html;
+  chain.appendChild(record);
+
+  chainRecords.push({ type, detail, hash, sig, signer, element: record });
+
+  // Scroll to new record
+  record.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
+}
+
+function showArrow(label, reverse) {
+  const arrow = document.getElementById('arrow');
+  const line = document.getElementById('arrow-line');
+  const lbl = document.getElementById('arrow-label');
+  arrow.classList.add('visible');
+  lbl.textContent = label;
+  if (reverse) {
+    line.classList.add('reverse');
+  } else {
+    line.classList.remove('reverse');
+  }
+}
+
+function hideArrow() {
+  document.getElementById('arrow').classList.remove('visible');
+}
+
+function showVerification(isTampered) {
+  const container = document.getElementById('verify-container');
+  container.innerHTML = '';
+
+  const panel = document.createElement('div');
+  panel.className = 'verify-panel';
+
+  const lines = [];
+  lines.push({ cls: 'verify-header', text: '══════════════════════════════════════════' });
+  lines.push({ cls: 'verify-header', text: '  AIR Trust — Chain Verification (v1.2)' });
+  lines.push({ cls: 'verify-header', text: '══════════════════════════════════════════' });
+  lines.push({ cls: 'verify-info', text: '' });
+  lines.push({ cls: 'verify-info', text: `Database: ~/.air-trust/events.db` });
+  lines.push({ cls: 'verify-info', text: `Records:  7` });
+  lines.push({ cls: 'verify-info', text: '' });
+
+  if (isTampered) {
+    lines.push({ cls: 'verify-fail', text: '✗ FAIL: Integrity — chain is broken' });
+    lines.push({ cls: 'verify-fail', text: '  Tampered at record index: 3' });
+  } else {
+    lines.push({ cls: 'verify-pass', text: '✓ PASS: Integrity — chain is intact (HMAC-SHA256)' });
+    lines.push({ cls: 'verify-info', text: '' });
+    lines.push({ cls: 'verify-info', text: '  Sessions checked:    1' });
+    lines.push({ cls: 'verify-info', text: '  Sessions complete:   1' });
+    lines.push({ cls: 'verify-info', text: '  Sessions incomplete: 0' });
+    lines.push({ cls: 'verify-info', text: '' });
+    lines.push({ cls: 'verify-pass', text: '✓ PASS: Completeness — all sessions are complete' });
+    lines.push({ cls: 'verify-info', text: '' });
+    lines.push({ cls: 'verify-info', text: '  Handoffs checked:    1' });
+    lines.push({ cls: 'verify-info', text: '  Handoffs complete:   1' });
+    lines.push({ cls: 'verify-info', text: '  Handoffs incomplete: 0' });
+    lines.push({ cls: 'verify-info', text: '' });
+    lines.push({ cls: 'verify-pass', text: '✓ PASS: Handoffs — all handoffs verified (Ed25519)' });
+  }
+
+  // Animate lines appearing
+  lines.forEach((line, i) => {
+    setTimeout(() => {
+      const div = document.createElement('div');
+      div.className = `verify-line ${line.cls}`;
+      div.textContent = line.text || '\u00A0';
+      panel.appendChild(div);
+      panel.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, i * 80);
+  });
+
+  container.appendChild(panel);
+}
+
+function tamperChain() {
+  if (tampered) return;
+  tampered = true;
+
+  document.getElementById('btn-tamper').disabled = true;
+  document.getElementById('narrative').innerHTML = '<span class="bad">An attacker modifies the handoff_ack record</span> — changing the payload hash to cover up that they swapped the data Agent B received. The HMAC chain <span class="bad">instantly detects the tampering</span>.';
+
+  // Find the ack record (index 3) and visually tamper it
+  const ackRecord = chainRecords[3];
+  if (ackRecord && ackRecord.element) {
+    ackRecord.element.classList.add('tampered');
+    // Update the display to show tampered content
+    const detail = ackRecord.element.querySelector('.record-detail');
+    if (detail) {
+      detail.innerHTML = `interaction: ${INTERACTION_ID}<br>counterparty: ${KEYS.a.priv.slice(0,8)}...<br><span style="color:var(--red);text-decoration:line-through">payload: ${PAYLOAD_HASH}</span><br><span style="color:var(--red);font-weight:bold">payload: sha256:TAMPERED...</span><br>nonce: ${NONCES[1]}`;
+    }
+  }
+
+  // Re-run verification after a beat
+  setTimeout(() => {
+    showVerification(true);
+  }, 800);
+
+  // Update step
+  step = TOTAL_STEPS;
+  updateStepDots();
+  document.getElementById('btn-next').disabled = true;
+}
+
+function resetDemo() {
+  step = 0;
+  tampered = false;
+  chainRecords = [];
+
+  document.getElementById('chain').innerHTML = '';
+  document.getElementById('verify-container').innerHTML = '';
+  document.getElementById('narrative').innerHTML = 'Press <strong>Start Demo</strong> to begin.';
+  document.getElementById('btn-next').disabled = false;
+  document.getElementById('btn-next').textContent = 'Start Demo';
+  document.getElementById('btn-tamper').disabled = true;
+
+  document.getElementById('key-a').style.display = 'none';
+  document.getElementById('key-b').style.display = 'none';
+  document.getElementById('agent-a').classList.remove('active', 'active-a');
+  document.getElementById('agent-b').classList.remove('active', 'active-b');
+
+  hideArrow();
+  updateStepDots();
+}
+
+// Init
+updateStepDots();
+</script>
+
+</body>
+</html>

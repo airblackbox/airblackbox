@@ -162,7 +162,7 @@ pip install air-compliance && air-compliance scan .
 
 No configuration. No API keys. No account. Runs locally.
 
-- **GitHub**: [github.com/airblackbox/gateway](https://github.com/airblackbox/gateway)
+- **GitHub**: [github.com/airblackbox/airblackbox](https://github.com/airblackbox/airblackbox)
 - **Website**: [airblackbox.ai](https://airblackbox.ai)
 - **CI/CD Integration**: [airblackbox.ai/ci-cd](https://airblackbox.ai/ci-cd)
 - **Demo**: [airblackbox.ai/demo](https://airblackbox.ai/demo)

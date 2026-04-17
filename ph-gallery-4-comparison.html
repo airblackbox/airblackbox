@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why AIR Blackbox? - Product Hunt Gallery</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1270px;
+            height: 760px;
+            background-color: #0a0a0f;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 40px;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1190px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        .title {
+            font-size: 48px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .table-wrapper {
+            width: 100%;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(251, 191, 36, 0.15);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #1a1a23;
+        }
+
+        th {
+            background-color: #1a1a23;
+            padding: 16px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #2d2d3d;
+        }
+
+        th:first-child {
+            padding-left: 20px;
+        }
+
+        th:last-child {
+            padding-right: 20px;
+        }
+
+        /* AIR Blackbox column header styling */
+        th:nth-child(2) {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.05) 100%);
+            color: #fbbf24;
+            border-left: 3px solid #fbbf24;
+            border-right: 3px solid #fbbf24;
+            box-shadow: inset 0 0 20px rgba(251, 191, 36, 0.1);
+        }
+
+        td {
+            padding: 14px 12px;
+            font-size: 14px;
+            border-bottom: 1px solid #2d2d3d;
+            color: white;
+        }
+
+        td:first-child {
+            padding-left: 20px;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+
+        td:last-child {
+            padding-right: 20px;
+        }
+
+        /* AIR Blackbox column data styling */
+        td:nth-child(2) {
+            background-color: rgba(251, 191, 36, 0.08);
+            border-left: 3px solid rgba(251, 191, 36, 0.3);
+            border-right: 3px solid rgba(251, 191, 36, 0.3);
+            font-weight: 600;
+            color: #fbbf24;
+        }
+
+        /* Alternating row backgrounds */
+        tbody tr:nth-child(odd) {
+            background-color: transparent;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: rgba(45, 45, 61, 0.4);
+        }
+
+        tbody tr:nth-child(even) td:nth-child(2) {
+            background-color: rgba(251, 191, 36, 0.1);
+        }
+
+        tbody tr:hover {
+            background-color: rgba(45, 45, 61, 0.6);
+        }
+
+        tbody tr:hover td:nth-child(2) {
+            background-color: rgba(251, 191, 36, 0.12);
+        }
+
+        /* Check mark styling */
+        .check {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            color: #22c55e;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        /* X mark styling */
+        .cross {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            color: #ef4444;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        /* Dollar sign styling */
+        .paid {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            color: #94a3b8;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        /* N/A styling */
+        .na {
+            color: #64748b;
+            font-style: italic;
+            font-size: 13px;
+        }
+
+        /* Footer note */
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">Why AIR Blackbox?</h1>
+            <p class="subtitle">The most comprehensive EU AI Act compliance scanner for agents and LLM systems</p>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>AIR Blackbox</th>
+                        <th>Deepchecks</th>
+                        <th>AgentLair</th>
+                        <th>Arthur AI</th>
+                        <th>Manual Audit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Open Source (Apache 2.0)</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="na">N/A</span></td>
+                    </tr>
+                    <tr>
+                        <td>Runs Locally</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Zero Dependencies</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="na">N/A</span></td>
+                    </tr>
+                    <tr>
+                        <td>HMAC Audit Chain</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                    </tr>
+                    <tr>
+                        <td>Agent Identity (Art. 14)</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="paid">$</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                    </tr>
+                    <tr>
+                        <td>Prompt Injection Scan</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                    </tr>
+                    <tr>
+                        <td>PII Detection</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                    </tr>
+                    <tr>
+                        <td>Framework Trust Layers</td>
+                        <td>5+</td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                    </tr>
+                    <tr>
+                        <td>EU AI Act Checks</td>
+                        <td>39</td>
+                        <td>Partial</td>
+                        <td><span class="cross">✗</span></td>
+                        <td>Partial</td>
+                        <td>Manual</td>
+                    </tr>
+                    <tr>
+                        <td>No-Code Scanner</td>
+                        <td><span class="check">✓</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                        <td><span class="cross">✗</span></td>
+                    </tr>
+                    <tr>
+                        <td>Price</td>
+                        <td>Free</td>
+                        <td>Free tier</td>
+                        <td><span class="paid">$$</span></td>
+                        <td><span class="paid">$$$</span></td>
+                        <td><span class="paid">$$$$</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>AIR Blackbox is the only open-source, locally-run EU AI Act compliance scanner with zero dependencies.</p>
+        </div>
+    </div>
+</body>
+</html>

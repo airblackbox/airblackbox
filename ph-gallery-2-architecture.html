@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIR Trust Layer Architecture - Product Hunt</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1270px;
+            height: 760px;
+            background: #0a0a0f;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+            overflow: hidden;
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 30px;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+
+        .architecture-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 30px;
+            flex: 1;
+            margin-bottom: 30px;
+        }
+
+        .box {
+            background: rgba(30, 30, 40, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            padding: 24px;
+            flex: 0 0 calc(33.333% - 20px);
+            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .box:hover {
+            border-color: rgba(148, 163, 184, 0.4);
+            background: rgba(30, 30, 40, 1);
+        }
+
+        .box-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 16px;
+            letter-spacing: -0.3px;
+        }
+
+        .box-items {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .box-item {
+            font-size: 13px;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .box-item-icon {
+            width: 6px;
+            height: 6px;
+            background: #94a3b8;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* Trust Layer - Center Box */
+        .trust-layer {
+            position: relative;
+            background: rgba(15, 15, 25, 0.95);
+            border: 2px solid #fbbf24;
+            box-shadow: 0 0 40px rgba(251, 191, 36, 0.15), inset 0 0 40px rgba(251, 191, 36, 0.05);
+            flex: 0 0 calc(33.333% - 20px);
+            min-height: 280px;
+            padding: 28px;
+        }
+
+        .trust-layer::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.05));
+            border-radius: 12px;
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        .trust-layer-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fbbf24;
+            margin-bottom: 18px;
+            letter-spacing: -0.3px;
+        }
+
+        .trust-layer-items {
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+        }
+
+        .trust-item {
+            font-size: 13px;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 0;
+        }
+
+        .trust-check {
+            width: 5px;
+            height: 5px;
+            background: #22c55e;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            color: #22c55e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        /* Arrow Container */
+        .arrow-container {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            position: relative;
+            height: 60px;
+            flex: 1;
+            max-width: 120px;
+        }
+
+        .arrow {
+            font-size: 36px;
+            color: #94a3b8;
+            flex: 1;
+            text-align: center;
+            font-weight: 300;
+            letter-spacing: -4px;
+        }
+
+        .arrow-label {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: #94a3b8;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            font-size: 15px;
+            color: #e2e8f0;
+            font-weight: 500;
+            letter-spacing: -0.2px;
+        }
+
+        .footer-highlight {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        /* Responsive tweaks */
+        .flow-wrapper {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 0;
+        }
+
+        .flow-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .flow-item-box {
+            flex: 0 0 auto;
+            width: 28%;
+        }
+
+        .flow-arrow {
+            flex: 0 0 auto;
+            width: 8%;
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">How It Works: Trust Layer Architecture</div>
+
+    <div class="architecture-container">
+        <div class="flow-wrapper">
+            <!-- Left Box: Your Code -->
+            <div class="flow-item-box">
+                <div class="box">
+                    <div class="box-title">Your Code</div>
+                    <div class="box-items">
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            LangChain
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            CrewAI
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            OpenAI
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            Anthropic
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            Google ADK
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Arrow -->
+            <div class="flow-arrow">
+                <div class="arrow-container">
+                    <div class="arrow">→</div>
+                    <div class="arrow-label">intercept</div>
+                </div>
+            </div>
+
+            <!-- Middle: Trust Layer -->
+            <div class="flow-item-box">
+                <div class="trust-layer">
+                    <div class="trust-layer-title">AIR Trust Layer</div>
+                    <div class="trust-layer-items">
+                        <div class="trust-item">
+                            <div class="trust-check"></div>
+                            PII Scan
+                        </div>
+                        <div class="trust-item">
+                            <div class="trust-check"></div>
+                            Injection Detection
+                        </div>
+                        <div class="trust-item">
+                            <div class="trust-check"></div>
+                            HMAC Audit Chain
+                        </div>
+                        <div class="trust-item">
+                            <div class="trust-check"></div>
+                            Agent Identity
+                            <span class="badge">NEW</span>
+                        </div>
+                        <div class="trust-item">
+                            <div class="trust-check"></div>
+                            Compliance Check
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Arrow -->
+            <div class="flow-arrow">
+                <div class="arrow-container">
+                    <div class="arrow">→</div>
+                    <div class="arrow-label">secured</div>
+                </div>
+            </div>
+
+            <!-- Right Box: LLM Provider -->
+            <div class="flow-item-box">
+                <div class="box">
+                    <div class="box-title">LLM Provider</div>
+                    <div class="box-items">
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            OpenAI
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            Anthropic
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            Google Gemini
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            Groq
+                        </div>
+                        <div class="box-item">
+                            <div class="box-item-icon"></div>
+                            Any LLM
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span class="footer-highlight">One pip install.</span> Zero dependencies. Runs locally.
+    </div>
+</body>
+</html>

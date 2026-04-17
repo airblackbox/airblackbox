@@ -35,7 +35,7 @@ air-blackbox demo
 
 No Docker. No config. No API keys needed for the demo.
 
-GitHub: https://github.com/airblackbox/gateway
+GitHub: https://github.com/airblackbox/airblackbox
 PyPI: https://pypi.org/project/air-blackbox/
 
 #AIGovernance #EUAIAct #OpenSource #Compliance #LangChain #Python #AIBOM
@@ -106,7 +106,7 @@ air-blackbox discover
 
 No Docker required for the demo. Zero config. 30 seconds to see compliance results.
 
-GitHub: https://github.com/airblackbox/gateway  
+GitHub: https://github.com/airblackbox/airblackbox  
 PyPI: https://pypi.org/project/air-blackbox/
 
 Apache 2.0. Built on OpenTelemetry. Feedback welcome.
@@ -184,7 +184,7 @@ air-blackbox demo
 
 No Docker. No config. 30 seconds.
 
-GitHub: github.com/airblackbox/gateway
+GitHub: github.com/airblackbox/airblackbox
 PyPI: pypi.org/project/air-blackbox/
 
 Open source. Apache 2.0. Feedback welcome.
@@ -212,6 +212,6 @@ It's a reverse proxy + Python SDK. Route your AI traffic through it and everythi
 
 Not observability (that's Langfuse/Datadog). This is accountability — tamper-proof records + compliance mapping + evidence export.
 
-Open source, Apache 2.0: https://github.com/airblackbox/gateway
+Open source, Apache 2.0: https://github.com/airblackbox/airblackbox
 
 Looking for feedback, especially from teams building agents that sell into EU markets. What compliance checks would you add?
