@@ -1,0 +1,37 @@
+# Covenant — Browser Automation Agent
+# For AI agents that interact with web pages on behalf of users.
+# Maps to EU AI Act Articles 12 (record-keeping) and 14 (human oversight).
+
+agent: browser-agent
+version: "1.0"
+description: "Policy for a browser automation agent (e.g. Browser Use)"
+
+rules:
+  # Navigation — permitted (low risk)
+  - permit: navigate
+  - permit: scroll
+  - permit: read_page
+  - permit: extract_text
+  - permit: screenshot
+
+  # Interaction — permitted with logging
+  - permit: click
+  - permit: select_option
+
+  # Form input — requires approval (PII risk)
+  - require_approval: fill_form
+  - require_approval: input_text
+
+  # Sensitive actions — always require human approval
+  - require_approval: submit_form
+  - require_approval: purchase
+    when: "amount > 0"
+  - require_approval: login
+  - require_approval: change_password
+  - require_approval: delete_account
+
+  # Dangerous actions — always blocked
+  - forbid: download_executable
+  - forbid: install_extension
+  - forbid: grant_permissions
+  - forbid: access_local_files
