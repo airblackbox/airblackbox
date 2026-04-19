@@ -1,0 +1,180 @@
+name: 'AIR Blackbox Compliance Scanner'
+description: 'Scan your Python AI project for EU AI Act compliance. 22 checks across 6 articles. No API key required.'
+branding:
+  icon: 'shield'
+  color: 'yellow'
+
+inputs:
+  path:
+    description: 'Path to the project directory to scan'
+    required: false
+    default: '.'
+  strict:
+    description: 'Fail the workflow if any check fails'
+    required: false
+    default: 'false'
+  badge:
+    description: 'Generate a compliance badge'
+    required: false
+    default: 'true'
+  format:
+    description: 'Output format: summary, json, verbose'
+    required: false
+    default: 'summary'
+
+outputs:
+  score:
+    description: 'Compliance coverage percentage'
+    value: ${{ steps.scan.outputs.score }}
+  status:
+    description: 'Overall status: pass, warn, or fail'
+    value: ${{ steps.scan.outputs.status }}
+  badge_url:
+    description: 'Shields.io badge URL for README'
+    value: ${{ steps.scan.outputs.badge_url }}
+  total_checks:
+    description: 'Total number of checks run'
+    value: ${{ steps.scan.outputs.total_checks }}
+  passed:
+    description: 'Number of passed checks'
+    value: ${{ steps.scan.outputs.passed }}
+  warned:
+    description: 'Number of warned checks'
+    value: ${{ steps.scan.outputs.warned }}
+  failed:
+    description: 'Number of failed checks'
+    value: ${{ steps.scan.outputs.failed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install air-compliance
+      shell: bash
+      run: pip install air-compliance --quiet
+
+    - name: Run compliance scan
+      id: scan
+      shell: bash
+      run: |
+        # Create temp file for JSON output
+        TEMP_JSON=$(mktemp)
+        trap "rm -f $TEMP_JSON" EXIT
+        
+        # Run scan and save JSON to temp file
+        air-compliance "${{ inputs.path }}" --json > "$TEMP_JSON" 2>&1 || true
+        
+        # Parse results with Python
+        python3 << 'PYEOF'
+        import json
+        import os
+        import sys
+        
+        temp_file = os.environ.get('TEMP_JSON', '/tmp/compliance_result.json')
+        
+        try:
+            with open(temp_file, 'r') as f:
+                result = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error reading JSON: {e}")
+            # Set safe defaults
+            result = {
+                'coverage_pct': 0,
+                'overall_status': 'unknown',
+                'summary': {'total': 0, 'pass': 0, 'warn': 0, 'fail': 0},
+                'frameworks_detected': [],
+                'articles': []
+            }
+        
+        score = result.get('coverage_pct', 0)
+        summary = result.get('summary', {})
+        total = summary.get('total', 0)
+        passed = summary.get('pass', 0)
+        warned = summary.get('warn', 0)
+        failed = summary.get('fail', 0)
+        status = result.get('overall_status', 'unknown')
+        frameworks = ', '.join(result.get('frameworks_detected', []))
+        
+        # Badge color based on score
+        if score >= 90:
+            color = 'brightgreen'
+        elif score >= 70:
+            color = 'yellow'
+        elif score >= 50:
+            color = 'orange'
+        else:
+            color = 'red'
+        
+        # Build badge URL (shields.io dynamic badge)
+        badge_label = 'EU%20AI%20Act'
+        badge_message = f'{score:.0f}%25%20compliant'
+        badge_url = f'https://img.shields.io/badge/{badge_label}-{badge_message}-{color}?style=for-the-badge'
+        
+        # Write outputs to GITHUB_OUTPUT
+        output_file = os.environ.get('GITHUB_OUTPUT', '')
+        if output_file:
+            with open(output_file, 'a') as f:
+                f.write(f'score={score:.1f}\n')
+                f.write(f'status={status}\n')
+                f.write(f'badge_url={badge_url}\n')
+                f.write(f'total_checks={total}\n')
+                f.write(f'passed={passed}\n')
+                f.write(f'warned={warned}\n')
+                f.write(f'failed={failed}\n')
+        
+        # Write step summary
+        step_summary = os.environ.get('GITHUB_STEP_SUMMARY', '')
+        if step_summary:
+            with open(step_summary, 'a') as f:
+                f.write('## 🛡️ EU AI Act Compliance Report\n\n')
+                f.write(f'**Score: {score:.0f}%** | **Status: {status.upper()}** | ')
+                f.write(f'**Frameworks: {frameworks or "None detected"}**\n\n')
+                
+                f.write('| Metric | Count |\n')
+                f.write('|--------|-------|\n')
+                f.write(f'| ✅ Passed | {passed} |\n')
+                f.write(f'| ⚠️ Warned | {warned} |\n')
+                f.write(f'| ❌ Failed | {failed} |\n')
+                f.write(f'| 📊 Total | {total} |\n\n')
+                
+                # Article breakdown
+                articles = result.get('articles', [])
+                if articles:
+                    f.write('### Article Breakdown\n\n')
+                    f.write('| Article | Title | Status | Details |\n')
+                    f.write('|---------|-------|--------|----------|\n')
+                    
+                    for article in articles:
+                        art_status = article.get('status', 'unknown')
+                        icon = '✅' if art_status == 'pass' else '⚠️' if art_status == 'warn' else '❌'
+                        art_num = article.get('article', 'N/A')
+                        art_title = article.get('title', 'Unknown')
+                        
+                        checks = article.get('checks', [])
+                        check_details = []
+                        for check in checks:
+                            check_status = check.get('status', 'unknown')
+                            check_icon = '✅' if check_status == 'pass' else '⚠️' if check_status == 'warn' else '❌'
+                            check_name = check.get('name', 'Unknown check')
+                            check_details.append(f'{check_icon} {check_name}')
+                        
+                        details_str = '<br>'.join(check_details) if check_details else 'No checks'
+                        f.write(f'| {icon} Art {art_num} | {art_title} | {art_status.upper()} | {details_str} |\n')
+                
+                f.write(f'\n\n### Badge for README\n\n')
+                f.write(f'```markdown\n')
+                f.write(f'![EU AI Act Compliance]({badge_url})\n')
+                f.write(f'```\n\n')
+                f.write(f'---\n')
+                f.write(f'*Scanned by [AIR Blackbox](https://airblackbox.ai) — EU AI Act enforcement ready*\n')
+        
+        # Strict mode: exit with error if any checks failed
+        if "${{ inputs.strict }}" == "true" and failed > 0:
+            print(f'::error::Compliance check failed: {failed} checks did not pass')
+            sys.exit(1)
+        
+        PYEOF
+
+    - name: Display verbose results
+      if: inputs.format == 'verbose'
+      shell: bash
+      run: air-compliance "${{ inputs.path }}" --verbose || true

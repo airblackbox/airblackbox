@@ -43,3 +43,5 @@ github_replies.md
 
 # Training data (too large for GitHub)
 training/training_data_*.jsonl
+compliance-action/.mcpregistry_github_token
+compliance-action/.mcpregistry_registry_token
