@@ -98,7 +98,14 @@ class Rule:
         return _eval_condition(self.when, context)
 
     def to_dict(self) -> dict:
-        d = {"action": self.action.value, "target": self.target}
+        """Serialize to the same format the YAML parser expects.
+
+        The YAML format uses the action type as the key:
+            - permit: read
+            - forbid: delete_records
+        So to_dict() must match that, not {"action": "permit", "target": "read"}.
+        """
+        d = {self.action.value: self.target}
         if self.when:
             d["when"] = self.when
         if self.unless:
