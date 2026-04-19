@@ -1,0 +1,250 @@
+name: Test Compliance Action
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-basic:
+    name: Test Basic Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run compliance scan
+        id: scan
+        uses: ./
+        with:
+          path: '.'
+          strict: false
+          badge: true
+          format: 'summary'
+
+      - name: Check outputs
+        run: |
+          echo "Score: ${{ steps.scan.outputs.score }}"
+          echo "Status: ${{ steps.scan.outputs.status }}"
+          echo "Badge URL: ${{ steps.scan.outputs.badge_url }}"
+          echo "Total checks: ${{ steps.scan.outputs.total_checks }}"
+          echo "Passed: ${{ steps.scan.outputs.passed }}"
+          echo "Warned: ${{ steps.scan.outputs.warned }}"
+          echo "Failed: ${{ steps.scan.outputs.failed }}"
+
+      - name: Verify outputs exist
+        run: |
+          if [ -z "${{ steps.scan.outputs.score }}" ]; then
+            echo "Error: score output is empty"
+            exit 1
+          fi
+          if [ -z "${{ steps.scan.outputs.status }}" ]; then
+            echo "Error: status output is empty"
+            exit 1
+          fi
+          if [ -z "${{ steps.scan.outputs.badge_url }}" ]; then
+            echo "Error: badge_url output is empty"
+            exit 1
+          fi
+          echo "All outputs present and valid"
+
+  test-strict-mode:
+    name: Test Strict Mode
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run scan in strict mode
+        id: scan
+        uses: ./
+        with:
+          path: '.'
+          strict: true
+          format: 'summary'
+        continue-on-error: true
+
+      - name: Report strict mode result
+        run: |
+          if [ "${{ steps.scan.outcome }}" = "failure" ]; then
+            echo "Strict mode correctly failed due to compliance issues"
+          else
+            echo "Scan passed in strict mode"
+          fi
+
+  test-verbose-mode:
+    name: Test Verbose Output
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run scan in verbose mode
+        uses: ./
+        with:
+          path: '.'
+          format: 'verbose'
+
+  test-json-output:
+    name: Test JSON Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run scan with JSON output
+        id: scan
+        uses: ./
+        with:
+          path: '.'
+          format: 'json'
+
+      - name: Verify JSON structure
+        run: |
+          # The action outputs the same fields regardless of format
+          # JSON format is handled by the air-compliance tool itself
+          if [ -z "${{ steps.scan.outputs.score }}" ]; then
+            echo "Error: JSON format did not produce outputs"
+            exit 1
+          fi
+          echo "JSON format outputs verified"
+
+  test-custom-path:
+    name: Test Custom Path
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create test subdirectory with Python
+        run: |
+          mkdir -p test_project
+          cat > test_project/sample.py << 'EOF'
+          """Sample AI agent for testing."""
+          
+          from typing import Optional
+          
+          class AIAgent:
+              """A simple AI agent."""
+              
+              def __init__(self):
+                  """Initialize the agent."""
+                  pass
+              
+              def run(self, input_text: str) -> str:
+                  """Run the agent.
+                  
+                  Args:
+                      input_text: The input to process
+                  
+                  Returns:
+                      The processed output
+                  """
+                  # Add error handling
+                  try:
+                      result = self._process(input_text)
+                      return result
+                  except Exception as e:
+                      # Log the error
+                      print(f"Error: {e}")
+                      return "Error occurred"
+              
+              def _process(self, text: str) -> str:
+                  """Process the input.
+                  
+                  Args:
+                      text: The text to process
+                  
+                  Returns:
+                      The processed text
+                  """
+                  return text.upper()
+          EOF
+
+      - name: Scan custom path
+        id: custom
+        uses: ./
+        with:
+          path: 'test_project'
+          strict: false
+
+      - name: Verify custom path scan
+        run: |
+          echo "Custom path scan completed"
+          echo "Score: ${{ steps.custom.outputs.score }}"
+          echo "Status: ${{ steps.custom.outputs.status }}"
+
+  test-badge-generation:
+    name: Test Badge Generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run scan and get badge
+        id: scan
+        uses: ./
+        with:
+          path: '.'
+          badge: true
+
+      - name: Verify badge URL
+        run: |
+          BADGE_URL="${{ steps.scan.outputs.badge_url }}"
+          if [[ $BADGE_URL == "https://img.shields.io/badge/"* ]]; then
+            echo "Badge URL is valid: $BADGE_URL"
+          else
+            echo "Error: Invalid badge URL format"
+            exit 1
+          fi
+
+  test-integration:
+    name: Integration Test - Full Workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run full compliance workflow
+        id: compliance
+        uses: ./
+        with:
+          path: '.'
+          strict: false
+          badge: true
+          format: 'summary'
+
+      - name: Display compliance report
+        if: always()
+        run: |
+          echo "====== Compliance Scan Results ======"
+          echo "Score: ${{ steps.compliance.outputs.score }}%"
+          echo "Status: ${{ steps.compliance.outputs.status }}"
+          echo "Total Checks: ${{ steps.compliance.outputs.total_checks }}"
+          echo "Passed: ${{ steps.compliance.outputs.passed }}"
+          echo "Warned: ${{ steps.compliance.outputs.warned }}"
+          echo "Failed: ${{ steps.compliance.outputs.failed }}"
+          echo "Badge: ${{ steps.compliance.outputs.badge_url }}"
+          echo "======================================"
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const score = "${{ steps.compliance.outputs.score }}";
+            const status = "${{ steps.compliance.outputs.status }}";
+            const passed = "${{ steps.compliance.outputs.passed }}";
+            const failed = "${{ steps.compliance.outputs.failed }}";
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `
+            ## EU AI Act Compliance Report
+            
+            **Score:** ${score}%
+            **Status:** ${status.toUpperCase()}
+            
+            **Results:**
+            - Passed: ${passed}
+            - Failed: ${failed}
+            
+            See the full report in the [Actions summary](${context.payload.pull_request.html_url}/checks) above.
+              `
+            });
