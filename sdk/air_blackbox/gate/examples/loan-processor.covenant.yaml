@@ -1,0 +1,31 @@
+# Covenant — Loan Processor Agent
+# Defines what this agent is allowed to do BEFORE it runs.
+# The covenant hash is included in every receipt.
+
+agent: loan-processor
+version: "1.0"
+description: "Policy for an AI agent that processes loan applications"
+
+rules:
+  # Read operations — always permitted
+  - permit: read_credit_score
+  - permit: read_application
+  - permit: calculate_risk
+  - permit: lookup_rates
+
+  # Decisions — require human approval above threshold
+  - permit: approve_loan
+    when: "amount <= 50000"
+  - require_approval: approve_loan
+    when: "amount > 50000"
+
+  # Notifications — permitted after human approval
+  - permit: send_confirmation
+    unless: human_approved
+  - require_approval: send_confirmation
+
+  # Dangerous actions — always blocked
+  - forbid: delete_records
+  - forbid: modify_credit_score
+  - forbid: bypass_compliance_check
+  - forbid: send_raw_pii

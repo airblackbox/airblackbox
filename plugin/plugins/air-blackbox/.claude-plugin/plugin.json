@@ -1,0 +1,27 @@
+{
+  "name": "air-blackbox",
+  "version": "1.0.0",
+  "description": "EU AI Act compliance scanner and trust infrastructure for Python AI projects",
+  "author": {
+    "name": "Jason Shotwell",
+    "email": "jason.j.shotwell@gmail.com"
+  },
+  "homepage": "https://airblackbox.ai",
+  "repository": "https://github.com/airblackbox/airblackbox",
+  "license": "Apache-2.0",
+  "keywords": [
+    "compliance",
+    "EU AI Act",
+    "audit",
+    "AI governance",
+    "trust infrastructure"
+  ],
+  "skills": "./skills/",
+  "commands": [
+    "./commands/discover.md",
+    "./commands/comply.md",
+    "./commands/replay.md",
+    "./commands/evidence.md"
+  ],
+  "agents": "./agents/"
+}
