@@ -25,10 +25,11 @@ jobs:
 
       - name: Print results
         run: |
-          echo "✅ ${{ steps.compliance.outputs.passing }} passing"
-          echo "⚠️  ${{ steps.compliance.outputs.warnings }} warnings"
-          echo "❌ ${{ steps.compliance.outputs.failing }} failing"
-          echo "Total: ${{ steps.compliance.outputs.total }} checks"
+          echo "✅ ${{ steps.compliance.outputs.passed }} passed"
+          echo "⚠️  ${{ steps.compliance.outputs.warned }} warnings"
+          echo "❌ ${{ steps.compliance.outputs.failed }} failing"
+          echo "📊 ${{ steps.compliance.outputs.total_checks }} total checks"
+          echo "Score: ${{ steps.compliance.outputs.score }}%"
 
   trust-layer-tests:
     runs-on: ubuntu-latest
