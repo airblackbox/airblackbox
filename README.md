@@ -106,16 +106,100 @@ You probably already have logging. The problems logging doesn't solve:
 
 **Secrets leaking into traces** — every team that builds their own logging eventually discovers credentials in their observability backend. AIR strips and vault-encrypts API keys before writing any record.
 
+## Gate — Pre-Execution Policy Enforcement
+
+Gate is a bilateral receipt system that governs what your AI agents are **allowed** to do and proves what they **actually did**. Every action goes through a covenant (policy), produces an Ed25519-signed receipt, and chains into a tamper-evident audit trail.
+
+### Covenants — Declare What's Allowed
+
+Write your agent's policy in YAML before it runs:
+
+```yaml
+# covenant.yaml
+agent: loan-processor
+version: "1.0"
+rules:
+  - permit: read_credit_score
+  - permit: approve_loan
+    when: "amount <= 50000"
+  - require_approval: approve_loan
+    when: "amount > 50000"
+  - forbid: delete_records
+  - forbid: modify_credit_score
+```
+
+Precedence: `forbid` > `require_approval` > `permit` > default deny.
+
+### Bilateral Receipts — Two-Phase Proof
+
+Every action produces a receipt with two cryptographic phases:
+
+```python
+from air_blackbox.gate import Gate, Covenant
+
+covenant = Covenant.from_yaml("covenant.yaml")
+gate = Gate(covenant=covenant)
+
+# Phase 1: Authorization — checks covenant, signs decision
+receipt = gate.authorize(
+    agent_id="loan-processor",
+    action_name="approve_loan",
+    payload={"applicant": "jane@example.com", "amount": 75000},
+    context={"amount": 75000},
+)
+
+if receipt.authorized:
+    result = process_loan(...)
+
+    # Phase 2: Seal — binds result to the authorization
+    gate.seal(receipt, result=result, status="success")
+
+# Third party can verify without the signing key
+print(gate.verify(receipt))
+# {'authorization_valid': True, 'seal_valid': True, 'overall': True}
+```
+
+**What the receipt proves:**
+- The covenant hash locks which rules were active at decision time
+- Ed25519 signatures (HMAC-SHA256 fallback) provide non-repudiation
+- The seal covers the authorization signature, binding the full lifecycle
+- Payloads are SHA-256 hashed — raw data never stored in the receipt
+
+### Delegation Chains — Multi-Agent Traceability
+
+When one agent delegates to another, the receipts chain together:
+
+```python
+# Parent agent authorizes its action
+parent_receipt = gate.authorize("orchestrator", "delegate_task", ...)
+
+# Child agent links back to the parent
+child_receipt = gate.authorize(
+    "notifier-agent", "send_confirmation",
+    parent_receipt=parent_receipt,
+)
+
+# Walk the full chain
+chain = gate.walk_delegation_chain(child_receipt)
+# [orchestrator receipt, notifier receipt]
+```
+
+### Install
+
+```bash
+pip install air-blackbox[gate]   # includes Ed25519 via cryptography
+```
+
 ## Ecosystem
 
-`air-blackbox` is the scanner. `air-trust` is the cryptographic proof layer underneath.
+`air-blackbox` is the scanner. `air-trust` is the cryptographic proof layer. `gate` is pre-execution policy enforcement.
 
 ```
 Your AI Agent
        |
        |-- air-blackbox scan     ->  finds compliance gaps
+       |-- air-blackbox gate     ->  pre-execution policy + bilateral receipts
        |-- air-trust             ->  proves what happened (HMAC + Ed25519)
-       |-- air-gate              ->  human approval before dangerous tool calls
        +-- air-blackbox-mcp      ->  all of the above inside Claude Desktop / Cursor
 ```
 
