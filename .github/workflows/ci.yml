@@ -24,6 +24,7 @@ jobs:
         run: |
           go build ./cmd/gateway
           go build ./cmd/replayctl
+          go build ./cmd/evidencectl
       - name: Test
         run: go test -race -count=1 -v ./...
       - name: Vet
