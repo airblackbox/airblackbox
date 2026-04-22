@@ -45,3 +45,4 @@ github_replies.md
 training/training_data_*.jsonl
 compliance-action/.mcpregistry_github_token
 compliance-action/.mcpregistry_registry_token
+.private/
