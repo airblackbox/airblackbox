@@ -1,6 +1,6 @@
 # AIR Blackbox Sales Pipeline
 
-**Last Updated**: April 1, 2026
+**Last Updated**: April 23, 2026
 
 ## Active Pipeline
 
@@ -33,6 +33,18 @@
 | Composio | 27.6K+ | 29% | Karan Vaidya (Co-founder) | karan@composio.dev | Email Drafted | — | — |
 | Ragas | 12.9K+ | 31% | Shahul ES (CTO/Co-founder) | shahul@ragas.io | Email Drafted | — | — |
 | AgentOps | 5.2K+ | 42% | Alex Reibman (CEO) | alex@agentops.ai | Email Drafted | — | — |
+| NannyML | 2.1K+ | 29% | Hakim Elakhrass (Co-Founder/CEO) | hakim@nannyml.com | Email Drafted | — | — |
+| doctr (Mindee) | 5.9K+ | 21% | Jonathan Grandperrin (Co-Founder/CEO) | jonathan@mindee.com | Email Drafted | — | — |
+| Taipy (Avaiga) | 18K+ | 36% | Vincent Gosselin (CEO/Co-Founder) | vincent@taipy.io | Email Drafted | — | — |
+| TruLens (Snowflake) | 2.6K+ | 40% | Josh Reini (Maintainer, Snowflake) | josh.reini@snowflake.com | Email Drafted | — | — |
+| Verba (Weaviate) | 7.6K+ | 19% | Bob van Luijt (CEO/Co-Founder) | bob@weaviate.io | Email Drafted | — | — |
+| Kornia | 11.1K+ | 24% | Edgar Riba (Founder) | edgar@kornia.org | Email Drafted | — | — |
+| soda-core (Soda.io) | 2K+ | 32% | Maarten Masschelein (Co-Founder/CEO) | maarten@soda.io | Email Drafted | — | — |
+| GuacaMol (BenevolentAI) | 500+ | 18% | Nathan Brown (Head of Cheminformatics) | nathan.brown@benevolent.com | Email Drafted (flag: contact confidence medium) | — | — |
+| Graphcore (examples) | ~780 | 24% | Nigel Toon (CEO/Co-Founder) | nigelt@graphcore.ai | Email Drafted | — | — |
+| LightOn (PyLate) | ~600 | 19% | Antoine Chaffin (Head of Search / PyLate maintainer) | antoine.chaffin@lighton.ai | Email Drafted | — | — |
+| Silo AI / LumiOpen (Megatron-LM-lumi) | ~45 | 24% | Peter Sarlin (CEO/Co-Founder, Silo AI/AMD) | peter.sarlin@silo.ai | Email Drafted | — | — |
+| ScrapeGraphAI | 17K+ | 36% | Marco Vinciguerra (Co-Founder) | marco@scrapegraphai.com | Email Drafted (flag: contact confidence medium) | — | — |
 
 ## GitHub Issues Opened
 
@@ -55,13 +67,13 @@ All 12 targets with sent emails now have EU AI Act compliance feature request is
 
 ## Pipeline Stats
 
-- **Total targets**: 27
+- **Total targets**: 39
 - **Emails sent**: 12
-- **Emails drafted**: 15
+- **Emails drafted**: 27
 - **GitHub issues opened**: 12
-- **Responses received**: 1 (LiteLLM — rejected)
-- **Combined GitHub stars**: 654K+
-- **Average compliance score**: 24%
+- **Responses received**: 1 (LiteLLM, rejected)
+- **Combined GitHub stars**: 720K+
+- **Average compliance score**: 25%
 
 ## Follow-up Reminders
 
@@ -77,6 +89,32 @@ All 12 targets with sent emails now have EU AI Act compliance feature request is
 - **supervision (Roboflow)**: Follow up on Apr 4 (5 days since send)
 - **Ivy (Unify)**: Follow up on Apr 4 (5 days since send)
 - **Letta (MemGPT)**: Follow up on Apr 4 (5 days since send)
+
+## Today's New Drafts (Apr 23, 2026)
+
+- **Graphcore (examples)** (Bristol, UK) — Tier 1 EU, IPU ML reference implementations, 1,225 files, 14/58 passing (24%)
+- **LightOn (PyLate)** (Paris, FR) — Tier 1 EU, ColBERT retrieval training toolkit, 104 files, 11/57 passing (19%)
+- **Silo AI / LumiOpen (Megatron-LM-lumi)** (Helsinki, FI, acq. AMD) — Tier 1 EU, Poro/Viking LLM training fork, 282 files, 14/58 passing (24%)
+- **ScrapeGraphAI** (Trento, IT) — Tier 1 EU, LLM-driven web scraping pipelines, 258 files, 21/58 passing (36%) — contact confidence medium
+
+## Previous Drafts (Apr 22, 2026)
+
+- **Verba (Weaviate)** (Amsterdam, NL) — Tier 1 EU, Python RAG reference app, 55 files, 11/57 passing (19%)
+- **Kornia** (UK / intl. non-profit) — Tier 1 EU, differentiable CV on PyTorch, 764 files, 14/58 passing (24%)
+- **soda-core (Soda.io)** (Brussels, BE) — Tier 1 EU, Python data-quality / data-contracts engine, 267 files, 18/57 passing (32%)
+- **GuacaMol (BenevolentAI)** (London, UK) — Tier 1 EU, molecular generation benchmark, 35 files, 10/57 passing (18%) — contact confidence medium
+
+## Previous Drafts (Apr 21, 2026)
+
+- **NannyML** (Leuven, BE, acq. by Soda) — Tier 1 EU, ML monitoring, 158 files, 17/58 passing (29%)
+- **doctr / Mindee** (Paris, FR) — Tier 1 EU, document OCR, 212 files, 12/58 passing (21%)
+- **Taipy / Avaiga** (Paris, FR) — Tier 1 EU, Python-first app builder, 1,103 files, 21/58 passing (36%)
+- **TruLens (Snowflake)** — Tier 2 US w/ EU enterprise reach, LLM eval, 461 files, 23/58 passing (40%)
+
+## Skipped (Apr 23 batch)
+
+- **KNIME (knime-python-llm)** (Konstanz, DE) — GitHub repos return 404 (private or moved); pivoted to ScrapeGraphAI instead
+- **InstaDeep / Jumanji** (London, UK) — already contacted via sibling repo Mava (email-mava-instadeep.md), do not double-tap
 
 ## Off-Limits
 

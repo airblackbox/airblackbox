@@ -1,92 +1,65 @@
-# Daily Outreach Summary - April 1, 2026
+# Daily Outreach Summary — April 23, 2026
 
-## Targets Processed Today
+## Targets Processed (Apr 23 batch, 4 drafts)
 
-| Project | Stars | Python Files | Score (Static) | Contact | Status |
-|---------|-------|-------------|----------------|---------|--------|
-| GPT4All (Nomic AI) | 77K+ | 21 | 6/33 (18%) | Andriy Mulyar (CEO), andriy@nomic.ai | Email Drafted |
-| Composio | 27.6K+ | 169 | 13/34 (38%) | Karan Vaidya (Co-founder), karan@composio.dev | Email Drafted |
-| Ragas | 12.9K+ | 387 | 14/34 (41%) | Shahul ES (CTO), shahul@ragas.io | Email Drafted |
-| AgentOps | 5.2K+ | 501 | 19/34 (56%) | Alex Reibman (CEO), alex@agentops.ai | Email Drafted |
+| Project | Location | Stars | Python Files | Score | Contact | Email File | Status |
+|---|---|---|---|---|---|---|---|
+| Graphcore (examples) | Bristol, UK (SoftBank) | ~780 | 1,225 | 14/58 (24%) | Nigel Toon, CEO — nigelt@graphcore.ai | email-graphcore-examples.md | Ready for review |
+| LightOn (PyLate) | Paris, FR | ~600 | 104 | 11/57 (19%) | Antoine Chaffin, Head of Search / PyLate maintainer — antoine.chaffin@lighton.ai | email-pylate-lighton.md | Ready for review |
+| Silo AI / LumiOpen (Megatron-LM-lumi) | Helsinki, FI (AMD) | ~45 | 282 | 14/58 (24%) | Peter Sarlin, CEO — peter.sarlin@silo.ai | email-silo-ai-lumiopen.md | Ready for review |
+| ScrapeGraphAI | Trento, IT | 17K+ | 258 | 21/58 (36%) | Marco Vinciguerra, Co-Founder — marco@scrapegraphai.com | email-scrapegraphai.md | Ready for review, contact confidence medium |
 
-## Scan Highlights
+All four are Tier 1 EU targets directly subject to the EU AI Act in August 2026.
 
-**Best scan: AgentOps (56% static compliance)**
-- 74% docstring coverage, logging in 27% of files, tracing in 202 files
-- Already has consent management, human oversight, token scope validation, identity binding
-- Natural integration partner (their observability data + our compliance checks)
+## Contact Notes
 
-**Most strategic target: GPT4All (77K+ stars, 250K+ MAU)**
-- Lowest compliance score (18%) but massive reach
-- Enterprise local LLM deployments will need compliance artifacts
-- Biggest gap: zero human oversight patterns detected
+- **nigelt@graphcore.ai**: derived from git log pattern (firstname + last-name-initial, e.g. `adams@`, `philb@`, `sofial@`, `ganeshk@`). High confidence.
+- **antoine.chaffin@lighton.ai**: maintainer of PyLate, listed on lighton.ai/team. High confidence. Fallback: igor.carron@lighton.ai or contact@lighton.ai for CEO route.
+- **peter.sarlin@silo.ai**: confirmed Silo AI domain pattern from git log (`antti.virtanen@silo.ai`). High confidence.
+- **marco@scrapegraphai.com**: pattern guess. Git log shows personal Gmails (mvincig11@gmail.com, perinim.98@gmail.com, lorenzo.padoan977@gmail.com). Fallback: contact@scrapegraphai.com. Flagged for Jason to confirm before sending.
 
-**Best framework play: Composio (27.6K+ stars)**
-- Agent tooling layer across LangChain, CrewAI, OpenAI Agents, ADK
-- 88% type hints, already has action boundaries and token expiry
-- Trust layer pitch is strong here (multi-framework support)
+## Targets Skipped This Batch
 
-**Best partnership angle: Ragas (12.9K+ stars, YC-backed)**
-- RAG evaluation framework used by AWS, Microsoft, Databricks
-- Ragas evaluates accuracy (Art. 15), AIR Blackbox scans compliance
-- Together they could cover most of Article 15 requirements
+- **KNIME (knime-python-llm)** (Konstanz, DE): GitHub repo URL returns 404 (likely private or renamed). Same for knime-python and knime-examples. Pivoted to ScrapeGraphAI to keep 4 targets.
+- **InstaDeep / Jumanji** (London, UK): already contacted via sibling repo Mava (see email-mava-instadeep.md). Do not double-tap.
+- **LumiOpen/lumiopen-tools** (11 Python files) and **LumiOpen/poro2-scripts-dev** (4 files): too small to justify as the scan target. Used Megatron-LM-lumi (282 files) instead as Silo AI's substantive training stack.
+- **Iktos** (Paris, FR): no meaningful open-source Python repo found.
 
-## Targets Skipped Today
+## Emails Ready for Jason to Review and Send
 
-- **Humanloop** (London, UK) - Python SDK only has 11 GitHub stars, too small
-- **PhotonAI** (Mannheim, Germany) - Academic project, 64 stars, not enterprise-relevant
-- **Patronus AI** (San Francisco) - Repos have very low star counts (<500 on main projects)
+1. `content/email-graphcore-examples.md` → nigelt@graphcore.ai
+2. `content/email-pylate-lighton.md` → antoine.chaffin@lighton.ai
+3. `content/email-silo-ai-lumiopen.md` → peter.sarlin@silo.ai
+4. `content/email-scrapegraphai.md` → marco@scrapegraphai.com (confirm contact first)
 
-## Emails Ready for Review
+## Follow-up Reminders
 
-1. `email-gpt4all.md` - Andriy Mulyar, Nomic AI
-2. `email-composio.md` - Karan Vaidya, Composio
-3. `email-ragas.md` - Shahul ES, Ragas
-4. `email-agentops.md` - Alex Reibman, AgentOps
+All previously sent emails (Apr 1 through Apr 4) are now past their 5-day follow-up window and past the one-email-plus-one-follow-up sequence cap. No fresh follow-up due today:
 
-## Follow-up Reminders (DUE)
+- **Superlinked** (sent Apr 1): 22 days past follow-up window. Sequence complete.
+- **Browser Use / RAGFlow** (sent Apr 2): 21 days past. Sequence complete.
+- **MetaGPT / Deepchecks / Cleanlab / Lightly AI** (sent Apr 3): 20 days past. Sequence complete.
+- **FLUX / supervision (Roboflow) / Ivy (Unify) / Letta (MemGPT)** (sent Apr 4): 19 days past. Sequence complete.
+- **LiteLLM**: rejected. No follow-up.
 
-| Project | Contact | Days Since Send | Action |
-|---------|---------|-----------------|--------|
-| **LiteLLM** | krrish@berri.ai | 6 days | **OVERDUE** - Send follow-up today |
-| **Superlinked** | daniel@superlinked.com | 5 days | **DUE TODAY** - Send follow-up today |
-| **Browser Use** | gregor@browser-use.com | 4 days | Due tomorrow (Apr 2) |
-| **RAGFlow** | yingfeng.zhang@infiniflow.org | 4 days | Due tomorrow (Apr 2) |
-| **MetaGPT** | alexanderwu@deepwisdom.ai | 3 days | Due Apr 3 |
-| **Deepchecks** | philip@deepchecks.com | 3 days | Due Apr 3 |
-| **Cleanlab** | curtis@cleanlab.ai | 3 days | Due Apr 3 |
-| **Lightly AI** | matthias@lightly.ai | 3 days | Due Apr 3 |
-| **FLUX (BFL)** | robin@blackforestlabs.ai | 2 days | Due Apr 4 |
-| **supervision** | joseph@roboflow.com | 2 days | Due Apr 4 |
-| **Ivy (Unify)** | daniel@unify.ai | 2 days | Due Apr 4 |
-| **Letta (MemGPT)** | charles@letta.com | 2 days | Due Apr 4 |
+Per the outreach rules (one email + one follow-up, then stop), these are done. If any of the GitHub issues opened against those repos show fresh engagement, Jason can choose to re-open the conversation on that thread rather than via email.
 
-## Total Pipeline Stats
+## Pipeline Totals After This Batch
 
-- **Total targets in pipeline**: 27
-- **Emails sent**: 12
-- **Emails drafted (pending send)**: 15
-- **GitHub issues opened**: 12
-- **Responses received**: 0
-- **Combined GitHub stars**: 654K+
-- **Average static compliance score**: 24%
-- **Follow-ups due today**: 2 (LiteLLM, Superlinked)
+- Total targets: 39 (was 35)
+- Emails sent: 12
+- Emails drafted: 27 (was 23, +4 today)
+- GitHub issues opened: 12
+- Responses: 1 (LiteLLM, rejected)
+- Combined GitHub stars of contacted + drafted targets: 720K+
+- Avg compliance score across pipeline: 25%
 
-## Contact Email Confidence Notes
+## Notes for Jason
 
-- **andriy@nomic.ai** - Confirmed via Nomic AI research papers (high confidence)
-- **karan@composio.dev** - Inferred from RocketReach partial match k******@composio.dev (medium-high confidence)
-- **shahul@ragas.io** - Inferred from YC startup pattern firstname@company.com (medium confidence, flag for Jason to verify)
-- **alex@agentops.ai** - Confirmed via RocketReach partial match a******@agentops.ai (medium-high confidence)
+The ScrapeGraphAI scan (21/58) is the strongest opening score in this batch. That email leads with genuine praise for Articles 11, 12, and 15 before surfacing the Art. 10 gap, so it should land well. Consider this one the highest-probability reply in the batch.
 
-## Next Batch Suggestions (Apr 2)
+Silo AI / LumiOpen is the most strategically valuable target. Peter Sarlin is the loudest European voice on sovereign AI, and a published EU AI Act compliance posture on Poro and Viking would be a PR moment for both sides.
 
-Priority EU-based targets to consider:
-- **Weaviate** (Amsterdam) - if Python client is substantial enough
-- **Valohai** (Helsinki) - MLOps platform
-- **Poolside AI** (Paris) - coding AI
+Graphcore post-SoftBank is quieter than it used to be. The email frames it as "every example you ship sets the default compliance posture for downstream IPU users," which should resonate if it reaches Nigel directly.
 
-High-value Tier 2 targets:
-- **H2O.ai** (h2ogpt, 11K+ stars)
-- **MindsDB** (AI query engine, popular Python project)
-- **Portkey** (AI gateway, agent infrastructure)
+PyLate is a tight, technical outreach to a specific maintainer (Antoine) rather than a CEO. That is deliberate, since the LightOn org is big enough that a maintainer-to-maintainer note is more likely to land than a CEO cold email. If no reply in 5-7 days, the follow-up can route to igor.carron@lighton.ai.

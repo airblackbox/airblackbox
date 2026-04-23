@@ -1,0 +1,140 @@
+Company,Industry,Confidence,Priority,EU AI Concern,Source URL
+AAA Washington,Insurance/Member Services,High,1,EU customer-facing agents + regulated workflows,https://www.salesforce.com/agentforce/customer-stories/
+Engie,Energy/Utilities,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Fisher & Paykel,Consumer Appliances,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Jacuzzi,Consumer Goods,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Kawasaki Motors,Automotive,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Lennar,Real Estate/Homebuilding,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Equipter,Industrial Equipment,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Miller Bros Solar,Energy/Solar,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+1-800Accountant,Professional Services,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Nexo,Financial Services,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Amplifon,Healthcare,High,1,EU patient/member interactions + sensitive data,https://www.salesforce.com/agentforce/customer-stories/
+Adecco Group,Staffing/HR,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Indeed,HR Tech,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Pacers Sports & Entertainment,Sports/Entertainment,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Indiana Fever,Sports/Entertainment,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+LIV Golf,Sports/Entertainment,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Movistar Plus+,Media/Telecom,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+CentralSquareGovTech/,Software,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Good360Nonprofit/,Logistics,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+World Economic Forum,Nonprofit,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+El JannahRestaurants/,Hospitality,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+EquinoxFitness/,Hospitality,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Grupo Falabella,Retail,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+PepsiCo,CPG,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+SaksRetail/,Luxury,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+SharkNinja,Consumer Goods,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Asymbl,Software,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Bionic,Software/FinOps,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Cengage,Education/EdTech,High,1,EU citizen/student interactions + procurement scrutiny,https://www.salesforce.com/agentforce/customer-stories/
+Datasite,Software/FinTech,High,1,EU customer-facing agents + regulated workflows,https://www.salesforce.com/agentforce/customer-stories/
+deinePflege,Healthcare,High,1,EU patient/member interactions + sensitive data,https://www.salesforce.com/agentforce/customer-stories/
+Elements.cloud,Software,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Equinix,Data Center/Infrastructure,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+ezCater,Food Tech,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Removery,Healthcare/Services,High,1,EU patient/member interactions + sensitive data,https://www.salesforce.com/agentforce/customer-stories/
+Slalom,Consulting,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Smartsheet,Software,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Sweeping Corporation of America,Industrial Services,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Vivint,Smart Home,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Boat Bike Tours,Travel,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+EngineTravel/,Software,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Finnair,Airline,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Singapore Airlines,Airline,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+TopCar Sociedad Limitada,Automotive/Rental,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Tony's Chocolonely,CPG/Food,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Year Up UnitedNonprofit/,Education,High,1,EU citizen/student interactions + procurement scrutiny,https://www.salesforce.com/agentforce/customer-stories/
+Arizona Registrar of Contractors,Public Sector,High,1,EU citizen/student interactions + procurement scrutiny,https://www.salesforce.com/agentforce/customer-stories/
+UChicago Medicine,Healthcare,High,1,EU patient/member interactions + sensitive data,https://www.salesforce.com/agentforce/customer-stories/
+reMarkableConsumer,Electronics,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+CaixaBank,Banking,High,1,EU customer-facing agents + regulated workflows,https://www.salesforce.com/agentforce/customer-stories/
+One NZ,Telecom,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Siemens,Industrial,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+SimplyhealthInsurance/,Healthcare,High,1,EU customer-facing agents + regulated workflows,https://www.salesforce.com/agentforce/customer-stories/
+DeVry,Education,High,1,EU citizen/student interactions + procurement scrutiny,https://www.salesforce.com/agentforce/customer-stories/
+Heathrow,Travel/Airport,High,1,EU consumer interactions + transparency obligations,https://www.salesforce.com/agentforce/customer-stories/
+Reddit,Consumer Internet,High,1,EU employee/customer workflows + governance risk,https://www.salesforce.com/agentforce/customer-stories/
+Adobe,Software,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+Lenovo,Hardware,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+CANCOM,IT Services,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+UNOS,Healthcare/Nonprofit,High,1,EU patient/member interactions + sensitive data,https://www.servicenow.com/customers.html
+Bayer,Pharma,High,1,EU customer-facing agents + regulated workflows,https://www.servicenow.com/customers.html
+Stellantis,Automotive,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+EY,Professional Services,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+Hitachi EnergyIndustrial/,Energy,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+Hitachi Vantara,Data/Infrastructure,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+Pure Storage,Infrastructure,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+KPMG UK,Professional Services,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/community/ceg-ai-coe-blog/real-results-real-customers-ai-transformation-stories-that/ba-p/3476261
+EXL,BPO/Analytics,High,1,EU employee/customer workflows + governance risk,https://www.servicenow.com/customers.html
+Suncoast Credit Union,Financial Services,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Fiserv,FinTech,High,1,EU customer-facing agents + regulated workflows,https://www.uipath.com/resources/automation-case-studies
+Polaris,Logistics,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Mediq,Healthcare,High,1,EU patient/member interactions + sensitive data,https://www.uipath.com/resources/automation-case-studies
+Bayer GBS,Shared Services,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Detmold Group,Packaging,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Medlitix,Healthcare,High,1,EU patient/member interactions + sensitive data,https://www.uipath.com/resources/automation-case-studies
+PromptCare,Healthcare,High,1,EU patient/member interactions + sensitive data,https://www.uipath.com/resources/automation-case-studies
+ADT,Security/Home,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Schulz & Partner,Legal Services,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+AGS HealthHealthcare,BPO,High,1,EU patient/member interactions + sensitive data,https://www.uipath.com/resources/automation-case-studies
+Siam Food Services,Food Services,High,1,EU consumer interactions + transparency obligations,https://www.uipath.com/resources/automation-case-studies
+Allegis Global Solutions,Staffing/HR,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Lightera,Legal/Compliance,High,1,EU employee/customer workflows + governance risk,https://www.uipath.com/resources/automation-case-studies
+Tele2,Telecom,High,1,EU consumer interactions + transparency obligations,https://www.uipath.com/resources/automation-case-studies
+CleanCloud,Software,High,1,EU employee/customer workflows + governance risk,https://www.intercom.com/customers
+Deliverect,Software,High,1,EU employee/customer workflows + governance risk,https://www.intercom.com/customers
+WHOOP,Consumer Wearables,High,1,EU employee/customer workflows + governance risk,https://www.intercom.com/customers
+AnthropicAI/,Software,High,1,EU employee/customer workflows + governance risk,https://www.intercom.com/customers
+Peddle,Retail/Auto,High,1,EU consumer interactions + transparency obligations,https://www.intercom.com/customers
+tado°,Climate Tech,High,1,EU employee/customer workflows + governance risk,https://www.intercom.com/customers
+Databox,Software,High,1,EU employee/customer workflows + governance risk,https://www.intercom.com/customers
+ZayZoon,FinTech,High,1,EU customer-facing agents + regulated workflows,https://community.intercom.com/ai-transformation-stories-104
+Best Egg,Financial Services,High,1,EU employee/customer workflows + governance risk,https://www.zendesk.com/why-zendesk/customers/
+BritBoxMedia/,Streaming,High,1,EU consumer interactions + transparency obligations,https://www.zendesk.com/why-zendesk/customers/
+Papier,Retail/Ecommerce,High,1,EU consumer interactions + transparency obligations,https://www.zendesk.com/why-zendesk/customers/
+SeatGeekTickets/,Entertainment,High,1,EU employee/customer workflows + governance risk,https://www.zendesk.com/why-zendesk/customers/
+AG BarrCPG/,Beverage,High,1,EU employee/customer workflows + governance risk,https://www.freshworks.com/customers/
+Alterra Mountain Company,Travel/Hospitality,High,1,EU consumer interactions + transparency obligations,https://www.freshworks.com/customers/
+Aramex,Logistics,High,1,EU employee/customer workflows + governance risk,https://www.freshworks.com/customers/
+Asian Paints,Manufacturing,High,1,EU employee/customer workflows + governance risk,https://www.freshworks.com/customers/
+Avanse,Financial Services,High,1,EU employee/customer workflows + governance risk,https://www.freshworks.com/customers/
+Bahamas Government,Public Sector,High,1,EU citizen/student interactions + procurement scrutiny,https://www.freshworks.com/customers/
+Woolacombe Bay Holiday Parks,Travel/Hospitality,High,1,EU consumer interactions + transparency obligations,https://www.freshworks.com/customers/
+Total Expert,Software/FinTech,High,1,EU customer-facing agents + regulated workflows,https://www.freshworks.com/customers/
+Entel,Telecom,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+Carglass Germany,Automotive Services,High,1,EU employee/customer workflows + governance risk,https://www.genesys.com/customer-stories
+TSB Bank,Banking,High,1,EU customer-facing agents + regulated workflows,https://www.genesys.com/customer-stories
+Fonterra,Food,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+Bank Millennium,Banking,High,1,EU customer-facing agents + regulated workflows,https://www.genesys.com/customer-stories
+eco24,Logistics/Services,High,1,EU employee/customer workflows + governance risk,https://www.genesys.com/customer-stories
+SITA,Travel Tech,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+JPIMedia,Media,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+Vivo,Telecom,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+CallPageboy,Software,High,1,EU employee/customer workflows + governance risk,https://www.genesys.com/customer-stories
+Western Governors University,Education,High,1,EU citizen/student interactions + procurement scrutiny,https://www.genesys.com/customer-stories
+Westpac New Zealand,Banking,High,1,EU customer-facing agents + regulated workflows,https://www.genesys.com/customer-stories
+Vodafone,Telecom,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+eFinancial,Insurance/FinTech,High,1,EU customer-facing agents + regulated workflows,https://www.genesys.com/customer-stories
+Swisscom,Telecom,High,1,EU consumer interactions + transparency obligations,https://www.genesys.com/customer-stories
+Quicken,FinTech,High,1,EU customer-facing agents + regulated workflows,https://www.genesys.com/customer-stories
+Aterian,Consumer Goods,High,1,EU employee/customer workflows + governance risk,https://www.genesys.com/customer-stories
+Pets at Home,Retail,High,1,EU consumer interactions + transparency obligations,https://news.microsoft.com/source/emea/features/with-copilot-agents-pets-at-home-unleashes-an-ai-revolution/
+Stanford Health Care,Healthcare,High,1,EU patient/member interactions + sensitive data,https://news.microsoft.com/source/features/ai/meet-4-developers-leading-the-way-with-ai-agents/
+Province of Bolzano,Public Sector,High,1,EU citizen/student interactions + procurement scrutiny,https://news.microsoft.com/source/emea/features/bolzano-digital-renaissance-citizens-first-ai/
+Levi Strauss & Co.Retail/,Apparel,High,1,EU consumer interactions + transparency obligations,https://news.microsoft.com/source/2025/11/17/levi-strauss-co-partners-with-microsoft-to-develop-next-gen-superagent/
+WesfarmersConglomerate/,Retail,High,1,EU consumer interactions + transparency obligations,https://news.microsoft.com/source/2025/11/17/levi-strauss-co-partners-with-microsoft-to-develop-next-gen-superagent/
+Cognizant,IT Services,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/copilot-in-the-c-suite/
+Infosys,IT Services,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/copilot-in-the-c-suite/
+Sumeeko Industries Company Limited,Manufacturing,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/apac/ai-customer-stories-1/
+Vision AustraliaNonprofit/,Healthcare,High,1,EU patient/member interactions + sensitive data,https://news.microsoft.com/apac/ai-customer-stories-1/
+Kindai University Aquaculture Research Institute,Education/Research,High,1,EU citizen/student interactions + procurement scrutiny,https://news.microsoft.com/apac/ai-customer-stories-1/
+365mc,Healthcare,High,1,EU patient/member interactions + sensitive data,https://news.microsoft.com/apac/ai-customer-stories-1/
+Apollo Hospitals,Healthcare,High,1,EU patient/member interactions + sensitive data,https://news.microsoft.com/apac/ai-customer-stories-1/
+Orient Overseas Container Line,Logistics/Shipping,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/apac/ai-customer-stories-1/
+Ricacorp Properties Limited,Real Estate,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/apac/ai-customer-stories-1/
+Mitsubishi Fuso Truck and Bus Corporation,Automotive,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/apac/ai-customer-stories-1/
+ICRISAT,Agriculture/Research,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/apac/ai-customer-stories-1/
+United Phosphorous,Agriculture/Chemicals,High,1,EU employee/customer workflows + governance risk,https://news.microsoft.com/apac/ai-customer-stories-1/
+Government of Karnataka,Public Sector,High,1,EU citizen/student interactions + procurement scrutiny,https://news.microsoft.com/apac/ai-customer-stories-1/
+Forus Health,Healthcare,High,1,EU patient/member interactions + sensitive data,https://news.microsoft.com/apac/ai-customer-stories-1/
