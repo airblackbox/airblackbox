@@ -166,9 +166,32 @@ def _check_fallback_patterns(file_contents: dict, scan_path: str) -> List[CodeFi
 
 
 def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'pydantic', r'BaseModel', r'validator', r'field_validator', r'validate_input', r'input_schema', r'json_schema', r'TypedDict', r'dataclass', r'InputGuard', r'sanitize']
-    combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
+    # Strong patterns: always indicate input validation
+    strong_patterns = [
+        r'field_validator', r'validate_input', r'input_schema',
+        r'json_schema', r'InputGuard', r'jsonschema\.validate',
+    ]
+    # Weak patterns: only count if LLM calls are also present in same file
+    # (a BaseModel for a DB schema is NOT AI input validation)
+    weak_patterns = [
+        r'pydantic', r'BaseModel', r'validator', r'TypedDict',
+        r'dataclass', r'Field\(',
+    ]
+    llm_patterns = [
+        r'\.chat\.completions\.create\(', r'\.invoke\(', r'\.generate\(',
+        r'ChatOpenAI\(', r'OpenAI\(', r'Anthropic\(', r'\.kickoff\(',
+    ]
+    llm_combined = "|".join(llm_patterns)
+    strong_combined = "|".join(strong_patterns)
+    weak_combined = "|".join(weak_patterns)
+
+    hits = []
+    for fp, content in file_contents.items():
+        if re.search(strong_combined, content):
+            hits.append(fp)
+        elif re.search(weak_combined, content) and re.search(llm_combined, content):
+            hits.append(fp)
+
     total = len(file_contents)
     if hits:
         return [CodeFinding(article=10, name="Input validation / schema enforcement", status="pass",
@@ -323,7 +346,10 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'import logging', r'from logging', r'getLogger', r'structlog', r'loguru', r'logger\.', r'logging\.']
+    # Require actual logger usage, not just `import logging`
+    patterns = [r'logging\.getLogger', r'logging\.basicConfig',
+        r'logging\.(?:debug|info|warning|error|critical)\(',
+        r'structlog', r'loguru', r'logger\.(?:debug|info|warning|error)\(']
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
     total = len(file_contents)
@@ -371,21 +397,35 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    # Learned from Haystack: confirmation_strategy and confirmation_policy are real HITL patterns
-    # Learned from CrewAI: allow_delegation is a crew-level oversight mechanism
+    # Core HITL patterns that always indicate human oversight
     patterns = [
         r'human_in_the_loop', r'human_approval', r'require_approval',
         r'approval_gate', r'require_confirmation', r'confirmation_gate',
-        r'confirm.*action', r'ask_human', r'human_input',
+        r'ask_human', r'human_input',
         r'HumanApprovalCallbackHandler', r'human_feedback',
         r'manual_review', r'approval_required', r'allow_human',
         r'human_oversight',
         r'confirmation_strategy', r'confirmation_polic',  # Haystack HITL
-        r'allow_delegation',  # CrewAI delegation oversight
         r'interrupt_before', r'interrupt_after',  # LangGraph HITL
+        r'air_gate', r'GateClient',  # AIR Blackbox gate
     ]
+    # Removed: r'allow_delegation' -- in CrewAI this is agent-to-agent
+    # delegation, NOT human oversight. False positive reported by
+    # community (github.com/deepset-ai/haystack/issues/10810).
+    # Removed: r'confirm.*action' -- too generic, matches JS confirm()
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+
+    # Context-aware check: allow_delegation only counts if NOT in a
+    # CrewAI Agent/Task constructor (where it means agent-to-agent)
+    if not hits:
+        crewai_patterns = r'(?:Agent|Task|Crew)\s*\('
+        for fp, content in file_contents.items():
+            if re.search(r'allow_delegation', content, re.IGNORECASE):
+                if not re.search(crewai_patterns, content):
+                    # allow_delegation in non-CrewAI context = real HITL
+                    hits.append(fp)
+
     if hits:
         return [CodeFinding(article=14, name="Human-in-the-loop patterns", status="pass", evidence=f"Human oversight patterns found in {len(hits)} file(s)")]
     return [CodeFinding(article=14, name="Human-in-the-loop patterns", status="warn",

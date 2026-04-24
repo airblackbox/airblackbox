@@ -160,14 +160,33 @@ def _check_fallback_patterns(file_contents: dict, scan_path: str) -> List[CodeFi
 
 def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if user inputs are validated before reaching LLM."""
-    validation_patterns = [
-        r'pydantic', r'BaseModel', r'validator', r'field_validator',
-        r'validate_input', r'input_schema', r'json_schema',
-        r'TypedDict', r'dataclass', r'InputGuard', r'sanitize',
+    # Strong patterns: always indicate input validation
+    strong_patterns = [
+        r'field_validator', r'validate_input', r'input_schema',
+        r'json_schema', r'InputGuard', r'jsonschema\.validate',
     ]
-    combined = "|".join(validation_patterns)
-    files_with_validation = [fp for fp, content in file_contents.items()
-                            if re.search(combined, content)]
+    # Weak patterns: only count if LLM calls are also present
+    # (a BaseModel for a DB schema is NOT AI input validation)
+    weak_patterns = [
+        r'pydantic', r'BaseModel', r'validator', r'TypedDict',
+        r'dataclass', r'Field\(',
+    ]
+    llm_patterns = [
+        r'\.chat\.completions\.create\(', r'\.invoke\(', r'\.generate\(',
+        r'ChatOpenAI\(', r'OpenAI\(', r'Anthropic\(', r'\.kickoff\(',
+    ]
+    llm_combined = "|".join(llm_patterns)
+    strong_combined = "|".join(strong_patterns)
+    weak_combined = "|".join(weak_patterns)
+
+    files_with_validation = []
+    for fp, content in file_contents.items():
+        if re.search(strong_combined, content):
+            files_with_validation.append(fp)
+        elif re.search(weak_combined, content) and re.search(llm_combined, content):
+            # Weak pattern only counts if LLM calls are in same file
+            files_with_validation.append(fp)
+
     total_files = len(file_contents)
     if files_with_validation:
         return [CodeFinding(article=10, name="Input validation / schema enforcement",
@@ -182,9 +201,11 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
 def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check for PII detection, redaction, or masking patterns."""
     pii_patterns = [
-        r'pii', r'redact', r'mask', r'anonymize', r'tokenize_pii',
-        r'presidio', r'scrub', r'private', r'sensitive',
-        r'data_protection', r'gdpr', r'personal_data',
+        r'pii', r'detect_pii', r'scrub_pii', r'mask_pii',
+        r'redact.*(?:pii|ssn|email|phone|name|address|personal)',
+        r'anonymize.*(?:data|user|pii|record)',
+        r'(?:pii|personal).*(?:redact|filter|remove|strip|mask)',
+        r'presidio', r'data_protection', r'gdpr', r'personal_data',
     ]
     combined = "|".join(pii_patterns)
     files_with_pii = [fp for fp, content in file_contents.items()
@@ -310,8 +331,9 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check if the project uses structured logging."""
     logging_patterns = [
-        r'import logging', r'from logging', r'getLogger',
-        r'structlog', r'loguru', r'logger\.', r'logging\.',
+        r'logging\.getLogger', r'logging\.basicConfig',
+        r'logging\.(?:debug|info|warning|error|critical)\(',
+        r'structlog', r'loguru', r'logger\.(?:debug|info|warning|error)\(',
     ]
     combined = "|".join(logging_patterns)
     files_with_logging = [fp for fp, content in file_contents.items()
@@ -355,10 +377,13 @@ def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFindin
     """Check for human-in-the-loop / approval gate patterns."""
     hitl_patterns = [
         r'human_in_the_loop', r'human_approval', r'require_approval',
-        r'approval_gate', r'confirm', r'ask_human', r'human_input',
-        r'HumanApprovalCallbackHandler', r'input\(',
+        r'approval_gate', r'ask_human', r'human_input',
+        r'HumanApprovalCallbackHandler',
         r'human_feedback', r'manual_review', r'approval_required',
+        r'interrupt_before', r'air_gate', r'GateClient',
     ]
+    # Removed: r'confirm' (too generic -- matches JS confirm(), string methods)
+    # Removed: r'input\(' (too generic -- matches any Python input() call)
     combined = "|".join(hitl_patterns)
     files_with_hitl = [fp for fp, content in file_contents.items()
                        if re.search(combined, content, re.IGNORECASE)]
@@ -415,11 +440,15 @@ def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]
 def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check for prompt injection defense patterns."""
     injection_patterns = [
-        r'injection', r'sanitize', r'escape', r'guardrail',
-        r'content_filter', r'moderation', r'safety_check',
+        r'prompt.*injection', r'sanitize.*prompt', r'sanitize.*llm',
+        r'guardrail', r'content_filter', r'moderation', r'safety_check',
         r'prompt_guard', r'nemo_guardrails', r'rebuff',
         r'lakera', r'system_prompt.*?boundary',
+        r'input.*filter.*(?:llm|prompt|model|agent)',
     ]
+    # Removed: bare r'injection' (matches SQL injection, dependency injection)
+    # Removed: bare r'sanitize' (matches HTML/SQL sanitization)
+    # Removed: bare r'escape' (matches string escaping, HTML escaping)
     combined = "|".join(injection_patterns)
     files_with_defense = [fp for fp, content in file_contents.items()
                           if re.search(combined, content, re.IGNORECASE)]
