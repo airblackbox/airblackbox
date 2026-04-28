@@ -61,6 +61,13 @@ def scan_codebase(scan_path: str) -> List[CodeFinding]:
     findings.extend(_check_action_audit_trail(file_contents, scan_path))
     findings.extend(_check_action_boundaries(file_contents, scan_path))
 
+    # === Hiring AI Compliance (US) ===
+    # Only fires when the codebase looks like a hiring/employment AI system
+    if _has_hiring_context(file_contents):
+        findings.extend(_check_zip_proxy(file_contents, scan_path))
+        findings.extend(_check_bias_audit(file_contents, scan_path))
+        findings.extend(_check_hiring_retention(file_contents, scan_path))
+
     return findings
 
 
@@ -541,6 +548,107 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
     return [CodeFinding(article=15, name="LLM output validation", status="warn",
         evidence="No structured output validation detected",
         fix_hint="Use output parsers (Pydantic, JSON schema) to validate LLM responses before acting on them")]
+
+
+# ─────────────────────────────────────────────
+# Hiring AI Compliance (US Jurisdictions)
+# These checks only fire when hiring/employment
+# AI context is detected in the codebase.
+# ─────────────────────────────────────────────
+
+HIRING_CONTEXT_PATTERNS = [
+    r"candidate", r"applicant", r"hiring", r"screening",
+    r"resume", r"interview", r"recruitment", r"job_posting",
+    r"job_application", r"talent_acquisition", r"ats\b",
+    r"applicant_tracking", r"shortlist", r"reject.*candidate",
+    r"rank.*candidate", r"score.*candidate", r"evaluate.*candidate",
+]
+
+
+def _has_hiring_context(file_contents: dict) -> bool:
+    """Check if the codebase is related to hiring/employment AI."""
+    all_code = "\n".join(file_contents.values())
+    matches = 0
+    for p in HIRING_CONTEXT_PATTERNS:
+        if re.search(p, all_code, re.IGNORECASE):
+            matches += 1
+            if matches >= 2:
+                return True
+    return False
+
+
+def _check_zip_proxy(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """Illinois HB 3773: Detect ZIP code used as proxy for protected characteristics."""
+    zip_patterns = [
+        r"zip_code", r"zipcode", r"zip_prefix", r"postal_code",
+        r"zip\s*[\[=]",
+    ]
+    scoring_patterns = [
+        r"score", r"rank", r"weight", r"predict", r"feature",
+        r"model\.", r"classifier", r"decision", r"filter",
+    ]
+    zip_combined = "|".join(zip_patterns)
+    scoring_combined = "|".join(scoring_patterns)
+
+    files_with_zip = [fp for fp, content in file_contents.items()
+                      if re.search(zip_combined, content, re.IGNORECASE)]
+    if not files_with_zip:
+        return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+            status="pass", evidence="No ZIP/postal code usage detected in hiring scoring context")]
+
+    files_with_zip_scoring = [fp for fp in files_with_zip
+                              if re.search(scoring_combined, file_contents[fp], re.IGNORECASE)]
+    if files_with_zip_scoring:
+        return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+            status="fail",
+            evidence=f"ZIP/postal code used alongside scoring/ranking in {len(files_with_zip_scoring)} file(s): {', '.join(_rel(f, scan_path) for f in files_with_zip_scoring[:3])}. Illinois HB 3773 prohibits ZIP as proxy for protected characteristics.",
+            fix_hint="Remove ZIP code from scoring features or document a disparity analysis")]
+    return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+        status="warn",
+        evidence=f"ZIP/postal code referenced in {len(files_with_zip)} file(s) but not in obvious scoring context. Verify it does not influence ranking.",
+        fix_hint="Audit whether ZIP code flows into candidate ranking or filtering logic")]
+
+
+def _check_bias_audit(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """NYC Local Law 144: Check for bias audit framework in hiring AI."""
+    bias_patterns = [
+        r"bias_audit", r"disparate_impact", r"adverse_impact",
+        r"four_fifths_rule", r"selection_rate", r"demographic_parity",
+        r"impact_ratio", r"fairness_metric", r"protected_class",
+        r"equal_opportunity", r"statistical_parity",
+        r"aequitas", r"fairlearn", r"ai_fairness_360",
+    ]
+    combined = "|".join(bias_patterns)
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)]
+    if hits:
+        return [CodeFinding(article=16, name="NYC LL144: Bias audit framework",
+            status="pass", evidence=f"Bias audit or fairness metrics detected in {len(hits)} file(s)")]
+    return [CodeFinding(article=16, name="NYC LL144: Bias audit framework",
+        status="fail",
+        evidence="No bias audit framework detected. NYC LL144 requires annual independent bias audits for automated employment decision tools.",
+        fix_hint="Add fairness metrics (fairlearn, aequitas, AI Fairness 360) with disparate impact analysis across race/ethnicity and sex")]
+
+
+def _check_hiring_retention(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """California FEHA: Check for 4-year data retention in hiring AI."""
+    retention_patterns = [
+        r"retention_period", r"retention_policy", r"data_retention",
+        r"record_retention", r"archive.*(?:year|day|month)",
+        r"retention.*(?:year|day|month)", r"keep.*record.*(?:year|day)",
+        r"(?:1460|1461)\s*day", r"4\s*year.*retain", r"retain.*4\s*year",
+        r"purge_after", r"ttl.*(?:year|day)",
+    ]
+    combined = "|".join(retention_patterns)
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)]
+    if hits:
+        return [CodeFinding(article=16, name="California FEHA: Data retention",
+            status="pass", evidence=f"Data retention policy detected in {len(hits)} file(s)")]
+    return [CodeFinding(article=16, name="California FEHA: Data retention",
+        status="fail",
+        evidence="No data retention policy detected. California FEHA requires 4-year retention of hiring AI decisions and candidate data.",
+        fix_hint="Add retention_policy config with minimum 4-year (1460-day) retention for candidate evaluation data")]
 
 
 # ─────────────────────────────────────────────
