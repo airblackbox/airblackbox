@@ -979,7 +979,7 @@ def generate_output(framework: str, level: str, code: str) -> str:
                 rec = "Recommendation: Strengthen existing controls to meet full Article requirements."
 
         lines.append(f"")
-        lines.append(f"**Article {art_num} — {art['title']}**: {status_label}")
+        lines.append(f"**Article {art_num} - {art['title']}**: {status_label}")
         lines.append(description)
         if rec:
             lines.append(rec)

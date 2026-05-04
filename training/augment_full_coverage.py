@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AIR Blackbox — Augmentation Pipeline for Phases 27-32
+AIR Blackbox - Augmentation Pipeline for Phases 27-32
 ======================================================
 Takes seed examples from generate_full_coverage.py and expands via:
 1. Instruction diversity (rephrase questions)
@@ -32,9 +32,9 @@ QA_INSTRUCTION_VARIANTS = [
     "How does {topic} work in practice?",
     "What should I know about {topic} as a developer?",
     "Summarize the EU AI Act requirements on {topic}",
-    "I'm confused about {topic} — can you clarify?",
+    "I'm confused about {topic} - can you clarify?",
     "What's the practical impact of {topic} on my AI project?",
-    "Our legal team is asking about {topic} — what do I tell them?",
+    "Our legal team is asking about {topic} - what do I tell them?",
     "We're preparing for an audit and need to understand {topic}",
     "What are the penalties for not complying with {topic}?",
 ]
@@ -50,7 +50,7 @@ CODE_INSTRUCTION_VARIANTS = [
     "Does this code meet EU AI Act standards?",
     "What would a regulator say about this code?",
     "Identify any EU AI Act risks in this code:",
-    "We're deploying this in the EU — check for compliance issues:",
+    "We're deploying this in the EU - check for compliance issues:",
     "Our compliance team wants this scanned against the AI Act:",
 ]
 
@@ -177,7 +177,7 @@ Because {domain_use_case} falls under {domain_risk_area}, the system is high-ris
 - Article 10: Data governance for {domain_data_type}
 - Article 11: Technical documentation covering GPAI integration
 - Article 12: Logging all AI decisions with auditability
-- Article 13: Transparency — document capabilities and limitations for deployers
+- Article 13: Transparency - document capabilities and limitations for deployers
 - Article 14: Human oversight mechanisms for consequential decisions about {domain_stakeholder}
 - Article 15: Robustness testing including GPAI failure modes
 - Article 43: Conformity assessment (self-assessment for most Annex III)
@@ -210,7 +210,7 @@ Each layer must provide sufficient documentation to the next. If the GPAI provid
 3. Inform distributors, deployers, and authorized representatives
 4. If the system presents a risk to {domain_stakeholder}: inform the competent authority of the Member States where the system was made available
 
-**If serious harm has occurred (Article 62 — Serious Incident Reporting):**
+**If serious harm has occurred (Article 62 - Serious Incident Reporting):**
 A serious incident means:
 - Death or serious damage to health, property, or environment
 - Serious and irreversible disruption of critical infrastructure management
@@ -228,7 +228,7 @@ After corrective action:
 2. Add the non-compliance finding as a known risk
 3. Implement additional monitoring to detect recurrence
 4. Update technical documentation to reflect changes
-5. Reassess whether a new conformity assessment is needed (Article 43(4) — substantial modification)
+5. Reassess whether a new conformity assessment is needed (Article 43(4) - substantial modification)
 
 **For {domain_specific_risk}:**
 If the non-compliance specifically relates to bias or discrimination against {domain_stakeholder}:
@@ -253,7 +253,7 @@ def augment_instruction_diversity(examples: list) -> list:
 
         # Only augment Q&A examples (not code examples)
         if "```" in user_msg:
-            # Code example — vary the instruction prefix
+            # Code example - vary the instruction prefix
             code_block = re.search(r'```[\s\S]*?```', user_msg)
             if code_block:
                 for variant in random.sample(CODE_INSTRUCTION_VARIANTS, min(3, len(CODE_INSTRUCTION_VARIANTS))):
@@ -261,7 +261,7 @@ def augment_instruction_diversity(examples: list) -> list:
                     new_ex["messages"][1]["content"] = f"{variant}\n\n{code_block.group()}"
                     augmented.append(new_ex)
         else:
-            # Q&A — extract topic and rephrase
+            # Q&A - extract topic and rephrase
             # Use first 50 chars as topic proxy
             topic = user_msg[:80].strip("?").strip()
             for variant_template in random.sample(QA_INSTRUCTION_VARIANTS, min(3, len(QA_INSTRUCTION_VARIANTS))):

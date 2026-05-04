@@ -1,5 +1,5 @@
 """
-Deep scan — uses local fine-tuned LLM (Ollama) to analyze code beyond regex.
+Deep scan - uses local fine-tuned LLM (Ollama) to analyze code beyond regex.
 
 The air-compliance model (fine-tuned Llama 3.1 8B) catches compliance issues that patterns miss:
 - Understanding *intent* behind code, not just keywords
@@ -33,7 +33,7 @@ class DeepFinding:
 
 DEEP_PROMPT_JSON = """You are an EU AI Act compliance expert analyzing Python AI agent code.
 
-Analyze ONLY for these 6 articles — output ONLY valid JSON, no explanation:
+Analyze ONLY for these 6 articles - output ONLY valid JSON, no explanation:
 
 - Article 9: Risk Management (error handling, fallbacks, risk assessment)
 - Article 10: Data Governance (input validation, PII handling, data quality)
@@ -42,7 +42,7 @@ Analyze ONLY for these 6 articles — output ONLY valid JSON, no explanation:
 - Article 14: Human Oversight (HITL gates, rate limits, kill switch, identity binding)
 - Article 15: Accuracy & Security (injection defense, output validation, retry logic)
 
-For each issue you find, output one JSON object. Only report issues the code actually has — do NOT fabricate findings.
+For each issue you find, output one JSON object. Only report issues the code actually has - do NOT fabricate findings.
 Use status "pass" if the code satisfies an article, "warn" for partial compliance, "fail" for missing.
 
 Output format (JSON array):
@@ -51,7 +51,7 @@ Output format (JSON array):
   {{"article": 12, "name": "Structured logging present", "status": "pass", "evidence": "Uses logging.getLogger() with structured output", "fix_hint": ""}}
 ]
 
-Report ALL 6 articles — use pass/warn/fail for each.
+Report ALL 6 articles - use pass/warn/fail for each.
 
 Code to analyze:
 ```python
@@ -72,10 +72,10 @@ IMPORTANT: A rule-based scanner has ALREADY analyzed the full project. Use these
 
 Your job: confirm or refine these findings using the code sample below. If the rule-based scanner found evidence (e.g. "logging in 143 files"), report PASS for that article. Only report FAIL if BOTH the scanner found nothing AND the code sample shows no evidence.
 
-EVIDENCE RULES — you MUST follow these:
+EVIDENCE RULES - you MUST follow these:
 1. ALWAYS cite specific function names, class names, or variable names from the code (e.g. "found retry_with_backoff() in utils.py")
 2. ALWAYS reference file names when citing evidence (e.g. "logging configured in config/settings.py")
-3. NEVER use generic phrases like "No error handling detected" — instead say what you looked for and where (e.g. "No try/except blocks or fallback functions found in agent.py or pipeline.py")
+3. NEVER use generic phrases like "No error handling detected" - instead say what you looked for and where (e.g. "No try/except blocks or fallback functions found in agent.py or pipeline.py")
 4. If the rule-based scanner found evidence but you don't see it in the code sample, trust the scanner and say "Rule-based scanner confirmed: [their evidence]. Code sample does not include these files."
 
 For each of Articles 9, 10, 11, 12, 14, and 15: report status, cite SPECIFIC evidence from the code with file/function names, and give actionable fix recommendations.
@@ -112,7 +112,7 @@ def deep_scan(code: str, model: str = "air-compliance",
             "error": "Ollama not installed. Install: brew install ollama && ollama create air-compliance -f Modelfile",
         }
 
-    # Check if model exists — auto-pull from registry if missing
+    # Check if model exists - auto-pull from registry if missing
     if not _model_available(model):
         pulled = _auto_pull_model(model)
         if not pulled:
@@ -237,12 +237,12 @@ def hybrid_merge(rule_findings: list, llm_findings: list) -> list:
     # Add LLM findings for articles not covered by rules, or as supplements
     for art, llm_list in llm_by_article.items():
         if art not in rule_by_article:
-            # LLM found something rules didn't check — add it
+            # LLM found something rules didn't check - add it
             for f in llm_list:
                 f["source"] = "llm"
                 merged.append(f)
         else:
-            # Both have findings — add LLM insights as supplementary
+            # Both have findings - add LLM insights as supplementary
             for f in llm_list:
                 f["source"] = "llm-supplement"
                 f["name"] = f"[AI] {f.get('name', '')}"
@@ -423,14 +423,14 @@ def _parse_llm_output(raw: str) -> list:
 
     # Strategy 4: parse markdown-style output from fine-tuned model
     # Handles two formats:
-    #   Format A: **Article 9 — Risk Management**: FAIL (status on same line)
-    #   Format B: ### Article 9 — Risk Management \n **Status**: FAIL (status on next line)
+    #   Format A: **Article 9 - Risk Management**: FAIL (status on same line)
+    #   Format B: ### Article 9 - Risk Management \n **Status**: FAIL (status on next line)
     article_with_status = re.compile(
         r'\*{0,2}Article\s+(\d+)[^*:]*\*{0,2}\s*:\s*(PASS|FAIL|WARN)',
         re.IGNORECASE
     )
     article_header_only = re.compile(
-        r'(?:#{1,4}\s+)?\*{0,2}Article\s+(\d+)\s*[—–-]\s*([^*:\n]+)',
+        r'(?:#{1,4}\s+)?\*{0,2}Article\s+(\d+)\s*[---]\s*([^*:\n]+)',
         re.IGNORECASE
     )
     status_line = re.compile(
@@ -467,7 +467,7 @@ def _parse_llm_output(raw: str) -> list:
                 }))
             current_article = int(art_status_match.group(1))
             current_status = art_status_match.group(2).lower()
-            name_match = re.search(r'Article\s+\d+\s*[—–-]\s*([^*:]+)', line)
+            name_match = re.search(r'Article\s+\d+\s*[---]\s*([^*:]+)', line)
             current_name = name_match.group(1).strip() if name_match else f"Article {current_article} analysis"
             current_evidence = []
             current_fix = []

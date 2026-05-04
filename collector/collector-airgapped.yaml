@@ -1,5 +1,5 @@
 ##
-## Air-Gapped Collector Config — Enterprise Tier
+## Air-Gapped Collector Config - Enterprise Tier
 ##
 ## Single pipeline: all traces stay local. No crowd pipeline, no external exports.
 ## Designed for deployment inside client VPS / on-prem where zero data leaves.
@@ -45,7 +45,7 @@ service:
       level: info
 
   pipelines:
-    ## Single local pipeline — traces never leave this machine.
+    ## Single local pipeline - traces never leave this machine.
     traces:
       receivers: [otlp]
       processors: [attributes/tag, batch]

@@ -1,4 +1,4 @@
-# AIR Blackbox v1.0.0 — Release Announcement Content
+# AIR Blackbox v1.0.0 - Release Announcement Content
 
 ## LinkedIn Post
 
@@ -12,10 +12,10 @@ Not a slide deck. Not a roadmap. Working software on PyPI.
 
 Four commands:
 
-→ `comply` — 20 EU AI Act checks across Articles 9-15, 90% auto-detected from live traffic
-→ `discover` — AI-BOM (CycloneDX 1.6), shadow AI detection, tool inventory  
-→ `replay` — incident reconstruction from HMAC-SHA256 audit chain
-→ `export` — signed evidence bundles for auditors and insurers
+→ `comply` - 20 EU AI Act checks across Articles 9-15, 90% auto-detected from live traffic
+→ `discover` - AI-BOM (CycloneDX 1.6), shadow AI detection, tool inventory  
+→ `replay` - incident reconstruction from HMAC-SHA256 audit chain
+→ `export` - signed evidence bundles for auditors and insurers
 
 What it actually does:
 
@@ -46,13 +46,13 @@ PyPI: https://pypi.org/project/air-blackbox/
 
 ---
 
-**Title (HN):** Show HN: 4 commands for EU AI Act compliance — AI-BOM, shadow AI detection, audit trails
+**Title (HN):** Show HN: 4 commands for EU AI Act compliance - AI-BOM, shadow AI detection, audit trails
 
 **Title (Dev.to):** I built an AI governance control plane in Python. Here's what each command does.
 
 ---
 
-The EU AI Act enforcement deadline for high-risk AI systems is August 2, 2026. If you're building AI agents with LangChain, CrewAI, OpenAI, or any Python framework — and you're selling into EU markets — you'll need to prove compliance.
+The EU AI Act enforcement deadline for high-risk AI systems is August 2, 2026. If you're building AI agents with LangChain, CrewAI, OpenAI, or any Python framework - and you're selling into EU markets - you'll need to prove compliance.
 
 I built AIR Blackbox to make that as simple as `pip install air-blackbox`.
 
@@ -60,17 +60,17 @@ I built AIR Blackbox to make that as simple as `pip install air-blackbox`.
 
 Four commands, one product:
 
-**`air-blackbox comply -v`** — Runs 20 compliance checks against EU AI Act Articles 9-15. Connects to your running gateway and analyzes live traffic. Shows which articles pass, which warn, which fail — with specific fix hints for every failing check.
+**`air-blackbox comply -v`** - Runs 20 compliance checks against EU AI Act Articles 9-15. Connects to your running gateway and analyzes live traffic. Shows which articles pass, which warn, which fail - with specific fix hints for every failing check.
 
-90% of checks are auto-detected from observed traffic. The gateway already sees the data — it just maps it to compliance articles.
+90% of checks are auto-detected from observed traffic. The gateway already sees the data - it just maps it to compliance articles.
 
-**`air-blackbox discover`** — Generates an AI Bill of Materials (CycloneDX 1.6) from your gateway traffic. Every model, every provider, every tool your agents use — inventoried automatically. 
+**`air-blackbox discover`** - Generates an AI Bill of Materials (CycloneDX 1.6) from your gateway traffic. Every model, every provider, every tool your agents use - inventoried automatically. 
 
 Also does shadow AI detection: define an approved model registry, and anything not on the list gets flagged. "Your team made 45 requests to api.mistral.ai. This endpoint is not approved."
 
-**`air-blackbox replay`** — Incident reconstruction from the HMAC-SHA256 audit chain. When something goes wrong, see exactly which model was called, what tools were invoked, how many tokens were used, and what the response was. `--verify` checks the chain integrity — if any record was tampered with, the chain breaks.
+**`air-blackbox replay`** - Incident reconstruction from the HMAC-SHA256 audit chain. When something goes wrong, see exactly which model was called, what tools were invoked, how many tokens were used, and what the response was. `--verify` checks the chain integrity - if any record was tampered with, the chain breaks.
 
-**`air-blackbox export`** — Packages everything into one signed evidence bundle: compliance scan + AI-BOM + audit trail + HMAC attestation. Hand it to your auditor or insurer as a single JSON file. The signature is independently verifiable.
+**`air-blackbox export`** - Packages everything into one signed evidence bundle: compliance scan + AI-BOM + audit trail + HMAC attestation. Hand it to your auditor or insurer as a single JSON file. The signature is independently verifiable.
 
 ### The trust layers
 
@@ -82,18 +82,18 @@ from air_blackbox.trust.langchain import AirLangChainHandler
 chain.invoke(input, config={"callbacks": [AirLangChainHandler()]})
 ```
 
-That one line adds: audit logging for every LLM call and tool invocation, PII detection (emails, SSNs, phone numbers, credit cards), and prompt injection scanning (7 patterns). Non-blocking — if logging fails, your agent keeps running.
+That one line adds: audit logging for every LLM call and tool invocation, PII detection (emails, SSNs, phone numbers, credit cards), and prompt injection scanning (7 patterns). Non-blocking - if logging fails, your agent keeps running.
 
 ### How it's different from Langfuse/Helicone/Datadog
 
 They do observability. AIR does accountability.
 
-- Your data stays in your vault (S3/MinIO/local) — not their cloud
-- HMAC-SHA256 tamper-evident audit chain — not just logs
-- CycloneDX AI-BOM generation — not just dashboards
-- Shadow AI detection — not just metrics
-- Signed evidence bundles — not just exports
-- EU AI Act compliance mapping — not just monitoring
+- Your data stays in your vault (S3/MinIO/local) - not their cloud
+- HMAC-SHA256 tamper-evident audit chain - not just logs
+- CycloneDX AI-BOM generation - not just dashboards
+- Shadow AI detection - not just metrics
+- Signed evidence bundles - not just exports
+- EU AI Act compliance mapping - not just monitoring
 
 ### Try it now
 
@@ -117,7 +117,7 @@ Apache 2.0. Built on OpenTelemetry. Feedback welcome.
 
 ---
 
-🧵 Shipped: `pip install air-blackbox` — an AI governance control plane in 4 commands.
+🧵 Shipped: `pip install air-blackbox` - an AI governance control plane in 4 commands.
 
 EU AI Act deadline: Aug 2, 2026. Most companies have no idea how to comply.
 
@@ -131,7 +131,7 @@ Here's what it does: ↓
 
 Shows pass/warn/fail for each article with specific fix hints.
 
-The gateway already sees your AI traffic — it just maps it to compliance.
+The gateway already sees your AI traffic - it just maps it to compliance.
 
 ---
 
@@ -195,11 +195,11 @@ Open source. Apache 2.0. Feedback welcome.
 
 ---
 
-**Title:** I built a CLI that checks your AI agent for EU AI Act compliance — 20 checks, 90% automated, CycloneDX AI-BOM included
+**Title:** I built a CLI that checks your AI agent for EU AI Act compliance - 20 checks, 90% automated, CycloneDX AI-BOM included
 
 The EU AI Act high-risk deadline is August 2, 2026 and most teams building with LangChain, CrewAI, or the OpenAI SDK haven't started thinking about compliance.
 
-I built `air-blackbox` — a Python CLI that runs 20 compliance checks against EU AI Act Articles 9-15, generates CycloneDX AI-BOMs from observed traffic, detects shadow AI (unapproved models), and produces signed evidence bundles for auditors.
+I built `air-blackbox` - a Python CLI that runs 20 compliance checks against EU AI Act Articles 9-15, generates CycloneDX AI-BOMs from observed traffic, detects shadow AI (unapproved models), and produces signed evidence bundles for auditors.
 
 Try it:
 ```
@@ -210,7 +210,7 @@ air-blackbox comply -v
 
 It's a reverse proxy + Python SDK. Route your AI traffic through it and everything is recorded, analyzed, and compliance-checked. HMAC-SHA256 audit chains, PII detection, prompt injection scanning.
 
-Not observability (that's Langfuse/Datadog). This is accountability — tamper-proof records + compliance mapping + evidence export.
+Not observability (that's Langfuse/Datadog). This is accountability - tamper-proof records + compliance mapping + evidence export.
 
 Open source, Apache 2.0: https://github.com/airblackbox/airblackbox
 

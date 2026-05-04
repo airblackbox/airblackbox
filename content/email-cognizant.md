@@ -10,7 +10,7 @@ Hi Noah,
 
 ISO 42001 certification requires evidence that AI management controls are actually implemented. The gap: how do you verify that at the code level during audits?
 
-AIR Blackbox automates that. It scans Python AI codebases against EU AI Act Articles 9-15 — risk management, data governance, documentation, human oversight, security, accuracy. Runs in ~30 seconds entirely on-premise, no data leaves the client's infrastructure. Open source (Apache 2.0), so your teams and clients can inspect the scan logic.
+AIR Blackbox automates that. It scans Python AI codebases against EU AI Act Articles 9-15 - risk management, data governance, documentation, human oversight, security, accuracy. Runs in ~30 seconds entirely on-premise, no data leaves the client's infrastructure. Open source (Apache 2.0), so your teams and clients can inspect the scan logic.
 
 Your consultants can run it as part of the ISO 42001 audit process. Findings feed directly into AI management documentation and control evidence.
 

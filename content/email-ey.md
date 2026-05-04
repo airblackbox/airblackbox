@@ -10,7 +10,7 @@ Hi Nicola,
 
 Governance frameworks define the rules. The question your clients will ask next: how do we verify the actual codebases meet them? Most advisory teams build custom scanning tools or do it manually. That's expensive and inconsistent.
 
-AIR Blackbox automates that. It's an open-source Python code scanner that checks AI applications against EU AI Act Articles 9-15 — risk management, data governance, documentation, human oversight, security, accuracy. Runs locally on client machines, scans in ~30 seconds, and is Apache 2.0 licensed so it's fully auditable.
+AIR Blackbox automates that. It's an open-source Python code scanner that checks AI applications against EU AI Act Articles 9-15 - risk management, data governance, documentation, human oversight, security, accuracy. Runs locally on client machines, scans in ~30 seconds, and is Apache 2.0 licensed so it's fully auditable.
 
 Not a linter, not legal compliance. It's a technical pattern scanner your consultants can use as a standardized assessment tool across engagements.
 

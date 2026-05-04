@@ -1,4 +1,4 @@
-# AIR Blackbox — Full Stack Deployment
+# AIR Blackbox - Full Stack Deployment
 #
 # Extends the root docker-compose.yaml with additional observability services.
 # Use this for production-like evaluations.

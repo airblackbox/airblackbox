@@ -24,7 +24,7 @@ func checkModelDowngrade(cfg ModelLimitConfig, model string, sessionTokens int) 
 func estimateSessionCost(costMap map[string]float64, model string, tokens int) float64 {
 	costPerMToken, ok := costMap[model]
 	if !ok {
-		return 0 // unknown model, can't estimate — don't downgrade
+		return 0 // unknown model, can't estimate - don't downgrade
 	}
 	return float64(tokens) / 1_000_000.0 * costPerMToken
 }

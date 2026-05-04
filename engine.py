@@ -1,5 +1,5 @@
 """
-Compliance engine — maps gateway traffic + code analysis to EU AI Act articles.
+Compliance engine - maps gateway traffic + code analysis to EU AI Act articles.
 Detection types: AUTO, HYBRID, MANUAL
 """
 import os

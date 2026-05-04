@@ -12,7 +12,7 @@ I'm Jason, the maintainer of AIR Blackbox, an open-source EU AI Act compliance s
 
 I ran the Rasa open-source repo through the scanner and wanted to share what I found. As a Berlin-based conversational AI framework deployed in enterprise contact centers across Europe, Rasa is directly in scope for EU AI Act obligations. Your enterprise customers will need to demonstrate compliance for the AI systems they deploy, and Rasa is the foundation of many of those systems.
 
-**Summary**: 600 Python files scanned, 21/48 checks passing (44%).
+**Summary**: 600 Python files scanned, 21/51 checks passing (44%).
 
 Per-article breakdown:
 

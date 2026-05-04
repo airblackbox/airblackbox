@@ -1,4 +1,4 @@
-// Package recorder writes AIR (AI Incident Record) files — portable,
+// Package recorder writes AIR (AI Incident Record) files - portable,
 // tamper-evident audit records for every LLM interaction.
 package recorder
 
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Record is the AIR file format — one per LLM call.
+// Record is the AIR file format - one per LLM call.
 type Record struct {
 	Version          string    `json:"version"`
 	RunID            string    `json:"run_id"`

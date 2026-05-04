@@ -10,7 +10,7 @@ Hi Sandeep,
 
 EU AI Act enforcement hits August 2, 2026. Your clients are going to ask how to verify their Python codebases actually comply with Articles 9-15. Most advisory teams don't have a standardized tool for that yet.
 
-AIR Blackbox is an open-source code scanner that checks AI applications against Articles 9-15 (risk management, data governance, documentation, human oversight, security, accuracy). It runs locally — no data leaves the client's machine — and completes in ~30 seconds. Apache 2.0 licensed, so your teams and clients can audit the scan logic.
+AIR Blackbox is an open-source code scanner that checks AI applications against Articles 9-15 (risk management, data governance, documentation, human oversight, security, accuracy). It runs locally - no data leaves the client's machine - and completes in ~30 seconds. Apache 2.0 licensed, so your teams and clients can audit the scan logic.
 
 It's not a linter and not legal compliance. It's a technical pattern scanner that gives your consultants code-level evidence to work with during assessments.
 

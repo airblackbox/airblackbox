@@ -1,5 +1,5 @@
 name: 'AIR Blackbox Compliance Scanner'
-description: 'Scan your Python AI project for EU AI Act compliance. 22 checks across 6 articles. No API key required.'
+description: 'Scan your Python AI project for EU AI Act compliance. 51 checks across 6 articles. No API key required.'
 branding:
   icon: 'shield'
   color: 'yellow'
@@ -165,7 +165,7 @@ runs:
                 f.write(f'![EU AI Act Compliance]({badge_url})\n')
                 f.write(f'```\n\n')
                 f.write(f'---\n')
-                f.write(f'*Scanned by [AIR Blackbox](https://airblackbox.ai) — EU AI Act enforcement ready*\n')
+                f.write(f'*Scanned by [AIR Blackbox](https://airblackbox.ai) - EU AI Act enforcement ready*\n')
         
         # Strict mode: exit with error if any checks failed
         if "${{ inputs.strict }}" == "true" and failed > 0:

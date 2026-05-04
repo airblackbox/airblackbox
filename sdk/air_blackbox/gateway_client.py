@@ -1,5 +1,5 @@
 """
-Gateway client — talks to the running AIR Blackbox Gateway.
+Gateway client - talks to the running AIR Blackbox Gateway.
 Pulls live data from gateway API and .air.json records.
 """
 

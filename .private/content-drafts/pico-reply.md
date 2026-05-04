@@ -1,22 +1,22 @@
-# Reply to Pico (AgentLair) — ATF Integration
+# Reply to Pico (AgentLair) - ATF Integration
 
-**Subject:** Re: CSA Agentic Trust Framework — AIR Blackbox now has native ATF conformance
+**Subject:** Re: CSA Agentic Trust Framework - AIR Blackbox now has native ATF conformance
 
 ---
 
 Hi Pico,
 
-Thanks for reaching out — the timing is good. I went deep on the CSA Agentic Trust Framework over the last couple of days and shipped native ATF support into `air-trust` v0.4.0 (the universal trust layer that sits underneath AIR Blackbox).
+Thanks for reaching out - the timing is good. I went deep on the CSA Agentic Trust Framework over the last couple of days and shipped native ATF support into `air-trust` v0.4.0 (the universal trust layer that sits underneath AIR Blackbox).
 
 Quick summary of what's now in the package:
 
-**Identity core element (ATF Element 1) — all 5 requirements implemented**
+**Identity core element (ATF Element 1) - all 5 requirements implemented**
 
-- **I-1 Unique Identifier** — every `AgentIdentity` now auto-derives a persistent URN in the form `urn:agent:{org}:{name}:{version}`. Custom URNs are preserved if supplied.
-- **I-2 Credential Binding** — SHA-256 fingerprint over `name:owner:version` (was already there from our Article 14 work).
-- **I-3 Ownership Chain** — `owner` + optional `org` field.
-- **I-4 Purpose Declaration** — new `purpose` field (MUST at Intern level).
-- **I-5 Capability Manifest** — new `capabilities` field, kept distinct from `permissions` (capabilities = what the agent *can* do, permissions = what it's *allowed* to do). Falls back to `permissions` for backward compatibility.
+- **I-1 Unique Identifier** - every `AgentIdentity` now auto-derives a persistent URN in the form `urn:agent:{org}:{name}:{version}`. Custom URNs are preserved if supplied.
+- **I-2 Credential Binding** - SHA-256 fingerprint over `name:owner:version` (was already there from our Article 14 work).
+- **I-3 Ownership Chain** - `owner` + optional `org` field.
+- **I-4 Purpose Declaration** - new `purpose` field (MUST at Intern level).
+- **I-5 Capability Manifest** - new `capabilities` field, kept distinct from `permissions` (capabilities = what the agent *can* do, permissions = what it's *allowed* to do). Falls back to `permissions` for backward compatibility.
 
 **Conformance engine**
 
@@ -57,18 +57,18 @@ Output is a human-readable conformance statement suitable for compliance reports
 
 **AgentLair as an external identity provider**
 
-I designed the integration so AgentLair is a first-class *optional* external identity provider, not a hard dependency. The new `external_id` field on `AgentIdentity` is meant to hold exactly the kind of binding you mentioned — things like `pico@agentlair.dev` or a `did:web:` URI — which maps the local URN onto an external registry. That pattern keeps `air-trust` usable in air-gapped / offline environments while still letting teams who use AgentLair (or DIDs, or any other registry) tie their local agents to a durable external identity.
+I designed the integration so AgentLair is a first-class *optional* external identity provider, not a hard dependency. The new `external_id` field on `AgentIdentity` is meant to hold exactly the kind of binding you mentioned - things like `pico@agentlair.dev` or a `did:web:` URI - which maps the local URN onto an external registry. That pattern keeps `air-trust` usable in air-gapped / offline environments while still letting teams who use AgentLair (or DIDs, or any other registry) tie their local agents to a durable external identity.
 
-If AgentLair exposes a stable lookup/verify endpoint for those external IDs, I'd be happy to add an `air_trust.providers.agentlair` adapter in a follow-up release — something like `AgentLairProvider().verify(identity)` that attests the external binding and feeds the result back into the conformance check. Happy to spec that out with you.
+If AgentLair exposes a stable lookup/verify endpoint for those external IDs, I'd be happy to add an `air_trust.providers.agentlair` adapter in a follow-up release - something like `AgentLairProvider().verify(identity)` that attests the external binding and feeds the result back into the conformance check. Happy to spec that out with you.
 
 **Shipping details**
 
-- `air-trust==0.4.0` — the ATF work is in the module now; 223 tests passing including 34 new ATF-specific tests.
+- `air-trust==0.4.0` - the ATF work is in the module now; 223 tests passing including 34 new ATF-specific tests.
 - Will be on PyPI shortly.
 - Repo: https://github.com/airblackbox/air-trust
 - Docs will land on airblackbox.ai alongside the Article 11 / Roadmap posts that just went live.
 
-Because `air-trust` is the trust layer underneath the whole AIR Blackbox ecosystem (air-compliance, air-blackbox, the MCP server), every downstream consumer gets ATF conformance automatically once they upgrade — which is the whole point of doing it at the trust-layer level instead of at the scanner level.
+Because `air-trust` is the trust layer underneath the whole AIR Blackbox ecosystem (air-compliance, air-blackbox, the MCP server), every downstream consumer gets ATF conformance automatically once they upgrade - which is the whole point of doing it at the trust-layer level instead of at the scanner level.
 
 A couple of open questions on my side:
 

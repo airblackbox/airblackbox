@@ -1,4 +1,4 @@
-# Monday March 30, 2026 — AIR Blackbox Outreach Action Plan
+# Monday March 30, 2026 - AIR Blackbox Outreach Action Plan
 
 ---
 
@@ -8,21 +8,21 @@ All three emails are drafted and ready to copy-paste. Scan results are real.
 
 ### Email 1: LlamaIndex
 - **To**: jerry@llamaindex.ai (Jerry Liu, CEO/Founder)
-- **Score**: 41% (21/51 checks) — 4,154 Python files scanned
+- **Score**: 41% (21/51 checks) - 4,154 Python files scanned
 - **Hook**: Record-keeping gap despite strong tracing infra; enterprise customers (KPMG, Salesforce, Rakuten) will need compliance
 - **Trust layer angle**: `air_blackbox.attach("langchain")`
 - **File**: [email-llamaindex.md](content/email-llamaindex.md)
 
 ### Email 2: CrewAI
 - **To**: joao@crewai.com (João Moura, CEO/Founder)
-- **Score**: 37% (19/51 checks) — 1,051 Python files scanned
+- **Score**: 37% (19/51 checks) - 1,051 Python files scanned
 - **Hook**: Best human oversight of any framework scanned (6/9), but data governance at 1/5; 40-60% Fortune 500 adoption means compliance pressure
-- **Trust layer angle**: `air_blackbox.attach("crewai")` — dedicated trust layer
+- **Trust layer angle**: `air_blackbox.attach("crewai")` - dedicated trust layer
 - **File**: [email-crewai.md](content/email-crewai.md)
 
 ### Email 3: Jina AI
 - **To**: han.xiao@jina.ai (Han Xiao, Founder, now VP AI at Elastic)
-- **Score**: 18% (9/50 checks) — 643 Python files scanned
+- **Score**: 18% (9/50 checks) - 643 Python files scanned
 - **Hook**: 0/9 on human oversight, Berlin-based (directly subject to EU AI Act), just acquired by Elastic (Fortune 500 customers)
 - **Trust layer angle**: `air_blackbox.attach("openai")`
 - **File**: [email-jina.md](content/email-jina.md)
@@ -32,10 +32,10 @@ All three emails are drafted and ready to copy-paste. Scan results are real.
 ## Tuesday 8-10am EST: Content Launch (Already Drafted)
 
 Execute the Tuesday launch checklist:
-1. **8:00am** — Publish Dev.to article → [devto-scan-results-article.md](content/devto-scan-results-article.md)
-2. **8:15am** — Submit to Hacker News → [hn-show-post.md](content/hn-show-post.md)
-3. **8:30am** — Post Twitter thread (4 tweets)
-4. **9:00am** — Post LinkedIn
+1. **8:00am** - Publish Dev.to article → [devto-scan-results-article.md](content/devto-scan-results-article.md)
+2. **8:15am** - Submit to Hacker News → [hn-show-post.md](content/hn-show-post.md)
+3. **8:30am** - Post Twitter thread (4 tweets)
+4. **9:00am** - Post LinkedIn
 5. Monitor HN comments for 3 hours
 
 Full checklist: [tuesday-launch-checklist.md](content/tuesday-launch-checklist.md)
@@ -104,7 +104,7 @@ Check for responses from the first 5 targets. If no response, draft follow-up em
 | Lightning AI | 28K+ | PyTorch Lightning, Python |
 
 ### Off-Limits
-- **Haystack (deepset)** — Jason's collaborators, do not contact
+- **Haystack (deepset)** - Jason's collaborators, do not contact
 
 ---
 

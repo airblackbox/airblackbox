@@ -1,1 +1,1 @@
-"""AIR Blackbox otel module — part of the gateway monorepo."""
+"""AIR Blackbox otel module - part of the gateway monorepo."""

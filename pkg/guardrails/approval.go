@@ -29,7 +29,7 @@ type ApprovalResponse struct {
 // RequestApproval sends a violation to the approval webhook and waits for a decision.
 // Returns (approved, error).
 //
-// If approval is disabled, returns (true, nil) — everything is allowed.
+// If approval is disabled, returns (true, nil) - everything is allowed.
 // If the webhook is unreachable or times out, returns (cfg.FallbackAllow, nil).
 // Only rules listed in cfg.Rules trigger the approval flow.
 func RequestApproval(ctx context.Context, cfg ApprovalConfig, v *Violation) (bool, error) {

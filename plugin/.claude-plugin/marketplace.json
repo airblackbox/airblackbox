@@ -5,14 +5,14 @@
     "email": "jason.j.shotwell@gmail.com"
   },
   "metadata": {
-    "description": "AIR Blackbox — the flight recorder for autonomous AI agents. Compliance scanning, audit chains, replay, and evidence export for EU AI Act.",
+    "description": "AIR Blackbox - the flight recorder for autonomous AI agents. Compliance scanning, audit chains, replay, and evidence export for EU AI Act.",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "air-blackbox",
       "source": "./plugins/air-blackbox",
-      "description": "EU AI Act compliance scanner and trust infrastructure for Python AI projects. Scan your codebase, interpret findings, and generate evidence — without leaving Claude Code.",
+      "description": "EU AI Act compliance scanner and trust infrastructure for Python AI projects. Scan your codebase, interpret findings, and generate evidence - without leaving Claude Code.",
       "version": "1.0.0",
       "author": {
         "name": "Jason Shotwell",

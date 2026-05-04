@@ -52,7 +52,7 @@ func checkPII(cfg PIIConfig, text string) (bool, string) {
 	}
 
 	if found && cfg.RedactMode == "block" {
-		return true, text // blocked — return original for error context
+		return true, text // blocked - return original for error context
 	}
 
 	return false, redacted

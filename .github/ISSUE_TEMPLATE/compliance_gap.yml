@@ -1,0 +1,35 @@
+name: Compliance Gap Request
+description: Request a new compliance check or flag a missing control
+labels: ["compliance", "enhancement"]
+body:
+  - type: dropdown
+    id: regulation
+    attributes:
+      label: Regulation or framework
+      options:
+        - EU AI Act
+        - ISO 42001
+        - NIST AI RMF
+        - Colorado SB 24-205
+        - GDPR
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: article
+    attributes:
+      label: Specific article or control
+      placeholder: "e.g. Article 12 - Logging obligations"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should AIR Blackbox detect or enforce?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Why does this matter
+      description: Use case, industry, or compliance context

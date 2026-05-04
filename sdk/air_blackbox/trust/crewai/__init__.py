@@ -305,7 +305,7 @@ class AirCrewAITrust:
                 with open(fpath, "w") as f:
                     json.dump(record, f, indent=2)
             except Exception:
-                pass  # Non-blocking — never crash the user's crew
+                pass  # Non-blocking - never crash the user's crew
 
     @property
     def event_count(self) -> int:

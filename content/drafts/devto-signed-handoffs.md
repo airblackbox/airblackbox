@@ -16,13 +16,13 @@ That's what I shipped this week in [air-trust v0.6.1](https://github.com/airblac
 
 Multi-agent pipelines are becoming the default architecture for serious AI work. A research agent gathers context, hands off to a writer agent, which hands off to a fact-checker, which hands off to a publisher. Each agent does a piece of the work.
 
-But when something goes wrong — or when a regulator asks for an audit trail — you have a problem. Your logs show *what* happened. They don't prove *who* did it or that the data wasn't modified in transit.
+But when something goes wrong - or when a regulator asks for an audit trail - you have a problem. Your logs show *what* happened. They don't prove *who* did it or that the data wasn't modified in transit.
 
 Three specific failure modes that are genuinely hard to detect today:
 
 1. **Payload tampering**: Agent A says it handed off document X. Agent B received document X. But was it the same X? Without a hash comparison locked in at handoff time, you can't know.
 2. **Identity spoofing**: An agent claims to be "research-bot." Is it? If agents communicate over any shared message bus, impersonation is trivial.
-3. **Silent unsigned records**: You think your audit chain has signatures. It doesn't — the signing key was missing and the library failed silently. (This was actually a bug in air-trust v0.6.0 that we fixed in v0.6.1.)
+3. **Silent unsigned records**: You think your audit chain has signatures. It doesn't - the signing key was missing and the library failed silently. (This was actually a bug in air-trust v0.6.0 that we fixed in v0.6.1.)
 
 The EU AI Act's Article 12 requires high-risk AI systems to maintain logs "sufficient to ensure traceability." Unsigned JSON files don't meet that bar for systems making consequential decisions.
 
@@ -32,9 +32,9 @@ The EU AI Act's Article 12 requires high-risk AI systems to maintain logs "suffi
 
 `air-trust` adds three new event types to its audit chain:
 
-- **`handoff_request`** — Agent A says "I want to hand off to Agent B with this payload"
-- **`handoff_ack`** — Agent B acknowledges receipt
-- **`handoff_result`** — Agent B reports back what it produced
+- **`handoff_request`** - Agent A says "I want to hand off to Agent B with this payload"
+- **`handoff_ack`** - Agent B acknowledges receipt
+- **`handoff_result`** - Agent B reports back what it produced
 
 Each record is automatically signed with the agent's Ed25519 private key. The verifier checks all three: valid signatures, matching counterparties, payload hash integrity, and nonce uniqueness (to prevent replay attacks).
 
@@ -149,20 +149,20 @@ The `payload_hash` is SHA-256 of the JSON-serialized payload. This means:
 
 ### Ed25519 vs. HMAC
 
-The tamper-evident chain (spec v1.0) uses HMAC-SHA256 with a shared secret — this catches post-hoc modification of stored records. But HMAC is symmetric: anyone with the secret key can forge a record.
+The tamper-evident chain (spec v1.0) uses HMAC-SHA256 with a shared secret - this catches post-hoc modification of stored records. But HMAC is symmetric: anyone with the secret key can forge a record.
 
 Signed handoffs (spec v1.2) use Ed25519 asymmetric keys. The private key never leaves the agent. The public key is embedded in every signed record. This means:
 
 - **Non-repudiation**: agent A can prove it signed the request, and nobody else can produce that signature
 - **No shared secret**: agents don't need to trust each other's key management
-- **Public key in the record**: verifiers don't need a key registry — the public key is self-contained in the audit log
+- **Public key in the record**: verifiers don't need a key registry - the public key is self-contained in the audit log
 
 ### The audit chain is layered
 
 ```
-v1.0  HMAC chain        — tamper detection for all records
-v1.1  Session sequences — completeness: no gaps, no replays within a session
-v1.2  Signed handoffs   — identity proof at agent boundaries
+v1.0  HMAC chain        - tamper detection for all records
+v1.1  Session sequences - completeness: no gaps, no replays within a session
+v1.2  Signed handoffs   - identity proof at agent boundaries
 ```
 
 Each layer is backward compatible. A v1.0 chain verifies clean under v1.2. A v1.2 chain with no handoffs still passes.
@@ -173,21 +173,21 @@ Each layer is backward compatible. A v1.0 chain verifies clean under v1.2. A v1.
 
 The silent failure modes I mentioned earlier were real bugs in v0.6.0, caught during a design review after shipping:
 
-**Bug 1 — Signed records written without signatures**: If the `cryptography` package wasn't installed, handoff records were written silently without signatures. The verifier then silently skipped them. The chain appeared to verify clean. It now raises `ImportError` at write time instead.
+**Bug 1 - Signed records written without signatures**: If the `cryptography` package wasn't installed, handoff records were written silently without signatures. The verifier then silently skipped them. The chain appeared to verify clean. It now raises `ImportError` at write time instead.
 
-**Bug 2 — Verifier skipped unsigned records**: Even with the library installed, if an agent had no keypair, records were written unsigned and the verifier skipped checking them. It now flags these as `missing_signature` with severity `warn`.
+**Bug 2 - Verifier skipped unsigned records**: Even with the library installed, if an agent had no keypair, records were written unsigned and the verifier skipped checking them. It now flags these as `missing_signature` with severity `warn`.
 
-**Bug 3 — Session ID leaked on exception**: If a `session()` block raised, the ContextVar holding the session ID wasn't reset, so the next session wrote events with the wrong session ID. Fixed with a `finally` block.
+**Bug 3 - Session ID leaked on exception**: If a `session()` block raised, the ContextVar holding the session ID wasn't reset, so the next session wrote events with the wrong session ID. Fixed with a `finally` block.
 
-**Bug 4 — Thread safety**: The global chain and identity singletons weren't protected by a lock. In threaded code (common with agent frameworks), you could get cross-thread identity clobbering. Fixed with `threading.Lock()`.
+**Bug 4 - Thread safety**: The global chain and identity singletons weren't protected by a lock. In threaded code (common with agent frameworks), you could get cross-thread identity clobbering. Fixed with `threading.Lock()`.
 
-I'm documenting these because they're the kind of bugs that would be catastrophic in a compliance context — you think you have signed records, you don't. Soundness matters more than features here.
+I'm documenting these because they're the kind of bugs that would be catastrophic in a compliance context - you think you have signed records, you don't. Soundness matters more than features here.
 
 ---
 
 ## What This Is (and Isn't)
 
-This is a **technical audit layer**, not a legal compliance certification. `air-trust` helps you answer: *did these agents interact in the way the logs claim, and is the data intact?* It doesn't answer whether your system meets every requirement of the EU AI Act — that's a legal question involving risk classification, conformity assessments, and a lot more.
+This is a **technical audit layer**, not a legal compliance certification. `air-trust` helps you answer: *did these agents interact in the way the logs claim, and is the data intact?* It doesn't answer whether your system meets every requirement of the EU AI Act - that's a legal question involving risk classification, conformity assessments, and a lot more.
 
 Think of it as a linter for your audit chain. Fast, local, no cloud, no API keys. It either passes or it tells you exactly what's wrong.
 
@@ -212,7 +212,7 @@ GitHub: [github.com/airblackbox/air-trust](https://github.com/airblackbox/air-tr
 
 The roadmap has two items queued for Phase 3:
 
-- **Remote verification endpoint** — post a chain to a verifier service and get a signed attestation back (useful for third-party audits)
-- **Framework trust layers** — drop-in `air_trust` wrappers for LangChain, CrewAI, and AutoGen that auto-instrument handoffs with zero code changes
+- **Remote verification endpoint** - post a chain to a verifier service and get a signed attestation back (useful for third-party audits)
+- **Framework trust layers** - drop-in `air_trust` wrappers for LangChain, CrewAI, and AutoGen that auto-instrument handoffs with zero code changes
 
 If you're building multi-agent systems and care about auditability, I'd genuinely like to know what your current setup looks like. Comments open.

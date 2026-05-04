@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/{pypi-package-name}.svg?color=fbbf24)](https://pypi.org/project/{pypi-package-name}/)
 [![Status: Beta](https://img.shields.io/badge/Status-Beta-fbbf24.svg)](#)
 
-{One-sentence description — 10 words max.}
+{One-sentence description - 10 words max.}
 
 <p align="center">
   <img src="demo.gif" alt="{repo-name} demo" width="800">
@@ -20,7 +20,7 @@ pip install {pypi-package-name}
 ```
 
 ```python
-# Minimal working example — 3-5 lines max
+# Minimal working example - 3-5 lines max
 from {module} import {MainClass}
 
 result = {MainClass}().run("your_agent.py")
@@ -29,10 +29,10 @@ print(result)
 
 ## What It Does
 
-- {Feature one — concrete, specific}
-- {Feature two — concrete, specific}
-- {Feature three — concrete, specific}
-- {Feature four — concrete, specific}
+- {Feature one - concrete, specific}
+- {Feature two - concrete, specific}
+- {Feature three - concrete, specific}
+- {Feature four - concrete, specific}
 
 ## Configuration
 
@@ -70,7 +70,7 @@ Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 - see [LICENSE](LICENSE).
 
 ---
 

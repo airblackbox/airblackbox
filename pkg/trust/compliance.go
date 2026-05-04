@@ -101,7 +101,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Role-Based Access and Least Privilege",
 			Description:    "The entity authorizes, modifies, or removes access to data based on roles",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "Prevention layer enforces tool allowlists and blocklists per policy", "Prevention layer not configured — tool access controls unavailable"),
+			Evidence:       conditionalEvidence(hasGuardrails, "Prevention layer enforces tool allowlists and blocklists per policy", "Prevention layer not configured - tool access controls unavailable"),
 			GatewayFeature: "Prevention Layer",
 		},
 		{
@@ -109,7 +109,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "System Monitoring",
 			Description:    "The entity monitors system components for anomalies indicative of malicious acts",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "Detection layer monitors for runaway agents: token budget, prompt loops, tool retry storms, error spirals", "Detection layer not configured — no automated monitoring"),
+			Evidence:       conditionalEvidence(hasGuardrails, "Detection layer monitors for runaway agents: token budget, prompt loops, tool retry storms, error spirals", "Detection layer not configured - no automated monitoring"),
 			GatewayFeature: "Detection Layer",
 		},
 		{
@@ -117,7 +117,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Change Evaluation",
 			Description:    "The entity evaluates changes for impact on the system of internal control",
 			Status:         boolStatus(hasVault),
-			Evidence:       conditionalEvidence(hasVault, "Every AIR record includes SHA-256 checksums of request/response; vault provides immutable storage", "Vault not configured — no checksummed records"),
+			Evidence:       conditionalEvidence(hasVault, "Every AIR record includes SHA-256 checksums of request/response; vault provides immutable storage", "Vault not configured - no checksummed records"),
 			GatewayFeature: "Visibility Layer",
 		},
 		{
@@ -125,7 +125,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Change Management",
 			Description:    "The entity authorizes, designs, develops, configures, and implements changes to meet objectives",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "Prevention layer enforces policy changes: PII redaction, model limits, tool filtering, approval workflows", "Prevention layer not configured — no policy enforcement"),
+			Evidence:       conditionalEvidence(hasGuardrails, "Prevention layer enforces policy changes: PII redaction, model limits, tool filtering, approval workflows", "Prevention layer not configured - no policy enforcement"),
 			GatewayFeature: "Prevention Layer",
 		},
 		{
@@ -133,7 +133,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Monitoring of Controls",
 			Description:    "The entity selects, develops, and performs evaluations to ascertain controls are present and functioning",
 			Status:         chainStatus(chainLen),
-			Evidence:       conditionalEvidence(chainLen > 0, "Cryptographic audit chain with HMAC-SHA256 signatures validates control integrity", "Audit chain empty — no records signed yet"),
+			Evidence:       conditionalEvidence(chainLen > 0, "Cryptographic audit chain with HMAC-SHA256 signatures validates control integrity", "Audit chain empty - no records signed yet"),
 			GatewayFeature: "Trust Layer",
 		},
 		{
@@ -141,7 +141,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Risk Assessment",
 			Description:    "The entity identifies and assesses risks to the achievement of objectives",
 			Status:         boolStatus(hasAnalytics),
-			Evidence:       conditionalEvidence(hasAnalytics, "Optimization layer tracks per-model error rates, latency percentiles, and failure taxonomy for risk identification", "Analytics not configured — no automated risk assessment"),
+			Evidence:       conditionalEvidence(hasAnalytics, "Optimization layer tracks per-model error rates, latency percentiles, and failure taxonomy for risk identification", "Analytics not configured - no automated risk assessment"),
 			GatewayFeature: "Optimization Layer",
 		},
 		{
@@ -149,7 +149,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Incident Response",
 			Description:    "The entity responds to identified security incidents by executing defined procedures",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "Guardrails auto-terminate runaway sessions and send webhook alerts; prevention layer blocks policy violations", "Guardrails not configured — no automated incident response"),
+			Evidence:       conditionalEvidence(hasGuardrails, "Guardrails auto-terminate runaway sessions and send webhook alerts; prevention layer blocks policy violations", "Guardrails not configured - no automated incident response"),
 			GatewayFeature: "Detection Layer",
 		},
 		{
@@ -165,7 +165,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Recovery Mechanisms",
 			Description:    "The entity implements recovery mechanisms to support system availability",
 			Status:         boolStatus(hasVault),
-			Evidence:       conditionalEvidence(hasVault, "Replay engine (replayctl) can reconstruct any run from vault-backed AIR records", "Vault not configured — replay/recovery not available"),
+			Evidence:       conditionalEvidence(hasVault, "Replay engine (replayctl) can reconstruct any run from vault-backed AIR records", "Vault not configured - replay/recovery not available"),
 			GatewayFeature: "Visibility Layer",
 		},
 		{
@@ -173,7 +173,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "System Boundary Protection",
 			Description:    "The entity implements controls to restrict access at system boundaries",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "Prevention layer acts as policy boundary: blocks unauthorized tools, redacts PII, enforces model limits", "Prevention layer not configured — no boundary controls"),
+			Evidence:       conditionalEvidence(hasGuardrails, "Prevention layer acts as policy boundary: blocks unauthorized tools, redacts PII, enforces model limits", "Prevention layer not configured - no boundary controls"),
 			GatewayFeature: "Prevention Layer",
 		},
 		{
@@ -181,7 +181,7 @@ func evaluateSOC2(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool) []
 			Name:           "Risk Mitigation",
 			Description:    "The entity specifies objectives with sufficient clarity to enable identification of risks",
 			Status:         boolStatus(hasAnalytics),
-			Evidence:       conditionalEvidence(hasAnalytics, "Failure taxonomy classifies errors into 8 categories; auto-routing mitigates model failures", "Analytics not configured — no automated risk mitigation"),
+			Evidence:       conditionalEvidence(hasAnalytics, "Failure taxonomy classifies errors into 8 categories; auto-routing mitigates model failures", "Analytics not configured - no automated risk mitigation"),
 			GatewayFeature: "Optimization Layer",
 		},
 	}
@@ -211,7 +211,7 @@ func evaluateISO27001(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool
 			Name:           "System Change Control Procedures",
 			Description:    "Changes to systems shall be controlled by formal change control procedures",
 			Status:         chainStatus(chainLen),
-			Evidence:       conditionalEvidence(chainLen > 0, "Cryptographic audit chain ensures integrity — any modified record breaks the HMAC chain", "Audit chain empty — no cryptographic change control yet"),
+			Evidence:       conditionalEvidence(chainLen > 0, "Cryptographic audit chain ensures integrity - any modified record breaks the HMAC chain", "Audit chain empty - no cryptographic change control yet"),
 			GatewayFeature: "Trust Layer",
 		},
 		{
@@ -219,7 +219,7 @@ func evaluateISO27001(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool
 			Name:           "Protection of Records",
 			Description:    "Records shall be protected from loss, destruction, falsification, and unauthorized access",
 			Status:         boolStatus(hasVault),
-			Evidence:       conditionalEvidence(hasVault, "Vault stores content in S3 with SHA-256 checksums; AIR records reference vault URIs", "Vault not configured — records not cryptographically protected"),
+			Evidence:       conditionalEvidence(hasVault, "Vault stores content in S3 with SHA-256 checksums; AIR records reference vault URIs", "Vault not configured - records not cryptographically protected"),
 			GatewayFeature: "Visibility Layer",
 		},
 		{
@@ -235,7 +235,7 @@ func evaluateISO27001(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool
 			Name:           "Policy on Use of Cryptographic Controls",
 			Description:    "A policy on the use of cryptographic controls for protection of information shall be developed",
 			Status:         chainStatus(chainLen),
-			Evidence:       conditionalEvidence(chainLen > 0, "HMAC-SHA256 signed audit chain; SHA-256 checksums on all vault records; HMAC-signed evidence packages", "Audit chain empty — cryptographic controls not yet exercised"),
+			Evidence:       conditionalEvidence(chainLen > 0, "HMAC-SHA256 signed audit chain; SHA-256 checksums on all vault records; HMAC-signed evidence packages", "Audit chain empty - cryptographic controls not yet exercised"),
 			GatewayFeature: "Trust Layer",
 		},
 		{
@@ -243,7 +243,7 @@ func evaluateISO27001(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool
 			Name:           "Documented Operating Procedures",
 			Description:    "Operating procedures shall be documented and made available to all users",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "guardrails.yaml defines all policies declaratively; prevention and detection rules are version-controlled", "Guardrails not configured — no documented operating procedures"),
+			Evidence:       conditionalEvidence(hasGuardrails, "guardrails.yaml defines all policies declaratively; prevention and detection rules are version-controlled", "Guardrails not configured - no documented operating procedures"),
 			GatewayFeature: "Detection Layer",
 		},
 		{
@@ -251,7 +251,7 @@ func evaluateISO27001(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool
 			Name:           "Reporting Information Security Events",
 			Description:    "Information security events shall be reported through appropriate management channels",
 			Status:         boolStatus(hasGuardrails),
-			Evidence:       conditionalEvidence(hasGuardrails, "Webhook alerts fire on guardrail violations; detection layer reports incidents with structured context", "Guardrails not configured — no security event reporting"),
+			Evidence:       conditionalEvidence(hasGuardrails, "Webhook alerts fire on guardrail violations; detection layer reports incidents with structured context", "Guardrails not configured - no security event reporting"),
 			GatewayFeature: "Detection Layer",
 		},
 		{
@@ -259,7 +259,7 @@ func evaluateISO27001(chainLen int64, hasVault, hasGuardrails, hasAnalytics bool
 			Name:           "Management of Technical Vulnerabilities",
 			Description:    "Information about technical vulnerabilities shall be obtained and evaluated",
 			Status:         boolStatus(hasAnalytics),
-			Evidence:       conditionalEvidence(hasAnalytics, "Failure taxonomy identifies 8 error categories; analytics surface model-specific vulnerability patterns", "Analytics not configured — no vulnerability assessment"),
+			Evidence:       conditionalEvidence(hasAnalytics, "Failure taxonomy identifies 8 error categories; analytics surface model-specific vulnerability patterns", "Analytics not configured - no vulnerability assessment"),
 			GatewayFeature: "Optimization Layer",
 		},
 		{

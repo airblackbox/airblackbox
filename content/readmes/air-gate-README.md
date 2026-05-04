@@ -95,10 +95,10 @@ gatekeeper = GateKeeper(audit_chain=audit_chain)
 
 `air-gate` is one component of the **AIR Blackbox** ecosystem for EU AI Act compliance:
 
-- **[air-gate](https://github.com/airblackbox/air-gate)** — Human-in-the-loop tool gating (Article 14)
-- **[air-trust](https://github.com/airblackbox/air-trust)** — Audit chain and compliance layers
-- **[air-compliance](https://github.com/airblackbox/air-compliance)** — Automated Article 9–15 scanning
-- **[air-docs](https://github.com/airblackbox/air-docs)** — Model cards, consent logs, audit trails
+- **[air-gate](https://github.com/airblackbox/air-gate)** - Human-in-the-loop tool gating (Article 14)
+- **[air-trust](https://github.com/airblackbox/air-trust)** - Audit chain and compliance layers
+- **[air-compliance](https://github.com/airblackbox/air-compliance)** - Automated Article 9-15 scanning
+- **[air-docs](https://github.com/airblackbox/air-docs)** - Model cards, consent logs, audit trails
 
 ## License
 

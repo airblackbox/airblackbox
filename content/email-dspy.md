@@ -40,7 +40,7 @@ air-blackbox comply --scan . --no-llm --format table --verbose
 
 Everything runs locally. No data leaves your machine.
 
-If any of this is useful, I'd be happy to share the full per-file report or to contribute a small docs section on compile-time audit logging for DSPy programs. No ask beyond that — just wanted to put the data in front of you before downstream teams start asking the same questions.
+If any of this is useful, I'd be happy to share the full per-file report or to contribute a small docs section on compile-time audit logging for DSPy programs. No ask beyond that - just wanted to put the data in front of you before downstream teams start asking the same questions.
 
 Best,
 Jason Shotwell

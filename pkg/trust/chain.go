@@ -14,7 +14,7 @@ import (
 
 // ChainEntry is one signed link in the audit chain.
 // Each entry includes the hash of the previous entry, forming a tamper-proof
-// chain similar to a blockchain — modifying any record breaks the chain.
+// chain similar to a blockchain - modifying any record breaks the chain.
 type ChainEntry struct {
 	Sequence   int64     `json:"sequence"`    // monotonic counter (1-based)
 	RunID      string    `json:"run_id"`      // the AIR record this signs

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AIR Blackbox — Moat Training Data Generator (v8)
+AIR Blackbox - Moat Training Data Generator (v8)
 =================================================
 Generates highly differentiated training data that competitors cannot replicate:
   Phase 11: ISO 42001 + NIST AI RMF cross-mapping
@@ -23,11 +23,11 @@ import hashlib
 STANDARDS_MAPPING_QA = [
     # ISO 42001 mappings
     {"q": "How does EU AI Act Article 9 map to ISO 42001?",
-     "a": "Article 9 (Risk Management) maps to ISO 42001 Section 6.1 (Actions to address risks and opportunities) and Annex B.2 (AI risk management). ISO 42001 requires organizations to determine risks and opportunities relevant to the AI management system, establish risk assessment processes, and maintain risk treatment plans. The key alignment: both require continuous, lifecycle-long risk management. Implementation: maintain a risk register (ISO 42001 B.2.3) that documents each AI system's risk level, potential harms, and mitigations. ISO 42001 additionally requires organizational context (Section 4) — understanding internal/external issues that affect AI risk management."},
+     "a": "Article 9 (Risk Management) maps to ISO 42001 Section 6.1 (Actions to address risks and opportunities) and Annex B.2 (AI risk management). ISO 42001 requires organizations to determine risks and opportunities relevant to the AI management system, establish risk assessment processes, and maintain risk treatment plans. The key alignment: both require continuous, lifecycle-long risk management. Implementation: maintain a risk register (ISO 42001 B.2.3) that documents each AI system's risk level, potential harms, and mitigations. ISO 42001 additionally requires organizational context (Section 4) - understanding internal/external issues that affect AI risk management."},
     {"q": "How does EU AI Act Article 10 map to ISO 42001?",
      "a": "Article 10 (Data Governance) maps to ISO 42001 Annex B.3 (Data for AI systems) and Section 8.4 (Data management). ISO 42001 B.3 requires: data acquisition policies, data quality assessment, bias evaluation, data lineage tracking, and data retention/disposal procedures. The EU AI Act is more prescriptive (requiring specific bias testing, representativeness checks), while ISO 42001 is framework-oriented. Together: implement ISO 42001's data management framework with EU AI Act's specific quality criteria as the minimum standard. Both require documentation of data sources, preparation methods, and known limitations."},
     {"q": "How does EU AI Act Article 12 map to ISO 42001?",
-     "a": "Article 12 (Record-Keeping) maps to ISO 42001 Section 7.5 (Documented information) and Annex B.5 (Monitoring and measurement of AI systems). ISO 42001 requires maintaining documented information for the AI management system, including records of decisions, performance metrics, and audit results. Article 12 is more specific — requiring automatic event logging, traceability, and minimum 6-month retention. Implementation: use ISO 42001's documentation framework as the structure, with Article 12's specific requirements (automatic logging, traceability, retention periods) as the minimum capabilities."},
+     "a": "Article 12 (Record-Keeping) maps to ISO 42001 Section 7.5 (Documented information) and Annex B.5 (Monitoring and measurement of AI systems). ISO 42001 requires maintaining documented information for the AI management system, including records of decisions, performance metrics, and audit results. Article 12 is more specific - requiring automatic event logging, traceability, and minimum 6-month retention. Implementation: use ISO 42001's documentation framework as the structure, with Article 12's specific requirements (automatic logging, traceability, retention periods) as the minimum capabilities."},
     {"q": "How does EU AI Act Article 14 map to ISO 42001?",
      "a": "Article 14 (Human Oversight) maps to ISO 42001 Annex B.4 (Human oversight of AI systems) and Section 8.2 (AI system lifecycle). ISO 42001 B.4 requires: definition of human roles in AI operation, escalation procedures, override mechanisms, and competency requirements for human overseers. Article 14 specifies the technical capabilities needed (understand, interpret, override, interrupt). Together: ISO 42001 provides the organizational framework (who oversees, their training, escalation paths), while Article 14 provides technical requirements (what the system must enable). Both require documentation of oversight measures."},
     # NIST AI RMF mappings
@@ -51,7 +51,7 @@ STANDARDS_MAPPING_QA = [
 
 This matrix enables triple-standard compliance through a single implementation framework."""},
     {"q": "What is the difference between ISO 42001 and the EU AI Act?",
-     "a": "ISO 42001 (AI Management System) and the EU AI Act serve complementary but different purposes. ISO 42001 is a VOLUNTARY international standard that provides a framework for ORGANIZATIONS to manage AI responsibly — it focuses on processes, policies, and governance structures. The EU AI Act is a MANDATORY REGULATION that sets specific technical requirements for AI SYSTEMS — it focuses on what the technology must do. Key differences: (1) Scope: ISO 42001 covers the entire organization, EU AI Act targets specific AI systems based on risk. (2) Enforcement: ISO 42001 is certified by auditors, EU AI Act is enforced by regulators with fines up to €35M/7% turnover. (3) Approach: ISO 42001 is process-oriented (Plan-Do-Check-Act), EU AI Act is requirements-oriented (Articles 9-15). (4) Geography: ISO 42001 is global, EU AI Act is EU-specific (but applies to anyone selling to EU). Best practice: use ISO 42001 as your management framework and EU AI Act as your technical compliance checklist."},
+     "a": "ISO 42001 (AI Management System) and the EU AI Act serve complementary but different purposes. ISO 42001 is a VOLUNTARY international standard that provides a framework for ORGANIZATIONS to manage AI responsibly - it focuses on processes, policies, and governance structures. The EU AI Act is a MANDATORY REGULATION that sets specific technical requirements for AI SYSTEMS - it focuses on what the technology must do. Key differences: (1) Scope: ISO 42001 covers the entire organization, EU AI Act targets specific AI systems based on risk. (2) Enforcement: ISO 42001 is certified by auditors, EU AI Act is enforced by regulators with fines up to €35M/7% turnover. (3) Approach: ISO 42001 is process-oriented (Plan-Do-Check-Act), EU AI Act is requirements-oriented (Articles 9-15). (4) Geography: ISO 42001 is global, EU AI Act is EU-specific (but applies to anyone selling to EU). Best practice: use ISO 42001 as your management framework and EU AI Act as your technical compliance checklist."},
 ]
 
 # ═══════════════════════════════════════
@@ -75,7 +75,7 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message.content)''',
         "framework": "Azure OpenAI",
-        "notes": "Azure OpenAI basic call — Article 12: no logging. Article 15: no input validation. Article 14: no usage limits. Article 10: no data governance despite enterprise deployment. Azure provides content filtering by default (partial Article 15), but the code doesn't leverage any compliance features.",
+        "notes": "Azure OpenAI basic call - Article 12: no logging. Article 15: no input validation. Article 14: no usage limits. Article 10: no data governance despite enterprise deployment. Azure provides content filtering by default (partial Article 15), but the code doesn't leverage any compliance features.",
     },
     {
         "code": '''from openai import AzureOpenAI
@@ -143,7 +143,7 @@ def invoke_claude(prompt: str) -> str:
 
 answer = invoke_claude(user_question)''',
         "framework": "AWS Bedrock",
-        "notes": "AWS Bedrock basic call — Article 12: no logging (AWS CloudTrail logs API calls but not prompt content). Article 15: no input validation, max_tokens too high. Article 14: no usage controls. Article 10: user data sent to AWS without governance documentation.",
+        "notes": "AWS Bedrock basic call - Article 12: no logging (AWS CloudTrail logs API calls but not prompt content). Article 15: no input validation, max_tokens too high. Article 14: no usage controls. Article 10: user data sent to AWS without governance documentation.",
     },
     {
         "code": '''import boto3
@@ -209,7 +209,7 @@ model = GenerativeModel("gemini-1.5-pro")
 response = model.generate_content(user_prompt)
 print(response.text)''',
         "framework": "GCP Vertex AI",
-        "notes": "GCP Vertex AI minimal — Article 12: no logging. Article 15: no safety settings configured (Vertex has them, code doesn't use them). Article 14: no usage limits. Article 10: US region may violate EU data residency. All articles need attention.",
+        "notes": "GCP Vertex AI minimal - Article 12: no logging. Article 15: no safety settings configured (Vertex has them, code doesn't use them). Article 14: no usage limits. Article 10: US region may violate EU data residency. All articles need attention.",
     },
     {
         "code": '''import vertexai
@@ -360,7 +360,7 @@ def process_tool_call(tool_response: str) -> str:
     )
     return response.choices[0].message.content
 
-# tool_response comes from an external API — could contain injection
+# tool_response comes from an external API - could contain injection
 external_data = requests.get("https://api.sales-platform.com/data").text
 result = process_tool_call(external_data)''',
         "injection_type": "Tool output injection",
@@ -425,7 +425,7 @@ def safe_chat(user_input: str) -> str:
     output = response.choices[0].message.content
     logger.info(f"Safe response generated (input risk: {sanitized.risk_score})")
     return output''',
-        "injection_type": "Defense pattern — injection detection and blocking",
+        "injection_type": "Defense pattern - injection detection and blocking",
         "notes": "COMPLIANT injection defense: Article 15 pass (regex-based injection detection, input sanitization, input length bounds, risk scoring). Article 12 pass (logging of detection events). Article 10 pass (Pydantic validation). Article 14 pass (automatic blocking above risk threshold). This pattern can be enhanced with ML-based detection (Rebuff, NeMo Guardrails) for production use.",
     },
 ]
@@ -454,7 +454,7 @@ def chatbot(message, history):
 demo = gr.ChatInterface(chatbot, title="AI Assistant")
 demo.launch(share=True)''',
         "framework": "Gradio + OpenAI",
-        "notes": "Gradio chatbot with share=True — Article 14: share=True exposes to public internet with no auth. Article 15: no input validation, unbounded conversation history. Article 12: no logging. Article 10: conversation data may contain PII, no governance. Article 9: no rate limiting on public endpoint.",
+        "notes": "Gradio chatbot with share=True - Article 14: share=True exposes to public internet with no auth. Article 15: no input validation, unbounded conversation history. Article 12: no logging. Article 10: conversation data may contain PII, no governance. Article 9: no rate limiting on public endpoint.",
     },
     {
         "code": '''import streamlit as st
@@ -481,7 +481,7 @@ if user_query:
         result = executor.invoke({"input": user_query})
     st.write(result["output"])''',
         "framework": "Streamlit + LangChain",
-        "notes": "Streamlit SQL agent — CRITICAL: Article 15 fail (SQL injection via natural language to SQL). Article 14: no authentication on Streamlit app. Article 12: no logging. Article 10: direct database access without governance. Streamlit provides no built-in auth or rate limiting.",
+        "notes": "Streamlit SQL agent - CRITICAL: Article 15 fail (SQL injection via natural language to SQL). Article 14: no authentication on Streamlit app. Article 12: no logging. Article 10: direct database access without governance. Streamlit provides no built-in auth or rate limiting.",
     },
     {
         "code": '''import gradio as gr
@@ -588,7 +588,7 @@ LLM_MODEL = "gpt-4"
 TEMPERATURE = 0.7
 # TODO: add API key management''',
         "framework": "LangChain",
-        "notes": "Multi-file agent project analysis: (1) agent/tools.py — CRITICAL: shell=True command execution (Article 15), unrestricted file read (Article 14), no input validation (Article 10). (2) agent/llm.py — temperature=0.7 too high for production, no max_tokens (Article 14). (3) agent/main.py — no logging (Article 12), no error handling (Article 9), raw input() with no validation (Article 15). (4) agent/config.py — TODO comment indicates incomplete API key management (Article 15). Cross-file issue: no centralized logging, no audit trail across modules, no compliance configuration. Recommendation: add a compliance middleware layer that wraps all tool calls with logging, validation, and approval gates.",
+        "notes": "Multi-file agent project analysis: (1) agent/tools.py - CRITICAL: shell=True command execution (Article 15), unrestricted file read (Article 14), no input validation (Article 10). (2) agent/llm.py - temperature=0.7 too high for production, no max_tokens (Article 14). (3) agent/main.py - no logging (Article 12), no error handling (Article 9), raw input() with no validation (Article 15). (4) agent/config.py - TODO comment indicates incomplete API key management (Article 15). Cross-file issue: no centralized logging, no audit trail across modules, no compliance configuration. Recommendation: add a compliance middleware layer that wraps all tool calls with logging, validation, and approval gates.",
     },
     {
         "code": '''# File: app/api/routes.py
@@ -660,7 +660,7 @@ def log_agent_action(user_id: str, query: str, result: dict):
     }
     logger.info(f"AUDIT: {json.dumps(audit)}")''',
         "framework": "LangChain + FastAPI",
-        "notes": "COMPLIANT multi-file project: (1) routes.py — FastAPI with request validation (Article 10/15). (2) request.py — Pydantic validation with regex patterns (Article 10). (3) agent.py — logging, max_iterations=5, error handling, max_tokens (Articles 9, 12, 14). (4) tools.py — validated tool inputs (Article 10/15). (5) audit.py — structured audit logging (Article 12). Cross-file assessment: good separation of concerns, centralized audit, validated inputs at every layer. Missing: no explicit risk classification (Article 9), no human oversight mechanism (Article 14 partial).",
+        "notes": "COMPLIANT multi-file project: (1) routes.py - FastAPI with request validation (Article 10/15). (2) request.py - Pydantic validation with regex patterns (Article 10). (3) agent.py - logging, max_iterations=5, error handling, max_tokens (Articles 9, 12, 14). (4) tools.py - validated tool inputs (Article 10/15). (5) audit.py - structured audit logging (Article 12). Cross-file assessment: good separation of concerns, centralized audit, validated inputs at every layer. Missing: no explicit risk classification (Article 9), no human oversight mechanism (Article 14 partial).",
     },
 ]
 
@@ -734,11 +734,11 @@ result = agent.invoke({"input": "Find recent papers"})''',
                 "scan_timestamp": "2026-03-14T12:00:00Z",
                 "articles": {
                     "article_9": {"status": "PASS", "score": 85, "finding": "Error handling via handle_parsing_errors and max_iterations limit", "severity": "LOW", "recommendation": "Consider adding explicit try/except around invoke()"},
-                    "article_10": {"status": "PASS", "score": 95, "finding": "Pydantic input validation with max_length, PII detection via trust layer", "severity": "LOW", "recommendation": "None — well implemented"},
+                    "article_10": {"status": "PASS", "score": 95, "finding": "Pydantic input validation with max_length, PII detection via trust layer", "severity": "LOW", "recommendation": "None - well implemented"},
                     "article_11": {"status": "PASS", "score": 90, "finding": "Docstrings present, type annotations via Pydantic, Field descriptions", "severity": "LOW", "recommendation": "Add module-level docstring"},
-                    "article_12": {"status": "PASS", "score": 100, "finding": "Structured logging + AIR Blackbox trust layer audit trail", "severity": "LOW", "recommendation": "None — comprehensive logging"},
+                    "article_12": {"status": "PASS", "score": 100, "finding": "Structured logging + AIR Blackbox trust layer audit trail", "severity": "LOW", "recommendation": "None - comprehensive logging"},
                     "article_14": {"status": "PASS", "score": 90, "finding": "max_iterations=5, max_tokens=1000, callbacks for oversight", "severity": "LOW", "recommendation": "Consider adding human approval for high-stakes queries"},
-                    "article_15": {"status": "PASS", "score": 95, "finding": "Injection detection, PII detection, input validation, error handling", "severity": "LOW", "recommendation": "None — well implemented"}
+                    "article_15": {"status": "PASS", "score": 95, "finding": "Injection detection, PII detection, input validation, error handling", "severity": "LOW", "recommendation": "None - well implemented"}
                 },
                 "files_scanned": 1,
                 "critical_issues": [],
@@ -754,13 +754,13 @@ result = agent.invoke({"input": "Find recent papers"})''',
 
 GDPR_INTERSECTION_QA = [
     {"q": "How does the EU AI Act interact with GDPR?",
-     "a": "The EU AI Act and GDPR are complementary regulations that often apply simultaneously. Key intersections: (1) Article 10 Data Governance: when AI training data contains personal data, both GDPR data minimization (Art. 5) and AI Act data quality requirements apply. (2) Automated Decision-Making: GDPR Article 22 gives individuals the right not to be subject to solely automated decisions with legal effects — this directly overlaps with AI Act Article 14 human oversight requirements. (3) Transparency: GDPR Articles 13-14 require disclosure of automated decision-making, while AI Act Articles 13 and 52 require transparency about AI system use. (4) Data Protection Impact Assessment (GDPR Art. 35) may be required alongside AI Act conformity assessment for high-risk systems processing personal data. (5) The AI Act explicitly states (Article 2(7)) that it does not affect GDPR — both sets of obligations must be met independently."},
+     "a": "The EU AI Act and GDPR are complementary regulations that often apply simultaneously. Key intersections: (1) Article 10 Data Governance: when AI training data contains personal data, both GDPR data minimization (Art. 5) and AI Act data quality requirements apply. (2) Automated Decision-Making: GDPR Article 22 gives individuals the right not to be subject to solely automated decisions with legal effects - this directly overlaps with AI Act Article 14 human oversight requirements. (3) Transparency: GDPR Articles 13-14 require disclosure of automated decision-making, while AI Act Articles 13 and 52 require transparency about AI system use. (4) Data Protection Impact Assessment (GDPR Art. 35) may be required alongside AI Act conformity assessment for high-risk systems processing personal data. (5) The AI Act explicitly states (Article 2(7)) that it does not affect GDPR - both sets of obligations must be met independently."},
     {"q": "How do GDPR data subject rights apply to AI systems under the EU AI Act?",
-     "a": "GDPR data subject rights create specific technical requirements for AI systems: (1) Right of Access (Art. 15): AI systems must be able to retrieve and report what personal data was used for training or inference. (2) Right to Erasure (Art. 17): AI systems must support data deletion, including from training sets and vector stores — this may require model retraining or machine unlearning. (3) Right to Explanation (Art. 22): For automated decisions, individuals can request meaningful information about the logic involved. Combined with AI Act Article 14, this means AI systems need explainability features. (4) Right to Rectification (Art. 16): If personal data in an AI system is inaccurate, it must be correctable. (5) Right to Object (Art. 21): Individuals can object to AI processing of their data. Implementation: maintain data lineage, support deletion APIs, implement explainability layers, and document data flows."},
+     "a": "GDPR data subject rights create specific technical requirements for AI systems: (1) Right of Access (Art. 15): AI systems must be able to retrieve and report what personal data was used for training or inference. (2) Right to Erasure (Art. 17): AI systems must support data deletion, including from training sets and vector stores - this may require model retraining or machine unlearning. (3) Right to Explanation (Art. 22): For automated decisions, individuals can request meaningful information about the logic involved. Combined with AI Act Article 14, this means AI systems need explainability features. (4) Right to Rectification (Art. 16): If personal data in an AI system is inaccurate, it must be correctable. (5) Right to Object (Art. 21): Individuals can object to AI processing of their data. Implementation: maintain data lineage, support deletion APIs, implement explainability layers, and document data flows."},
     {"q": "What are the GDPR implications of using personal data in RAG systems?",
-     "a": "RAG (Retrieval-Augmented Generation) systems have significant GDPR implications: (1) Legal Basis: You need a lawful basis (consent, legitimate interest, contract, etc.) to store personal data in vector databases. (2) Data Minimization: Only index personal data that is necessary for the AI system's purpose. (3) Storage Limitation: Personal data in vector stores must be deleted when no longer needed — implement TTL or periodic cleanup. (4) Purpose Limitation: Data indexed for one purpose cannot be used for another without additional legal basis. (5) Technical measures: Implement PII detection before indexing, support deletion from vector stores (right to erasure), maintain provenance tracking to know which documents contain whose data. (6) DPIA Required: Processing personal data through AI likely triggers GDPR Article 35 Data Protection Impact Assessment. Under the AI Act, this must also address AI-specific risks (Article 10)."},
+     "a": "RAG (Retrieval-Augmented Generation) systems have significant GDPR implications: (1) Legal Basis: You need a lawful basis (consent, legitimate interest, contract, etc.) to store personal data in vector databases. (2) Data Minimization: Only index personal data that is necessary for the AI system's purpose. (3) Storage Limitation: Personal data in vector stores must be deleted when no longer needed - implement TTL or periodic cleanup. (4) Purpose Limitation: Data indexed for one purpose cannot be used for another without additional legal basis. (5) Technical measures: Implement PII detection before indexing, support deletion from vector stores (right to erasure), maintain provenance tracking to know which documents contain whose data. (6) DPIA Required: Processing personal data through AI likely triggers GDPR Article 35 Data Protection Impact Assessment. Under the AI Act, this must also address AI-specific risks (Article 10)."},
     {"q": "How should PII handling in AI agent code comply with both GDPR and the EU AI Act?",
-     "a": "Dual GDPR + AI Act PII compliance requires: (1) DETECTION: Implement PII detection on all inputs before they reach the LLM — detect names, emails, phone numbers, addresses, SSNs, financial data. Libraries: Presidio (Microsoft), spaCy NER, regex patterns. (2) CONSENT: Verify consent exists before processing personal data (GDPR Art. 6). (3) MINIMIZATION: Redact or pseudonymize PII before sending to external LLM APIs — the LLM provider is a data processor under GDPR. (4) LOGGING: Log that PII was detected and handled, but do NOT log the PII itself (GDPR data minimization). (5) RETENTION: Implement data retention policies — don't store conversation history with PII indefinitely. (6) SUBJECT RIGHTS: Support data access, deletion, and portability requests. (7) CROSS-BORDER: If using US-based LLM APIs, ensure adequate transfer safeguards (GDPR Chapter V). Code example: PII detection middleware that sits between user input and LLM call, with configurable actions (redact, block, pseudonymize, consent-check)."},
+     "a": "Dual GDPR + AI Act PII compliance requires: (1) DETECTION: Implement PII detection on all inputs before they reach the LLM - detect names, emails, phone numbers, addresses, SSNs, financial data. Libraries: Presidio (Microsoft), spaCy NER, regex patterns. (2) CONSENT: Verify consent exists before processing personal data (GDPR Art. 6). (3) MINIMIZATION: Redact or pseudonymize PII before sending to external LLM APIs - the LLM provider is a data processor under GDPR. (4) LOGGING: Log that PII was detected and handled, but do NOT log the PII itself (GDPR data minimization). (5) RETENTION: Implement data retention policies - don't store conversation history with PII indefinitely. (6) SUBJECT RIGHTS: Support data access, deletion, and portability requests. (7) CROSS-BORDER: If using US-based LLM APIs, ensure adequate transfer safeguards (GDPR Chapter V). Code example: PII detection middleware that sits between user input and LLM call, with configurable actions (redact, block, pseudonymize, consent-check)."},
 ]
 
 # ═══════════════════════════════════════

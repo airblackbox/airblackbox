@@ -1,5 +1,5 @@
 """
-AIR Blackbox CLI — AI governance control plane.
+AIR Blackbox CLI - AI governance control plane.
 
     air-blackbox setup       # One-command setup: install model + verify
     air-blackbox discover    # Shadow AI inventory + AI-BOM
@@ -38,7 +38,7 @@ def print_banner():
     console.print("  [dim]EU AI Act Compliance · AI-BOM · Audit Chain · Incident Replay[/dim]")
     console.print()
     console.print("  " + "─" * 76, style="#1e2530")
-    console.print("  [bold #f85149]⚠  Enforcement deadline: August 2, 2026  —  €35M or 7% global turnover[/bold #f85149]")
+    console.print("  [bold #f85149]⚠  Enforcement deadline: August 2, 2026  -  €35M or 7% global turnover[/bold #f85149]")
     console.print("  " + "─" * 76, style="#1e2530")
     console.print("  [dim]pip install air-blackbox  ·  github.com/airblackbox/airblackbox  ·  airblackbox.ai[/dim]")
     console.print()
@@ -48,7 +48,7 @@ def print_banner():
 @click.version_option(version="1.8.0", prog_name="air-blackbox")
 @click.pass_context
 def main(ctx):
-    """AIR Blackbox — AI governance control plane.
+    """AIR Blackbox - AI governance control plane.
 
     Route your AI traffic through the gateway and get compliance,
     security, inventory, and incident response out of the box.
@@ -152,7 +152,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     """Check EU AI Act compliance from live gateway traffic."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
-    console.print("\n[bold blue]AIR Blackbox[/] — EU AI Act Compliance Check\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - EU AI Act Compliance Check\n")
     with console.status("[bold green]Connecting to gateway..."):
         client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
         status = client.get_status()
@@ -191,7 +191,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
             total_files = len(py_files)
 
             # === Smart sampling: pick compliance-relevant files ===
-            # Priority keywords — files most likely to contain compliance patterns
+            # Priority keywords - files most likely to contain compliance patterns
             priority_keywords = [
                 "agent", "pipeline", "tool", "llm", "model", "chat",
                 "safety", "guard", "policy", "policies", "hitl", "human",
@@ -207,7 +207,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                 rel = os.path.relpath(fp, scan).lower()
                 basename = os.path.basename(fp).lower()
                 score = 0
-                # Skip test files — they don't reflect compliance posture
+                # Skip test files - they don't reflect compliance posture
                 parts = rel.replace("\\", "/").split("/")
                 if any(p in {"tests", "test", "testing"} for p in parts):
                     return -1
@@ -318,7 +318,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
             # Only run AI model if we have actual code to analyze
             if files_included == 0 or not merged_code.strip():
                 if verbose:
-                    console.print(f"  [dim]No Python files found for AI analysis — skipping model[/]")
+                    console.print(f"  [dim]No Python files found for AI analysis - skipping model[/]")
                 result = {"available": False, "findings": [], "model": model, "error": None}
             else:
                 if verbose:
@@ -368,7 +368,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                         finding["status"] = "warn"
                         rule_ev = rule_evidence_map.get(art, "")
                         finding["evidence"] = (
-                            f"[Partial — rule-based found evidence] {rule_ev}. "
+                            f"[Partial - rule-based found evidence] {rule_ev}. "
                             f"Model noted: {finding.get('evidence', '')}"
                         )
                         overrides += 1
@@ -383,7 +383,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                 console.print(f"  [dim]Falling back to regex-only scan[/]\n")
         else:
             if verbose:
-                console.print(f"  [dim]AI model not available — using regex-only scan[/]")
+                console.print(f"  [dim]AI model not available - using regex-only scan[/]")
                 console.print(f"  [dim]Install: ollama create air-compliance -f Modelfile[/]\n")
 
     # Save to compliance history
@@ -420,7 +420,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         click.echo(json.dumps(output_data, indent=2))
         return
     for article in articles:
-        table = Table(title=f"Article {article['number']} — {article['title']}",
+        table = Table(title=f"Article {article['number']} - {article['title']}",
             show_header=True, header_style="bold white on dark_blue", title_style="bold")
         table.add_column("Check", style="bold", width=28)
         table.add_column("Tier", width=8, justify="center")
@@ -444,7 +444,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         console.print(table)
         console.print()
 
-    # Display deep findings if any (supplementary — not counted in main score)
+    # Display deep findings if any (supplementary - not counted in main score)
     if deep_findings and verbose:
         # Only show LLM findings that ADD info beyond what rules found
         rule_articles = {a["number"] for a in articles}
@@ -552,7 +552,7 @@ def discover(gateway, runs_dir, approved, fmt, output, init_registry):
     from air_blackbox.aibom.shadow import detect_shadow_ai, generate_approved_registry
     import json as jsonlib
 
-    console.print("\n[bold blue]AIR Blackbox[/] — AI Discovery & Inventory\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - AI Discovery & Inventory\n")
     with console.status("[bold green]Scanning environment..."):
         client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir)
         status = client.get_status()
@@ -667,7 +667,7 @@ def replay(gateway, runs_dir, episode, last, verify):
     """Reconstruct AI incidents from the audit chain."""
     from air_blackbox.replay.engine import ReplayEngine
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Incident Replay\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - Incident Replay\n")
 
     with console.status("[bold green]Loading audit records..."):
         engine = ReplayEngine(runs_dir=runs_dir or "./runs")
@@ -682,7 +682,7 @@ def replay(gateway, runs_dir, episode, last, verify):
         console.print("[bold]Verifying HMAC audit chain...[/]\n")
         result = engine.verify_chain()
         if result.intact:
-            console.print(f"  [green]✅ CHAIN INTACT[/] — {result.verified_records:,} records verified. No tampering detected.\n")
+            console.print(f"  [green]✅ CHAIN INTACT[/] - {result.verified_records:,} records verified. No tampering detected.\n")
         else:
             console.print(f"  [red]❌ CHAIN BROKEN[/] at record {result.first_break_at} (run: {result.first_break_run_id})")
             console.print(f"  [red]  {result.verified_records} of {result.total_records} records verified before break.[/]\n")
@@ -763,8 +763,8 @@ def export(gateway, runs_dir, scan, time_range, fmt, output):
 
     \b
     Formats:
-        json  — machine-readable signed evidence bundle (default)
-        pdf   — formatted PDF compliance report for humans / auditors
+        json  - machine-readable signed evidence bundle (default)
+        pdf   - formatted PDF compliance report for humans / auditors
 
     \b
     Examples:
@@ -776,7 +776,7 @@ def export(gateway, runs_dir, scan, time_range, fmt, output):
     from air_blackbox.export.bundle import generate_evidence_bundle
     import json as jsonlib
 
-    console.print("\n[bold cyan]AIR Blackbox[/] — Evidence Export\n")
+    console.print("\n[bold cyan]AIR Blackbox[/] - Evidence Export\n")
 
     with console.status("[bold green]Generating evidence bundle..."):
         bundle = generate_evidence_bundle(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
@@ -838,7 +838,7 @@ def export(gateway, runs_dir, scan, time_range, fmt, output):
 @main.command()
 @click.option("--output", "-o", default=".", help="Directory to create demo data in")
 def demo(output):
-    """Run a zero-config demo — generates sample data and shows compliance.
+    """Run a zero-config demo - generates sample data and shows compliance.
 
     Creates sample .air.json records and compliance doc templates so you
     can experience the full tool without Docker or a running gateway.
@@ -855,7 +855,7 @@ def demo(output):
     from air_blackbox.compliance.engine import run_all_checks
     import time
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Zero-Config Demo\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - Zero-Config Demo\n")
     console.print("[dim]Generating sample AI agent traffic...[/]\n")
     time.sleep(0.5)
 
@@ -881,7 +881,7 @@ def demo(output):
     if status.reachable:
         console.print(f"  [green]●[/] Gateway detected at {status.url}")
     else:
-        console.print(f"  [yellow]●[/] No gateway running (offline mode — using .air.json records)")
+        console.print(f"  [yellow]●[/] No gateway running (offline mode - using .air.json records)")
 
     console.print(f"  [green]●[/] [bold]{status.total_runs}[/] events loaded")
     console.print()
@@ -937,7 +937,7 @@ def init(output):
     from air_blackbox.demo_generator import _RISK_TEMPLATE, _DATA_GOV_TEMPLATE
     import os
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Project Init\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - Project Init\n")
 
     files_created = []
     for fname, content in [
@@ -967,7 +967,7 @@ def init(output):
 def validate(tool, arguments, content, allowlist):
     """Validate an agent action BEFORE execution.
 
-    Pre-execution runtime certification — proves the output was
+    Pre-execution runtime certification - proves the output was
     checked against rules before it was acted on.
 
     \b
@@ -979,7 +979,7 @@ def validate(tool, arguments, content, allowlist):
     from air_blackbox.validate import RuntimeValidator, ToolAllowlistRule
     import json as jsonlib
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Runtime Validation\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - Runtime Validation\n")
 
     validator = RuntimeValidator()
 
@@ -1015,9 +1015,9 @@ def validate(tool, arguments, content, allowlist):
     console.print()
 
     if report.passed:
-        console.print(f"  [green]✅ VALIDATED[/] — action approved for execution ({report.validated_in_ms}ms)")
+        console.print(f"  [green]✅ VALIDATED[/] - action approved for execution ({report.validated_in_ms}ms)")
     else:
-        console.print(f"  [red]❌ BLOCKED[/] — action failed validation ({report.validated_in_ms}ms)")
+        console.print(f"  [red]❌ BLOCKED[/] - action failed validation ({report.validated_in_ms}ms)")
     console.print(f"  [dim]Validation record: {report.action_id}.air.json[/]\n")
 
 
@@ -1045,7 +1045,7 @@ def history(path, compare, export_path, limit):
     )
     import json as jsonlib
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Compliance History\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - Compliance History\n")
 
     # Export mode
     if export_path:
@@ -1159,7 +1159,7 @@ def history(path, compare, export_path, limit):
 def test(gateway, verbose):
     """Run end-to-end validation of the AIR Blackbox stack.
 
-    Tests every subsystem — validation engine, compliance engine,
+    Tests every subsystem - validation engine, compliance engine,
     audit records, HMAC chain, and optionally the live gateway.
 
     \b
@@ -1173,7 +1173,7 @@ def test(gateway, verbose):
     import tempfile
     import os
 
-    console.print("\n[bold blue]AIR Blackbox[/] — Stack Validation Test\n")
+    console.print("\n[bold blue]AIR Blackbox[/] - Stack Validation Test\n")
 
     results = []
     start_time = time.time()
@@ -1212,10 +1212,10 @@ def test(gateway, verbose):
         with tempfile.TemporaryDirectory() as tmpdir:
             v = RuntimeValidator(runs_dir=tmpdir)
             v.add_rule(ToolAllowlistRule(["web_search", "calculator"]))
-            # Should pass — tool is on allowlist
+            # Should pass - tool is on allowlist
             r1 = v.validate({"tool_name": "web_search", "arguments": {"q": "hello"}})
             assert r1.passed, "Approved tool should pass"
-            # Should fail — tool is NOT on allowlist
+            # Should fail - tool is NOT on allowlist
             r2 = v.validate({"tool_name": "exec_shell", "arguments": {"cmd": "rm -rf /"}})
             assert not r2.passed, "Blocked tool should fail"
             return True, f"2/2 validation scenarios correct ({r1.validated_in_ms + r2.validated_in_ms}ms)"
@@ -1482,7 +1482,7 @@ def test(gateway, verbose):
                 f.write("class MyClass:\n    def __init__(self):\n        self.private = True\n        self._private_method = lambda: None\n")
             findings = scan_codebase(tmpdir)
             pii = [f for f in findings if f.name == "PII handling in code"]
-            # Should NOT pass — 'private' alone is not PII handling
+            # Should NOT pass - 'private' alone is not PII handling
             assert len(pii) == 1 and pii[0].status != "pass", f"Bare 'private' should not trigger PII pass, got {pii[0].status}"
         return True, "False positive: bare 'private' correctly ignored"
 
@@ -1492,7 +1492,7 @@ def test(gateway, verbose):
         """Verify scanner skips deprecated and archived directories."""
         from air_blackbox.compliance.code_scanner import scan_codebase
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create deprecated dir with Python files — should be skipped
+            # Create deprecated dir with Python files - should be skipped
             dep_dir = os.path.join(tmpdir, "deprecated")
             os.makedirs(dep_dir)
             with open(os.path.join(dep_dir, "old.py"), "w") as f:
@@ -1581,7 +1581,7 @@ def test(gateway, verbose):
             if r.status_code == 200:
                 data = r.json()
                 chain = data.get("audit_chain", {})
-                return True, f"Audit endpoint OK — chain length: {chain.get('length', 0)}, intact: {chain.get('intact', False)}"
+                return True, f"Audit endpoint OK - chain length: {chain.get('length', 0)}, intact: {chain.get('intact', False)}"
             return False, f"Audit endpoint returned {r.status_code}"
         except Exception:
             return False, f"Audit endpoint not reachable (gateway may not be running)"
@@ -1595,7 +1595,7 @@ def test(gateway, verbose):
             if r.status_code == 200:
                 data = r.json()
                 models = [m.get("id", "?") for m in data.get("data", [])[:3]]
-                return True, f"Proxy forwarding OK — models: {', '.join(models)}"
+                return True, f"Proxy forwarding OK - models: {', '.join(models)}"
             elif r.status_code == 401:
                 return True, "Proxy reached upstream (401 = API key needed, but proxy works)"
             return False, f"Proxy returned {r.status_code}"

@@ -3,10 +3,10 @@
 ##
 ## This config requires the custom collector built with OCB (see ocb-config.yaml).
 ## It wires the three AIR processors in order:
-##   1. genai_semantic_normalizer — normalize vendor attrs to gen_ai.*
-##   2. promptvault — offload content to storage, replace with vault refs
-##   3. genaisafe — PII redaction, loop detection, token metrics
-##   4. batch — standard batching before export
+##   1. genai_semantic_normalizer - normalize vendor attrs to gen_ai.*
+##   2. promptvault - offload content to storage, replace with vault refs
+##   3. genaisafe - PII redaction, loop detection, token metrics
+##   4. batch - standard batching before export
 ##
 
 receivers:
@@ -75,7 +75,7 @@ exporters:
   debug:
     verbosity: basic
 
-  ## Crowd-source exporter — sends anonymized metadata to AIR Blackbox central.
+  ## Crowd-source exporter - sends anonymized metadata to AIR Blackbox central.
   ## Only active when TELEMETRY_MODE=crowd_source (default for free tier).
   ## Disabled for air_gapped and private modes.
   otlp/crowd:
@@ -136,7 +136,7 @@ processors:
       repeat_threshold: 6
 
   # Step 3b: Aggressive PII scrub for crowd-source pipeline.
-  # Same as genaisafe but with full_hash mode — no preview chars leak.
+  # Same as genaisafe but with full_hash mode - no preview chars leak.
   genaisafe/crowd:
     redact:
       mode: full_hash
@@ -172,14 +172,14 @@ processors:
 
 service:
   pipelines:
-    ## Local pipeline — full processing, vault storage, local observability.
+    ## Local pipeline - full processing, vault storage, local observability.
     ## Always active regardless of telemetry mode.
     traces/local:
       receivers: [otlp]
       processors: [genai_semantic_normalizer, promptvault, genaisafe, batch]
       exporters: [otlp/jaeger, debug]
 
-    ## Crowd-source pipeline — anonymized metadata only.
+    ## Crowd-source pipeline - anonymized metadata only.
     ## Normalizer + aggressive PII scrub. NO vault processor (prompts never sent).
     ## Toggle via TELEMETRY_MODE env var. Disabled = comment out this pipeline.
     traces/crowd:

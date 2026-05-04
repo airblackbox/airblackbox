@@ -12,7 +12,7 @@ I'm Jason, the maintainer of AIR Blackbox, an open-source EU AI Act compliance s
 
 I ran Stability AI's generative-models repo through the scanner and wanted to share what I found. With 27K+ GitHub stars and Stable Diffusion powering a massive ecosystem of image generation applications, the models and code patterns in this repo cascade through thousands of downstream deployments. When the EU AI Act enforcement deadline hits on August 2, 2026, downstream users building on these models will need compliance evidence.
 
-**Summary**: 73 Python files scanned, 7/48 checks passing (15%).
+**Summary**: 73 Python files scanned, 7/51 checks passing (15%).
 
 Per-article breakdown:
 

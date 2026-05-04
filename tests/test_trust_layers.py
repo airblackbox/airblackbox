@@ -382,7 +382,7 @@ def test_langchain_handler_writes_chained_records():
             handler = AirLangChainHandler(runs_dir=d)
         except ImportError as e:
             if "langchain" in str(e).lower():
-                return  # Skip — langchain-core not installed
+                return  # Skip - langchain-core not installed
             raise
 
         # Simulate LLM start + end

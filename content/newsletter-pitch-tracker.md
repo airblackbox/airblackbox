@@ -28,16 +28,16 @@
 ## Send Order
 
 **Monday morning** (before Tuesday content launch):
-1. a@ethical.institute (Alejandro) — direct email, highest conversion likelihood
-2. arvindn@cs.princeton.edu (Arvind) — direct email, 73K audience
-3. contact@safe.ai (CAIS) — direct email
-4. ks@turingpost.com (Ksenia) — direct email, 100K audience
-5. aipolicyperspectives@google.com (Conor & Julian) — direct email
+1. a@ethical.institute (Alejandro) - direct email, highest conversion likelihood
+2. arvindn@cs.princeton.edu (Arvind) - direct email, 73K audience
+3. contact@safe.ai (CAIS) - direct email
+4. ks@turingpost.com (Ksenia) - direct email, 100K audience
+5. aipolicyperspectives@google.com (Conor & Julian) - direct email
 
 **Monday afternoon** (Substack DMs and contact forms):
-6. Risto Uuk — Substack DM on artificialintelligenceact.substack.com
-7. Siméon Campos — Substack DM on navigatingairisks.substack.com
-8. Montreal AI Ethics — contact form at montrealethics.ai/contact
+6. Risto Uuk - Substack DM on artificialintelligenceact.substack.com
+7. Siméon Campos - Substack DM on navigatingairisks.substack.com
+8. Montreal AI Ethics - contact form at montrealethics.ai/contact
 
 ## Notes
 

@@ -8,10 +8,10 @@
 
 The FT1000 companies are the fastest-growing companies in EUROPE. That means:
 
-1. **They're EU-headquartered** — directly subject to the EU AI Act
-2. **They're scaling fast** — fast growth = more AI adoption = more compliance exposure
-3. **They care about credibility** — FT1000 is a badge they use in investor decks and marketing
-4. **They have budget** — high-growth companies have money to spend on compliance tooling
+1. **They're EU-headquartered** - directly subject to the EU AI Act
+2. **They're scaling fast** - fast growth = more AI adoption = more compliance exposure
+3. **They care about credibility** - FT1000 is a badge they use in investor decks and marketing
+4. **They have budget** - high-growth companies have money to spend on compliance tooling
 
 The pitch writes itself: "You're one of Europe's fastest-growing companies. You're using AI. The EU AI Act enforcement deadline is August 2, 2026. Here's what your compliance gap looks like."
 
@@ -107,8 +107,8 @@ The 213 IT & Software companies alone would give us 10+ weeks of outreach at 3-5
 
 These are the ones I'd prioritize even without the full list:
 
-1. **PolyAI** (UK, #32) — enterprise conversational AI, directly regulated
-2. **LoanTube** (UK) — AI credit decisions = high-risk AI system
-3. **ML6** (Belgium) — pure ML engineering firm, EU-based
-4. **ICS.AI** (UK) — public sector AI = automatically high-risk
-5. **MCO** (EU) — compliance software company (the irony pitch)
+1. **PolyAI** (UK, #32) - enterprise conversational AI, directly regulated
+2. **LoanTube** (UK) - AI credit decisions = high-risk AI system
+3. **ML6** (Belgium) - pure ML engineering firm, EU-based
+4. **ICS.AI** (UK) - public sector AI = automatically high-risk
+5. **MCO** (EU) - compliance software company (the irony pitch)

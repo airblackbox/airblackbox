@@ -695,8 +695,8 @@ func inferProvider(model, providerURL string) string {
 
 
 // handleAnalytics returns per-model performance stats as JSON.
-// GET /v1/analytics — returns all models.
-// GET /v1/analytics?model=gpt-4 — returns stats for a specific model.
+// GET /v1/analytics - returns all models.
+// GET /v1/analytics?model=gpt-4 - returns stats for a specific model.
 func handleAnalytics(w http.ResponseWriter, r *http.Request, cfg Config) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -736,7 +736,7 @@ func handleAnalytics(w http.ResponseWriter, r *http.Request, cfg Config) {
 }
 
 // handleAudit returns the audit chain status and compliance report.
-// GET /v1/audit — chain integrity + compliance evaluation.
+// GET /v1/audit - chain integrity + compliance evaluation.
 func handleAudit(w http.ResponseWriter, r *http.Request, cfg Config) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -778,7 +778,7 @@ func handleAudit(w http.ResponseWriter, r *http.Request, cfg Config) {
 }
 
 // handleAuditExport generates a full evidence package for regulators.
-// GET /v1/audit/export — returns a signed evidence package JSON.
+// GET /v1/audit/export - returns a signed evidence package JSON.
 func handleAuditExport(w http.ResponseWriter, r *http.Request, cfg Config) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)

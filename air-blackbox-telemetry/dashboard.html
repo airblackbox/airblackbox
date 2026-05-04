@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIR Blackbox — Usage Dashboard</title>
+    <title>AIR Blackbox - Usage Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,24 +71,24 @@
 </div>
 
 <div id="dashboard">
-    <h1>AIR Blackbox — Usage Dashboard</h1>
+    <h1>AIR Blackbox - Usage Dashboard</h1>
     <p class="subtitle">Anonymous telemetry from real users (not PyPI download counts)</p>
 
     <div class="grid">
         <div class="card">
-            <div class="number" id="uniqueUsers">—</div>
+            <div class="number" id="uniqueUsers">-</div>
             <div class="label">Unique Users (All Time)</div>
         </div>
         <div class="card">
-            <div class="number" id="todayUsers">—</div>
+            <div class="number" id="todayUsers">-</div>
             <div class="label">Unique Users Today</div>
         </div>
         <div class="card">
-            <div class="number" id="totalScans">—</div>
+            <div class="number" id="totalScans">-</div>
             <div class="label">Total Scans (30 Days)</div>
         </div>
         <div class="card">
-            <div class="number" id="topCommand">—</div>
+            <div class="number" id="topCommand">-</div>
             <div class="label">Most Used Command</div>
         </div>
     </div>
@@ -165,7 +165,7 @@ function renderDashboard(data) {
 
     const cmds = data.commands || {};
     const topCmd = Object.entries(cmds).sort((a, b) => b[1] - a[1])[0];
-    document.getElementById('topCommand').textContent = topCmd ? topCmd[0] : '—';
+    document.getElementById('topCommand').textContent = topCmd ? topCmd[0] : '-';
 
     // Daily chart
     const dates = Object.keys(data.daily_scans || {}).sort();
@@ -229,18 +229,18 @@ function renderDashboard(data) {
     const tbody = document.getElementById('eventsBody');
     (data.recent_events || []).forEach(evt => {
         const tr = document.createElement('tr');
-        const ts = evt.server_timestamp ? new Date(evt.server_timestamp).toLocaleString() : '—';
+        const ts = evt.server_timestamp ? new Date(evt.server_timestamp).toLocaleString() : '-';
         const cmdClass = evt.command === 'comply' ? 'badge-comply' :
                          evt.command === 'discover' ? 'badge-discover' : 'badge-demo';
         tr.innerHTML = `
             <td>${ts}</td>
-            <td><span class="badge ${cmdClass}">${evt.command || '—'}</span></td>
+            <td><span class="badge ${cmdClass}">${evt.command || '-'}</span></td>
             <td>${evt.python_files || 0}</td>
             <td style="color:#56d364">${evt.checks_passing || 0}</td>
             <td style="color:#f85149">${evt.checks_failing || 0}</td>
-            <td>${evt.version || '—'}</td>
-            <td>${evt.os || '—'}</td>
-            <td>${evt.python_version || '—'}</td>
+            <td>${evt.version || '-'}</td>
+            <td>${evt.os || '-'}</td>
+            <td>${evt.python_version || '-'}</td>
         `;
         tbody.appendChild(tr);
     });

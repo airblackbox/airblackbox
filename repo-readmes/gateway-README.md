@@ -14,13 +14,13 @@ air-blackbox scan agent.py
 ## Highlights
 
 - **39 compliance checks** across 6 EU AI Act articles (9, 10, 11, 12, 14, 15)
-- **GDPR scanner** — 8 checks for consent, minimization, erasure, retention, DPIA
-- **Bias & fairness** — 6 checks for demographic parity, equalized odds, calibration
-- **Prompt injection detection** — 20 weighted patterns across 5 attack categories
-- **Standards crosswalk** — one scan maps to EU AI Act + ISO 42001 + NIST AI RMF
-- **Evidence bundles** — signed ZIP exports for auditors (SHA-256 manifest + HMAC)
-- **7 framework trust layers** — drop-in compliance for LangChain, CrewAI, OpenAI, and more
-- **No cloud, no API keys** — everything runs on your machine
+- **GDPR scanner** - 8 checks for consent, minimization, erasure, retention, DPIA
+- **Bias & fairness** - 6 checks for demographic parity, equalized odds, calibration
+- **Prompt injection detection** - 20 weighted patterns across 5 attack categories
+- **Standards crosswalk** - one scan maps to EU AI Act + ISO 42001 + NIST AI RMF
+- **Evidence bundles** - signed ZIP exports for auditors (SHA-256 manifest + HMAC)
+- **7 framework trust layers** - drop-in compliance for LangChain, CrewAI, OpenAI, and more
+- **No cloud, no API keys** - everything runs on your machine
 
 ## Quick Start
 
@@ -54,7 +54,7 @@ chain.invoke(input, config={"callbacks": [AirLangChainHandler()]})
 
 | Area | Checks | What It Finds |
 |---|---|---|
-| **EU AI Act** (Arts 9–15) | 39 | Risk management, data governance, record-keeping, human oversight, robustness |
+| **EU AI Act** (Arts 9-15) | 39 | Risk management, data governance, record-keeping, human oversight, robustness |
 | **GDPR** | 8 | Consent, minimization, erasure, retention, DPIA, breach notification |
 | **Bias & Fairness** | 6 | Demographic parity, equalized odds, calibration, explainability |
 | **Prompt Injection** | 20 patterns | Role override, delimiter injection, privilege escalation, data exfiltration |
@@ -64,7 +64,7 @@ chain.invoke(input, config={"callbacks": [AirLangChainHandler()]})
 
 ```bash
 air-blackbox scan [file]          # Full compliance scan
-air-blackbox comply -v            # EU AI Act articles 9–15
+air-blackbox comply -v            # EU AI Act articles 9-15
 air-blackbox scan-injection       # Prompt injection detection
 air-blackbox scan-gdpr            # GDPR gap analysis
 air-blackbox scan-bias            # Fairness checks
@@ -75,7 +75,7 @@ air-blackbox demo                 # Interactive walkthrough
 
 ## Trust Layers
 
-Drop-in compliance for your existing agent code. Non-blocking — logs to `.air.json` audit records.
+Drop-in compliance for your existing agent code. Non-blocking - logs to `.air.json` audit records.
 
 | Framework | Install |
 |---|---|
@@ -122,20 +122,20 @@ Your AI Agent
 | **[air-trust](https://github.com/airblackbox/air-trust)** | Tamper-evident audit chain + Ed25519 signed handoffs |
 | **[air-gate](https://github.com/airblackbox/air-gate)** | Human-in-the-loop tool gating (Article 14) |
 | **[air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp)** | MCP server for Claude Desktop, Cursor, Claude Code |
-| **[air-platform](https://github.com/airblackbox/air-platform)** | Docker Compose — full stack in one command |
-| **[compliance-action](https://github.com/airblackbox/compliance-action)** | GitHub Action — checks on every pull request |
+| **[air-platform](https://github.com/airblackbox/air-platform)** | Docker Compose - full stack in one command |
+| **[compliance-action](https://github.com/airblackbox/compliance-action)** | GitHub Action - checks on every pull request |
 
 ## Who Made This
 
-Built by [Jason Shotwell](mailto:jason@airblackbox.ai). EU AI Act enforcement begins August 2, 2026 — this is the scanner that tells you where you stand.
+Built by [Jason Shotwell](mailto:jason@airblackbox.ai). EU AI Act enforcement begins August 2, 2026 - this is the scanner that tells you where you stand.
 
 ## Learn More
 
-- **[airblackbox.ai](https://airblackbox.ai)** — project homepage
-- **[Interactive demo](https://airblackbox.ai/demo/signed-handoff)** — signed handoffs in action
-- **[PyPI](https://pypi.org/project/air-blackbox/)** — package page
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — how the ecosystem fits together
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to help
+- **[airblackbox.ai](https://airblackbox.ai)** - project homepage
+- **[Interactive demo](https://airblackbox.ai/demo/signed-handoff)** - signed handoffs in action
+- **[PyPI](https://pypi.org/project/air-blackbox/)** - package page
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - how the ecosystem fits together
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - how to help
 
 ## License
 
@@ -143,4 +143,4 @@ Apache-2.0. See [LICENSE](LICENSE).
 
 ---
 
-If this helps your team prepare for EU AI Act enforcement, **[star the repo](https://github.com/airblackbox/gateway)** — it helps other teams find it.
+If this helps your team prepare for EU AI Act enforcement, **[star the repo](https://github.com/airblackbox/gateway)** - it helps other teams find it.

@@ -10,7 +10,7 @@ Hi Steve,
 
 Clients get a compliance strategy from advisory. Then they ask: how do we actually verify the codebase meets Articles 9-15? That's the technical gap.
 
-AIR Blackbox is an open-source code scanner that checks Python AI applications against EU AI Act Articles 9-15 — risk management, data governance, documentation, human oversight, security, accuracy. Runs on the client's machine, no data leaves their environment, scans in ~30 seconds. Apache 2.0, so your teams and clients can inspect the logic.
+AIR Blackbox is an open-source code scanner that checks Python AI applications against EU AI Act Articles 9-15 - risk management, data governance, documentation, human oversight, security, accuracy. Runs on the client's machine, no data leaves their environment, scans in ~30 seconds. Apache 2.0, so your teams and clients can inspect the logic.
 
 It's a technical pattern scanner, not a linter or legal tool. Think of it as the diagnostic scan that feeds into your compliance strategy conversations.
 

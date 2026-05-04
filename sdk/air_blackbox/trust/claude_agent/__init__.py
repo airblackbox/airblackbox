@@ -4,7 +4,7 @@ AIR Blackbox Trust Layer for Anthropic Claude Agent SDK.
 Drop-in audit trails, PII detection, injection scanning, and
 risk-based tool gating for Claude Agent SDK sessions.
 
-Usage (hooks — recommended):
+Usage (hooks - recommended):
     from air_blackbox.trust.claude_agent import air_claude_hooks
 
     options = ClaudeAgentOptions(
@@ -361,7 +361,7 @@ def air_claude_hooks(
     try:
         from claude_agent_sdk import HookMatcher
     except ImportError:
-        # If SDK not installed, return plain dicts — still usable
+        # If SDK not installed, return plain dicts - still usable
         # when the caller constructs HookMatcher themselves
         raise ImportError(
             "claude-agent-sdk not installed. "
@@ -455,7 +455,7 @@ def air_permission_handler(
         if risk == 'HIGH' and require_approval_high:
             record['status'] = 'approval_required'
             _write_record(record, runs_dir)
-            # Return deny with a message — the user will see why
+            # Return deny with a message - the user will see why
             return PermissionResultDeny(
                 message=f'AIR Blackbox: {tool_name} requires approval (HIGH risk)',
                 interrupt=False,

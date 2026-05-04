@@ -1,4 +1,4 @@
-# Dev.to Article — "The Three Questions..." (community-first redraft)
+# Dev.to Article - "The Three Questions..." (community-first redraft)
 
 **Target publish date**: 1-2 days after the Show HN post lands.
 
@@ -41,13 +41,13 @@ air-blackbox comply --scan .
 ### Expected output (abbreviated)
 
 ```text
-Article 9  — Risk Management              PASS (3/3 checks)
-Article 10 — Data Governance              WARN (2/3 checks)
-Article 11 — Technical Documentation      PASS (4/4 checks)
-Article 12 — Record-Keeping               FAIL (2/5 checks)
-Article 13 — Transparency                 WARN (4/6 checks)
-Article 14 — Human Oversight              PASS (3/3 checks)
-Article 15 — Accuracy & Robustness        FAIL (3/6 checks)
+Article 9  - Risk Management              PASS (3/3 checks)
+Article 10 - Data Governance              WARN (2/3 checks)
+Article 11 - Technical Documentation      PASS (4/4 checks)
+Article 12 - Record-Keeping               FAIL (2/5 checks)
+Article 13 - Transparency                 WARN (4/6 checks)
+Article 14 - Human Oversight              PASS (3/3 checks)
+Article 15 - Accuracy & Robustness        FAIL (3/6 checks)
 ```
 
 Every `FAIL` and `WARN` line includes a fix hint pointing at the specific code location and the specific regulatory clause.
@@ -77,7 +77,7 @@ AIR Blackbox v1.12.0 detects all three. The goal is not to push our scheme, it i
 If your code is an autonomous agent and none of these schemes are in use, the scanner reports:
 
 ```text
-Article 12 — Record-Keeping
+Article 12 - Record-Keeping
   FAIL  Agent identity binding
         Autonomous agent detected in 3 file(s) (agent.py, tick.py, loop.py)
         but no stable cryptographic identity binding found.
@@ -196,7 +196,7 @@ Most compliance tools skip Article 13 because it is documentation-heavy and hard
 ### What the Article 13 scan looks like
 
 ```text
-Article 13 — Transparency and Provision of Information
+Article 13 - Transparency and Provision of Information
   PASS   AI disclosure to users
   FAIL   Capability and limitation documentation
          No MODEL_CARD.md, SYSTEM_CARD.md, or capability docs found

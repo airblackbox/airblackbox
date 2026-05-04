@@ -6,7 +6,7 @@ tags: ai, python, opensource, security
 cover_image:
 ---
 
-The EU AI Act requires that high-risk AI systems automatically record events over their lifetime — and that those logs can't be quietly modified after the fact. Article 12 is specific:
+The EU AI Act requires that high-risk AI systems automatically record events over their lifetime - and that those logs can't be quietly modified after the fact. Article 12 is specific:
 
 > "High-risk AI systems shall technically allow for the automatic recording of events ('logs') over the lifetime of the system."
 
@@ -20,7 +20,7 @@ Three things landed this week:
 
 **1. HMAC-SHA256 Audit Chain Specification v1.0**
 
-A formal, citeable spec that defines how to build tamper-evident audit trails for AI agents. Every record is linked to the previous one via HMAC-SHA256 — modify any record and the entire chain breaks from that point forward.
+A formal, citeable spec that defines how to build tamper-evident audit trails for AI agents. Every record is linked to the previous one via HMAC-SHA256 - modify any record and the entire chain breaks from that point forward.
 
 The spec covers:
 - The `.air.json` record format (with full JSON Schema)
@@ -58,7 +58,7 @@ Full spec: [audit-chain-v1.md on GitHub](https://github.com/airblackbox/airblack
 
 **2. Anthropic Claude Agent SDK trust layer**
 
-AIR Blackbox now supports 6 agent frameworks. The newest is the Anthropic Claude Agent SDK — the hooks-based architecture made this a natural fit.
+AIR Blackbox now supports 6 agent frameworks. The newest is the Anthropic Claude Agent SDK - the hooks-based architecture made this a natural fit.
 
 ```python
 from claude_agent_sdk import ClaudeAgentOptions
@@ -96,7 +96,7 @@ Install: `pip install air-blackbox[claude]`
 
 **3. 4,600 training examples for the fine-tuned compliance model**
 
-We went from 18 hand-crafted examples to 4,602 diverse training examples covering all 6 frameworks at 4 compliance levels (0/6, 2/6, 4/6, 6/6). The training data generator produces realistic code snippets — not toy examples — with varied compliance gaps.
+We went from 18 hand-crafted examples to 4,602 diverse training examples covering all 6 frameworks at 4 compliance levels (0/6, 2/6, 4/6, 6/6). The training data generator produces realistic code snippets - not toy examples - with varied compliance gaps.
 
 This is for the fine-tuned Llama model that does deep compliance analysis locally via Ollama. More training data = fewer false positives = a model that actually understands the difference between "has logging" and "has tamper-evident logging."
 
@@ -110,7 +110,7 @@ Record 1: hash = HMAC-SHA256(key, hash_0_bytes || JSON(record_1))
 Record 2: hash = HMAC-SHA256(key, hash_1_bytes || JSON(record_2))
 ```
 
-Each hash depends on every previous hash. Change any record and the chain breaks. The signing key is set via `TRUST_SIGNING_KEY` env var — without it, anyone can compute valid hashes. With it, only key holders can produce or verify the chain.
+Each hash depends on every previous hash. Change any record and the chain breaks. The signing key is set via `TRUST_SIGNING_KEY` env var - without it, anyone can compute valid hashes. With it, only key holders can produce or verify the chain.
 
 A typical audit record looks like this:
 
@@ -155,7 +155,7 @@ The EU AI Act deadline is August 2026. Five months from now. Most AI teams I've 
 1. "We'll figure it out later." (Dangerous.)
 2. "We need to buy an enterprise compliance platform." (Expensive and unnecessary for most.)
 
-There's a third option: add compliance as a layer to the tools you're already using. That's what AIR Blackbox does. One pip install, a few lines of code, and you have tamper-evident audit trails, PII scanning, injection detection, and risk classification — all running locally.
+There's a third option: add compliance as a layer to the tools you're already using. That's what AIR Blackbox does. One pip install, a few lines of code, and you have tamper-evident audit trails, PII scanning, injection detection, and risk classification - all running locally.
 
 This isn't a substitute for legal counsel. It checks technical requirements, not legal compliance. It's a linter for AI governance, not a lawyer.
 

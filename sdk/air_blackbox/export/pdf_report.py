@@ -1,5 +1,5 @@
 """
-AIR Blackbox — PDF Compliance Report Generator
+AIR Blackbox - PDF Compliance Report Generator
 Converts a compliance evidence bundle into a professional PDF report.
 
 Usage:
@@ -98,7 +98,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
     failing  = summary.get("failing",  0)
     total    = summary.get("total_checks", passing + warnings + failing)
     scan_path = bundle.get("scan_metadata", {}).get("path", ".")
-    file_count = bundle.get("scan_metadata", {}).get("files_scanned", "—")
+    file_count = bundle.get("scan_metadata", {}).get("files_scanned", "-")
 
     # ── Header ─────────────────────────────────────────────────
     story.append(Paragraph("AIR Blackbox", title_s))
@@ -168,12 +168,12 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
 
     # ── Per-article tables ──────────────────────────────────────
     LABELS = {
-        9:  "Article 9 — Risk Management",
-        10: "Article 10 — Data Governance",
-        11: "Article 11 — Technical Documentation",
-        12: "Article 12 — Record-Keeping",
-        14: "Article 14 — Human Oversight",
-        15: "Article 15 — Accuracy, Robustness & Cybersecurity",
+        9:  "Article 9 - Risk Management",
+        10: "Article 10 - Data Governance",
+        11: "Article 11 - Technical Documentation",
+        12: "Article 12 - Record-Keeping",
+        14: "Article 14 - Human Oversight",
+        15: "Article 15 - Accuracy, Robustness & Cybersecurity",
     }
     CW = [0.7*inch, 1.85*inch, 0.55*inch, 3.9*inch]
 
@@ -217,7 +217,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
         [P("#",hdr_s), P("Fix",hdr_s), P("Article",hdr_s), P("Impact",hdr_s)],
         [P("1"), P("Set TRUST_SIGNING_KEY in .env"),         P("Art. 12"), P("Activates tamper-evident HMAC-SHA256 audit chain")],
         [P("2"), P("pip install air-langchain-trust"),       P("Art. 15"), P("Runtime prompt injection scanning")],
-        [P("3"), P("docker compose up"),                     P("Art. 14"), P("Gateway starts — kill switch active")],
+        [P("3"), P("docker compose up"),                     P("Art. 14"), P("Gateway starts - kill switch active")],
         [P("4"), P("Set VAULT_ENDPOINT in .env"),            P("Art. 10"), P("Encrypted data vault configured")],
         [P("5"), P("air-blackbox discover --generate-card"), P("Art. 11"), P("MODEL_CARD.md auto-generated")],
     ]
@@ -238,7 +238,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
 
     # ── Audit summary ───────────────────────────────────────────
     story.append(Paragraph("Audit Trail Summary", section_s))
-    models_str = ", ".join(list(audit.get("models", {}).keys())[:4]) or "—"
+    models_str = ", ".join(list(audit.get("models", {}).keys())[:4]) or "-"
     at_rows = [
         ["Total Records", str(audit.get("total_records", 0)),
          "Total Tokens",  str(audit.get("total_tokens", 0))],
@@ -274,14 +274,14 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
     story.append(Spacer(1, 8))
 
     # False positives removed
-    story.append(Paragraph("False Positives Removed (v1.2.2 — Haystack Maintainer Feedback)", S('sh',
+    story.append(Paragraph("False Positives Removed (v1.2.2 - Haystack Maintainer Feedback)", S('sh',
         fontSize=9, fontName='Helvetica-Bold', textColor=_c(NAVY), spaceBefore=6, spaceAfter=4)))
 
     fp_rows = [
         [P("Pattern Removed", hdr_s), P("Check", hdr_s), P("Why It Was Wrong", hdr_s)],
         [P("Generic scope matching"),
          P("Art. 14 Token Scope"),
-         P("Was matching PDF test files containing 'scope' — not OAuth scope validation. Removed and replaced with specific patterns: token_scope, oauth_scope, check_scope.")],
+         P("Was matching PDF test files containing 'scope' - not OAuth scope validation. Removed and replaced with specific patterns: token_scope, oauth_scope, check_scope.")],
         [P("ttl / max_age cache patterns"),
          P("Art. 14 Token Expiry"),
          P("Cache TTL is not token expiry. Was generating false passes. Replaced with: max_agent_steps, execution_timeout, session_timeout.")],
@@ -310,19 +310,19 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
         [P("Pattern Added", hdr_s), P("Article", hdr_s), P("What It Now Detects", hdr_s)],
         [P("max_agent_steps, step_limit, execution_timeout"),
          P("Art. 14"),
-         P("Genuine execution boundaries that prevent runaway agents — more accurate than cache TTL patterns")],
+         P("Genuine execution boundaries that prevent runaway agents - more accurate than cache TTL patterns")],
         [P("CONTENT_TRACING_ENABLED, logging_tracer"),
          P("Art. 12"),
-         P("Production-grade Haystack audit trail patterns — framework-specific tracing architecture")],
+         P("Production-grade Haystack audit trail patterns - framework-specific tracing architecture")],
         [P("human_in_the_loop/policies, confirmation_policy"),
          P("Art. 14"),
-         P("Real HITL policy patterns — distinguishes genuine human oversight gates from generic boolean flags")],
+         P("Real HITL policy patterns - distinguishes genuine human oversight gates from generic boolean flags")],
         [P("memory_store user_id patterns"),
          P("Art. 14"),
-         P("Memory store user binding — stronger identity signal than generic telemetry user fields")],
+         P("Memory store user binding - stronger identity signal than generic telemetry user fields")],
         [P("confirmation_strategy, strategy_context"),
          P("Art. 14"),
-         P("Haystack-specific tool execution confirmation — actual scope control, not generic permission checks")],
+         P("Haystack-specific tool execution confirmation - actual scope control, not generic permission checks")],
     ]
     np_tbl = Table(np_rows, colWidths=[2.2*inch, 0.7*inch, 4.1*inch], repeatRows=1)
     np_tbl.setStyle(TableStyle([
@@ -344,7 +344,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
     vfy_rows = [
         [P("Step", hdr_s), P("Command", hdr_s), P("What to Check", hdr_s)],
         [P("1"), P("air-blackbox comply --scan . -v"),
-         P("Re-run the scan yourself. Every check shows its evidence and detection type (AUTO/HYBRID/MANUAL). AUTO checks are deterministic — same code always produces same result.")],
+         P("Re-run the scan yourself. Every check shows its evidence and detection type (AUTO/HYBRID/MANUAL). AUTO checks are deterministic - same code always produces same result.")],
         [P("2"), P("air-blackbox replay --verify"),
          P("Verifies the HMAC-SHA256 audit chain integrity. If any record was tampered with after the scan, the chain breaks and this command reports it.")],
         [P("3"), P("air-blackbox discover"),
@@ -383,7 +383,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
     story.append(HRFlowable(width='100%', thickness=1, color=_c(BORDER)))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f"Generated by AIR Blackbox — airblackbox.ai — Apache 2.0 Open Source — {date_str}",
+        f"Generated by AIR Blackbox - airblackbox.ai - Apache 2.0 Open Source - {date_str}",
         foot_s
     ))
 

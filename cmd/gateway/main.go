@@ -1,4 +1,4 @@
-// Command gateway starts the AIR Blackbox Gateway — an OpenAI-compatible
+// Command gateway starts the AIR Blackbox Gateway - an OpenAI-compatible
 // reverse proxy that records every LLM call for audit and replay.
 package main
 
@@ -58,7 +58,7 @@ func main() {
 			log.Printf("Vault connected: %s", vaultEndpoint)
 		}
 	} else {
-		log.Println("WARN: VAULT_ENDPOINT not set — vault storage disabled")
+		log.Println("WARN: VAULT_ENDPOINT not set - vault storage disabled")
 	}
 
 	// --- Recorder setup ---
@@ -112,8 +112,7 @@ func main() {
 	if grCfg != nil && grCfg.Trust.Enabled {
 		signingKey := envOr("TRUST_SIGNING_KEY", grCfg.Trust.SigningKey)
 		if signingKey == "" {
-			log.Println("WARN: Trust layer enabled but no signing key set (set TRUST_SIGNING_KEY)")
-			signingKey = "insecure-default-key"
+			log.Fatalf("FATAL: Trust layer enabled but no signing key set. Set TRUST_SIGNING_KEY env var or trust.signing_key in guardrails.yaml. Refusing to start with an insecure default.")
 		}
 		grCfg.Trust.SigningKey = signingKey // store resolved key for export endpoint
 		auditChain = trust.NewAuditChain(signingKey)

@@ -162,7 +162,7 @@ func runJSONExport() {
 		log.Fatalf("vault connect: %v", err)
 	}
 
-	// Build a chain from scratch for demonstration — in production this would
+	// Build a chain from scratch for demonstration - in production this would
 	// load from the gateway's persistent chain store.
 	chain := trust.NewAuditChain(secret)
 

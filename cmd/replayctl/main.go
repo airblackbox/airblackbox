@@ -3,8 +3,8 @@
 //
 // Usage:
 //
-//	replayctl replay <path/to/run.air.json>          — single trace
-//	replayctl batch  <dir> [--last N] [--format json] — batch replay
+//	replayctl replay <path/to/run.air.json>          - single trace
+//	replayctl batch  <dir> [--last N] [--format json] - batch replay
 package main
 
 import (
@@ -100,7 +100,7 @@ func runSingleReplay() {
 		os.Exit(1)
 	}
 
-	fmt.Println("NO DRIFT — replay matches original within threshold.")
+	fmt.Println("NO DRIFT - replay matches original within threshold.")
 }
 
 // --- Batch replay (new) ---
@@ -113,7 +113,7 @@ func runBatchReplay() {
 
 	dir := os.Args[2]
 
-	// Parse optional flags (simple manual parsing — no external deps).
+	// Parse optional flags (simple manual parsing - no external deps).
 	last := 0
 	format := "text"
 

@@ -1,6 +1,6 @@
 # AIR Blackbox
 
-**AI governance control plane — compliance, inventory, incident response, and audit for AI agents.**
+**AI governance control plane - compliance, inventory, incident response, and audit for AI agents.**
 
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/airblackbox/airblackbox/blob/main/LICENSE)

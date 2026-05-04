@@ -12,7 +12,7 @@ I'm Jason, the maintainer of AIR Blackbox, an open-source EU AI Act compliance s
 
 I ran MindsDB through the scanner and wanted to share what I found. MindsDB connects to 200+ data sources and runs ML directly on live data, which means your enterprise users are deploying AI workflows that touch production databases. When the EU AI Act enforcement deadline hits on August 2, 2026, those enterprise customers with EU operations will need compliance evidence for their AI pipelines.
 
-**Summary**: 1,635 Python files scanned, 20/48 checks passing (42%).
+**Summary**: 1,635 Python files scanned, 20/51 checks passing (42%).
 
 Per-article breakdown:
 

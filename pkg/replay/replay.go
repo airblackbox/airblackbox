@@ -24,7 +24,7 @@ type Result struct {
 	DriftSummary   string  `json:"drift_summary,omitempty"`
 	OriginalTokens int     `json:"original_tokens"`
 	ReplayTokens   int     `json:"replay_tokens"`
-	Similarity     float64 `json:"similarity"` // 0.0–1.0 basic token overlap
+	Similarity     float64 `json:"similarity"` // 0.0-1.0 basic token overlap
 }
 
 // Options configures a replay.

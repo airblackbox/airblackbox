@@ -1,5 +1,5 @@
 """
-AIR Blackbox — EU AI Act Compliance LLM Fine-Tune
+AIR Blackbox - EU AI Act Compliance LLM Fine-Tune
 ==================================================
 Fine-tunes Llama-3.1-8B-Instruct using Unsloth + LoRA on 4,602 compliance
 analysis examples. The resulting model replaces regex-based pattern matching
@@ -15,9 +15,9 @@ Usage:
     python finetune.py --push-to-hub        # Train + push to HuggingFace Hub
 
 Output:
-    ./air-compliance-model/          — merged fp16 model
-    ./air-compliance-model-gguf/     — GGUF quantized (Q4_K_M, Q8_0)
-    ./air-compliance-lora/           — LoRA adapter only
+    ./air-compliance-model/          - merged fp16 model
+    ./air-compliance-model-gguf/     - GGUF quantized (Q4_K_M, Q8_0)
+    ./air-compliance-lora/           - LoRA adapter only
 """
 
 import argparse
@@ -84,7 +84,7 @@ def main():
 
     # ── Step 1: Load data ──
     print("=" * 60)
-    print("AIR Blackbox — EU AI Act Compliance LLM Fine-Tune")
+    print("AIR Blackbox - EU AI Act Compliance LLM Fine-Tune")
     print("=" * 60)
 
     examples = load_training_data(args.data)

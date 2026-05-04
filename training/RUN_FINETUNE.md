@@ -1,6 +1,6 @@
-# AIR Blackbox — Fine-Tune Guide
+# AIR Blackbox - Fine-Tune Guide
 
-## Quick Start (Google Colab — Free GPU)
+## Quick Start (Google Colab - Free GPU)
 
 1. Upload `training_data_combined_v3.jsonl` and `finetune.py` to Colab
 2. Run:

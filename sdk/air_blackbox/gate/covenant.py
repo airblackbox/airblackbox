@@ -1,5 +1,5 @@
 """
-Covenant — declarative policy DSL for AI agent behavior.
+Covenant - declarative policy DSL for AI agent behavior.
 
 A covenant is a set of rules an agent commits to BEFORE execution.
 The covenant hash is included in every receipt, proving which rules
@@ -186,7 +186,7 @@ class Covenant:
                     matched_rules.append(rule)
 
         if not matched_rules:
-            # Default deny — if no rule matches, forbid
+            # Default deny - if no rule matches, forbid
             return RuleAction.FORBID
 
         # Forbid wins over everything

@@ -134,7 +134,7 @@ class AirAutoGenTrust:
                 hook=self._make_message_hook(agent_name),
             )
 
-        # Hook into reply functions — wrap generate_reply
+        # Hook into reply functions - wrap generate_reply
         original_generate_reply = getattr(agent, 'generate_reply', None)
         if original_generate_reply:
             trust = self

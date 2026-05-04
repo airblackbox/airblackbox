@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AIR Blackbox — Moat Training Data Generator v2 (Phases 18-25)
+AIR Blackbox - Moat Training Data Generator v2 (Phases 18-25)
 ==============================================================
 Fills critical gaps competitors don't cover:
   Phase 18: Explainability / XAI techniques (Article 13 Transparency)
@@ -47,11 +47,11 @@ result, explanation = explain_decision(applicant_data)
 print(f"Decision: {result}, Explanation: {explanation}")''',
         "notes": """**CRITICAL Article 13 Violations:**
 
-1. **No actual XAI method used** — The LLM-generated explanation is fabricated, not derived from actual model reasoning. Article 13 requires explanations that accurately reflect how the system reached its decision.
+1. **No actual XAI method used** - The LLM-generated explanation is fabricated, not derived from actual model reasoning. Article 13 requires explanations that accurately reflect how the system reached its decision.
 
-2. **Post-hoc rationalization** — GPT-4 is inventing plausible-sounding explanations that have no connection to the RandomForest's actual feature importances. This is worse than no explanation — it's misleading.
+2. **Post-hoc rationalization** - GPT-4 is inventing plausible-sounding explanations that have no connection to the RandomForest's actual feature importances. This is worse than no explanation - it's misleading.
 
-3. **Credit scoring = Annex III high-risk** — This system falls under Annex III (creditworthiness assessment) requiring rigorous Article 13 transparency obligations.
+3. **Credit scoring = Annex III high-risk** - This system falls under Annex III (creditworthiness assessment) requiring rigorous Article 13 transparency obligations.
 
 **Required fixes:**
 - Use SHAP, LIME, or built-in feature_importances_ to derive real explanations
@@ -81,7 +81,7 @@ def explain_decision(features, feature_names, user_id: str):
     prediction = model.predict([features])[0]
     proba = model.predict_proba([features])[0]
 
-    # Real SHAP values — actual feature contributions
+    # Real SHAP values - actual feature contributions
     shap_values = explainer.shap_values(features)
 
     # Build human-readable explanation from real model reasoning
@@ -115,15 +115,15 @@ def explain_decision(features, feature_names, user_id: str):
 result = explain_decision(applicant_data, feature_names, user_id="U-12345")''',
         "notes": """**Compliant with Article 13 (Transparency):**
 
-1. **Real XAI method** — SHAP TreeExplainer provides mathematically grounded feature attributions directly from the model's decision process.
+1. **Real XAI method** - SHAP TreeExplainer provides mathematically grounded feature attributions directly from the model's decision process.
 
-2. **Human-readable output** — Top factors are presented with direction and magnitude, meeting Article 13's requirement for interpretable information.
+2. **Human-readable output** - Top factors are presented with direction and magnitude, meeting Article 13's requirement for interpretable information.
 
-3. **Confidence scores** — Prediction probabilities help users understand decision certainty.
+3. **Confidence scores** - Prediction probabilities help users understand decision certainty.
 
-4. **Audit trail** — Every explanation is logged with timestamp, user ID, and key factors (Article 12).
+4. **Audit trail** - Every explanation is logged with timestamp, user ID, and key factors (Article 12).
 
-5. **Methodology documented** — Explanation method and model type are recorded (Article 11).
+5. **Methodology documented** - Explanation method and model type are recorded (Article 11).
 
 **Minor recommendations:**
 - Add demographic group fairness analysis per decision
@@ -156,15 +156,15 @@ executor = AgentExecutor(agent=agent, tools=[classify_resume, rank_candidates])
 result = executor.invoke({"input": "Process these 50 resumes and rank them"})''',
         "notes": """**CRITICAL Article 13 + Annex III Violations:**
 
-1. **No explainability whatsoever** — Resume classification and ranking decisions are completely opaque. An LLM black-box making hiring decisions with no explanation of criteria used.
+1. **No explainability whatsoever** - Resume classification and ranking decisions are completely opaque. An LLM black-box making hiring decisions with no explanation of criteria used.
 
-2. **Employment = Annex III high-risk** — Recruitment and candidate screening falls under Annex III Section 4(a), triggering full Article 13 transparency requirements.
+2. **Employment = Annex III high-risk** - Recruitment and candidate screening falls under Annex III Section 4(a), triggering full Article 13 transparency requirements.
 
-3. **No criteria documentation** — What makes a candidate "qualified"? The system has no defined, auditable criteria — just an LLM prompt.
+3. **No criteria documentation** - What makes a candidate "qualified"? The system has no defined, auditable criteria - just an LLM prompt.
 
-4. **No appeal mechanism** — Rejected candidates cannot understand why or challenge the decision (violates Article 14 human oversight).
+4. **No appeal mechanism** - Rejected candidates cannot understand why or challenge the decision (violates Article 14 human oversight).
 
-5. **Bias amplification risk** — LLM may encode historical biases in hiring patterns without any fairness constraints or testing (Article 10).
+5. **Bias amplification risk** - LLM may encode historical biases in hiring patterns without any fairness constraints or testing (Article 10).
 
 **Required fixes:**
 - Define explicit, documented qualification criteria
@@ -195,15 +195,15 @@ def classify_with_attention(text):
 result, attention_map = classify_with_attention("Patient shows signs of depression")
 print(f"Classification: {result}")
 print(f"Attention: {attention_map}")''',
-        "notes": """**Partial Article 13 Compliance — Needs Improvement:**
+        "notes": """**Partial Article 13 Compliance - Needs Improvement:**
 
-1. **Attention ≠ explanation** — Attention weights show what the model "looked at" but research shows they don't reliably explain "why" a decision was made. Article 13 requires meaningful explanations.
+1. **Attention ≠ explanation** - Attention weights show what the model "looked at" but research shows they don't reliably explain "why" a decision was made. Article 13 requires meaningful explanations.
 
-2. **Healthcare context** — If this classifies patient conditions, it may fall under Annex III high-risk, requiring rigorous explainability beyond attention visualization.
+2. **Healthcare context** - If this classifies patient conditions, it may fall under Annex III high-risk, requiring rigorous explainability beyond attention visualization.
 
-3. **No confidence score** — Missing prediction probability/uncertainty estimate.
+3. **No confidence score** - Missing prediction probability/uncertainty estimate.
 
-4. **No logging** — No audit trail of decisions or explanations.
+4. **No logging** - No audit trail of decisions or explanations.
 
 **Recommendations:**
 - Supplement attention with SHAP or integrated gradients for more reliable explanations
@@ -237,7 +237,7 @@ def explain_classification(text: str, request_id: str):
     prediction = torch.argmax(proba, dim=-1).item()
     confidence = proba[0][prediction].item()
 
-    # Integrated Gradients — mathematically rigorous attribution
+    # Integrated Gradients - mathematically rigorous attribution
     def forward_func(input_ids):
         return model(input_ids=input_ids).logits
 
@@ -275,15 +275,15 @@ def explain_classification(text: str, request_id: str):
     return result''',
         "notes": """**Strong Article 13 Compliance:**
 
-1. **Rigorous XAI method** — Integrated Gradients is axiomatically grounded (satisfies sensitivity and implementation invariance), providing reliable token-level attributions.
+1. **Rigorous XAI method** - Integrated Gradients is axiomatically grounded (satisfies sensitivity and implementation invariance), providing reliable token-level attributions.
 
-2. **Confidence-based routing** — Low-confidence classifications trigger human review (Article 14).
+2. **Confidence-based routing** - Low-confidence classifications trigger human review (Article 14).
 
-3. **Full audit trail** — Request ID, timestamp, classification, confidence all logged (Article 12).
+3. **Full audit trail** - Request ID, timestamp, classification, confidence all logged (Article 12).
 
-4. **Transparent methodology** — Explanation method is documented in output (Article 11).
+4. **Transparent methodology** - Explanation method is documented in output (Article 11).
 
-5. **Token-level explanations** — Users can see which words drove the classification decision.
+5. **Token-level explanations** - Users can see which words drove the classification decision.
 
 **Minor recommendations:**
 - Add contrastive explanations for borderline cases
@@ -294,13 +294,13 @@ def explain_classification(text: str, request_id: str):
 
 XAI_QA = [
     {"q": "What does EU AI Act Article 13 require for transparency and explainability?",
-     "a": "Article 13 requires high-risk AI systems to be designed and developed in such a way that their operation is sufficiently transparent to enable deployers to interpret the system's output and use it appropriately. Specifically: (1) AI systems must be accompanied by instructions for use that include concise, complete, correct and clear information that is relevant, accessible and comprehensible to deployers; (2) The information must specify the system's intended purpose, level of accuracy, robustness and cybersecurity, known or foreseeable circumstances that could lead to risks, performance regarding specific groups of persons, and specifications for input data. For high-risk systems, this means providing meaningful explanations of how the system reaches its decisions — not just raw outputs but interpretable reasoning that humans can evaluate and act upon."},
+     "a": "Article 13 requires high-risk AI systems to be designed and developed in such a way that their operation is sufficiently transparent to enable deployers to interpret the system's output and use it appropriately. Specifically: (1) AI systems must be accompanied by instructions for use that include concise, complete, correct and clear information that is relevant, accessible and comprehensible to deployers; (2) The information must specify the system's intended purpose, level of accuracy, robustness and cybersecurity, known or foreseeable circumstances that could lead to risks, performance regarding specific groups of persons, and specifications for input data. For high-risk systems, this means providing meaningful explanations of how the system reaches its decisions - not just raw outputs but interpretable reasoning that humans can evaluate and act upon."},
     {"q": "What's the difference between SHAP, LIME, and Integrated Gradients for AI Act compliance?",
-     "a": "Each XAI method has different strengths for EU AI Act Article 13 compliance: **SHAP (SHapley Additive exPlanations)**: Based on game theory (Shapley values), provides theoretically optimal feature attribution. Best for tabular data and tree-based models. Gives global and local explanations. Most defensible for regulatory purposes because of mathematical foundations. **LIME (Local Interpretable Model-agnostic Explanations)**: Creates local linear approximations around individual predictions. Model-agnostic — works with any model. Good for explaining individual decisions but can be unstable (different runs give different explanations). Less suitable for regulatory compliance due to instability. **Integrated Gradients**: Gradient-based attribution for neural networks. Satisfies two key axioms (Sensitivity and Implementation Invariance). Best for NLP and image models. Computationally more expensive but mathematically rigorous. For EU AI Act compliance, the choice depends on the model type: SHAP for tree/tabular models, Integrated Gradients for deep learning, LIME as a supplementary method. All should be documented per Article 11, and their limitations disclosed per Article 13."},
+     "a": "Each XAI method has different strengths for EU AI Act Article 13 compliance: **SHAP (SHapley Additive exPlanations)**: Based on game theory (Shapley values), provides theoretically optimal feature attribution. Best for tabular data and tree-based models. Gives global and local explanations. Most defensible for regulatory purposes because of mathematical foundations. **LIME (Local Interpretable Model-agnostic Explanations)**: Creates local linear approximations around individual predictions. Model-agnostic - works with any model. Good for explaining individual decisions but can be unstable (different runs give different explanations). Less suitable for regulatory compliance due to instability. **Integrated Gradients**: Gradient-based attribution for neural networks. Satisfies two key axioms (Sensitivity and Implementation Invariance). Best for NLP and image models. Computationally more expensive but mathematically rigorous. For EU AI Act compliance, the choice depends on the model type: SHAP for tree/tabular models, Integrated Gradients for deep learning, LIME as a supplementary method. All should be documented per Article 11, and their limitations disclosed per Article 13."},
     {"q": "Can LLM-generated explanations satisfy Article 13 transparency requirements?",
-     "a": "No — LLM-generated post-hoc explanations generally cannot satisfy Article 13 requirements, and relying on them is risky. The problem: when you ask GPT-4 to 'explain' a decision made by another model, the LLM generates plausible-sounding but fabricated reasoning. This is post-hoc rationalization, not explanation. The LLM has no access to the actual model's internal decision process. Article 13 requires explanations that accurately reflect how the system actually reached its decision. A fabricated explanation violates this requirement and could expose the deployer to liability. Acceptable approaches: (1) Use model-intrinsic methods (SHAP, Integrated Gradients, attention + verification) that derive explanations from the actual model; (2) Use LLMs to translate technical XAI outputs into human-readable language, but only if the underlying data comes from real model internals; (3) For LLM-based systems themselves, use chain-of-thought prompting with logging, but document that LLM reasoning may not perfectly reflect internal processing."},
+     "a": "No - LLM-generated post-hoc explanations generally cannot satisfy Article 13 requirements, and relying on them is risky. The problem: when you ask GPT-4 to 'explain' a decision made by another model, the LLM generates plausible-sounding but fabricated reasoning. This is post-hoc rationalization, not explanation. The LLM has no access to the actual model's internal decision process. Article 13 requires explanations that accurately reflect how the system actually reached its decision. A fabricated explanation violates this requirement and could expose the deployer to liability. Acceptable approaches: (1) Use model-intrinsic methods (SHAP, Integrated Gradients, attention + verification) that derive explanations from the actual model; (2) Use LLMs to translate technical XAI outputs into human-readable language, but only if the underlying data comes from real model internals; (3) For LLM-based systems themselves, use chain-of-thought prompting with logging, but document that LLM reasoning may not perfectly reflect internal processing."},
     {"q": "How should explainability differ for high-risk vs general-purpose AI under the EU AI Act?",
-     "a": "The EU AI Act creates a tiered explainability requirement based on risk classification: **High-risk (Annex III)**: Full Article 13 compliance required — system must provide sufficient transparency for deployers to interpret outputs and use them appropriately. This means: per-decision explanations with feature attributions, confidence scores, documented explanation methodology, disclosure of known limitations, and information about performance across different demographic groups. Examples: credit scoring must explain which factors drove approval/denial; hiring AI must explain qualification criteria. **General-purpose AI models (GPAI)**: Under Article 53, providers must provide technical documentation and instructions sufficient for downstream deployers to comply with their own obligations. If a GPAI model is used in a high-risk system, the chain of responsibility means someone must provide the required transparency. **Limited risk (Article 50)**: Transparency obligations focus on disclosure — users must be informed they're interacting with AI (chatbots), content is AI-generated (deepfakes), or emotion recognition/biometric categorization is in use. **Minimal risk**: No specific explainability requirements, though voluntary codes of conduct are encouraged. The practical implication: if you're building tools that scan AI code, you should check whether the code includes appropriate explainability methods for its risk level."},
+     "a": "The EU AI Act creates a tiered explainability requirement based on risk classification: **High-risk (Annex III)**: Full Article 13 compliance required - system must provide sufficient transparency for deployers to interpret outputs and use them appropriately. This means: per-decision explanations with feature attributions, confidence scores, documented explanation methodology, disclosure of known limitations, and information about performance across different demographic groups. Examples: credit scoring must explain which factors drove approval/denial; hiring AI must explain qualification criteria. **General-purpose AI models (GPAI)**: Under Article 53, providers must provide technical documentation and instructions sufficient for downstream deployers to comply with their own obligations. If a GPAI model is used in a high-risk system, the chain of responsibility means someone must provide the required transparency. **Limited risk (Article 50)**: Transparency obligations focus on disclosure - users must be informed they're interacting with AI (chatbots), content is AI-generated (deepfakes), or emotion recognition/biometric categorization is in use. **Minimal risk**: No specific explainability requirements, though voluntary codes of conduct are encouraged. The practical implication: if you're building tools that scan AI code, you should check whether the code includes appropriate explainability methods for its risk level."},
 ]
 
 # ═══════════════════════════════════════
@@ -329,15 +329,15 @@ executor = AgentExecutor(agent=agent, tools=[score_loan_application])
 result = executor.invoke({"input": "Score this loan application: John, 35, income $75k, credit score 720"})''',
         "notes": """**CRITICAL Article 10 + Annex III Violations:**
 
-1. **No bias testing** — An LLM making loan decisions with zero fairness evaluation. LLMs encode societal biases from training data — names, ages, and demographic proxies directly influence outputs.
+1. **No bias testing** - An LLM making loan decisions with zero fairness evaluation. LLMs encode societal biases from training data - names, ages, and demographic proxies directly influence outputs.
 
-2. **Credit/lending = Annex III high-risk** — Creditworthiness assessment falls under Annex III Section 5(b), requiring full Article 10 data governance compliance.
+2. **Credit/lending = Annex III high-risk** - Creditworthiness assessment falls under Annex III Section 5(b), requiring full Article 10 data governance compliance.
 
-3. **No protected attribute handling** — Applicant name (ethnic proxy), age (protected class), and other features are passed directly to the LLM with no debiasing.
+3. **No protected attribute handling** - Applicant name (ethnic proxy), age (protected class), and other features are passed directly to the LLM with no debiasing.
 
-4. **No disparate impact testing** — No evaluation of whether approval rates differ across demographic groups.
+4. **No disparate impact testing** - No evaluation of whether approval rates differ across demographic groups.
 
-5. **No documented scoring criteria** — "Score 1-100" with no defined, auditable rubric.
+5. **No documented scoring criteria** - "Score 1-100" with no defined, auditable rubric.
 
 **Required fixes:**
 - Implement fairness metrics (demographic parity, equalized odds, equal opportunity)
@@ -428,17 +428,17 @@ class FairLoanScorer:
         return result''',
         "notes": """**Strong Article 10 Compliance:**
 
-1. **Fairlearn ThresholdOptimizer** — Post-processing fairness constraint ensures demographic parity across protected groups.
+1. **Fairlearn ThresholdOptimizer** - Post-processing fairness constraint ensures demographic parity across protected groups.
 
-2. **Comprehensive fairness metrics** — Demographic parity difference, equalized odds difference, and per-group accuracy/approval rates tracked.
+2. **Comprehensive fairness metrics** - Demographic parity difference, equalized odds difference, and per-group accuracy/approval rates tracked.
 
-3. **Threshold-based alerting** — Automatic warnings when fairness metrics exceed acceptable thresholds.
+3. **Threshold-based alerting** - Automatic warnings when fairness metrics exceed acceptable thresholds.
 
-4. **Protected attribute awareness** — Explicit tracking of gender, race proxies, age groups, disability status.
+4. **Protected attribute awareness** - Explicit tracking of gender, race proxies, age groups, disability status.
 
-5. **Full audit trail** — Every decision logged with applicant ID, timestamp, confidence, and fairness constraint status (Article 12).
+5. **Full audit trail** - Every decision logged with applicant ID, timestamp, confidence, and fairness constraint status (Article 12).
 
-6. **Human review routing** — Low-confidence decisions flagged for human review (Article 14).
+6. **Human review routing** - Low-confidence decisions flagged for human review (Article 14).
 
 **Recommendations:**
 - Schedule periodic fairness audits (monthly/quarterly)
@@ -465,17 +465,17 @@ screen_task = Task(
 
 crew = Crew(agents=[recruiter], tasks=[screen_task])
 result = crew.kickoff(inputs={"candidates": candidate_profiles})''',
-        "notes": """**CRITICAL Article 10 Violations (Employment — Annex III):**
+        "notes": """**CRITICAL Article 10 Violations (Employment - Annex III):**
 
-1. **No bias testing on LLM outputs** — LLMs are known to exhibit biases based on names (gender/ethnic proxies), education institutions (socioeconomic proxy), and career gap patterns (disability/parenting proxy). No testing is performed.
+1. **No bias testing on LLM outputs** - LLMs are known to exhibit biases based on names (gender/ethnic proxies), education institutions (socioeconomic proxy), and career gap patterns (disability/parenting proxy). No testing is performed.
 
-2. **No defined screening criteria** — "Select top 5" with no explicit, auditable qualification requirements. The LLM's implicit criteria are uncontrollable and undocumented.
+2. **No defined screening criteria** - "Select top 5" with no explicit, auditable qualification requirements. The LLM's implicit criteria are uncontrollable and undocumented.
 
-3. **Employment = Annex III high-risk** — Candidate screening falls under Annex III Section 4(a), requiring full bias testing.
+3. **Employment = Annex III high-risk** - Candidate screening falls under Annex III Section 4(a), requiring full bias testing.
 
-4. **No counterfactual testing** — Should test: does changing a candidate's name from "John" to "Jamal" or "Maria" change their ranking?
+4. **No counterfactual testing** - Should test: does changing a candidate's name from "John" to "Jamal" or "Maria" change their ranking?
 
-5. **No demographic monitoring** — No tracking of selection rates across gender, ethnicity, age, or disability.
+5. **No demographic monitoring** - No tracking of selection rates across gender, ethnicity, age, or disability.
 
 **Required fixes:**
 - Implement counterfactual fairness testing (swap names/demographics, check for output changes)
@@ -488,11 +488,11 @@ result = crew.kickoff(inputs={"candidates": candidate_profiles})''',
 
 BIAS_QA = [
     {"q": "What does Article 10 require for training data governance and bias prevention?",
-     "a": "Article 10 establishes comprehensive requirements for data governance in high-risk AI systems: (1) Training, validation and testing datasets must be subject to data governance practices covering design choices, data collection processes, data preparation operations (annotation, labeling, cleaning, updating, enrichment, aggregation), formulation of relevant assumptions about the data, assessment of data availability/quantity/suitability, examination of possible biases that could affect health/safety or lead to discrimination, and appropriate measures to detect/prevent/mitigate those biases. (2) Datasets must be relevant, sufficiently representative, and free of errors as far as possible. (3) Datasets must have appropriate statistical properties with regard to the persons or groups on which the system is intended to be used. (4) For bias detection and correction, providers may process special categories of personal data (Article 9 GDPR data like race, health, etc.) strictly to the extent necessary for bias monitoring, detection and correction, subject to appropriate safeguards. This is a significant provision because it explicitly allows processing sensitive data for bias testing — addressing the catch-22 where you need demographic data to detect discrimination but GDPR restricts that data."},
+     "a": "Article 10 establishes comprehensive requirements for data governance in high-risk AI systems: (1) Training, validation and testing datasets must be subject to data governance practices covering design choices, data collection processes, data preparation operations (annotation, labeling, cleaning, updating, enrichment, aggregation), formulation of relevant assumptions about the data, assessment of data availability/quantity/suitability, examination of possible biases that could affect health/safety or lead to discrimination, and appropriate measures to detect/prevent/mitigate those biases. (2) Datasets must be relevant, sufficiently representative, and free of errors as far as possible. (3) Datasets must have appropriate statistical properties with regard to the persons or groups on which the system is intended to be used. (4) For bias detection and correction, providers may process special categories of personal data (Article 9 GDPR data like race, health, etc.) strictly to the extent necessary for bias monitoring, detection and correction, subject to appropriate safeguards. This is a significant provision because it explicitly allows processing sensitive data for bias testing - addressing the catch-22 where you need demographic data to detect discrimination but GDPR restricts that data."},
     {"q": "What fairness metrics should be used to comply with the EU AI Act?",
-     "a": "The EU AI Act doesn't prescribe specific fairness metrics, but compliance best practice requires multiple complementary metrics: (1) **Demographic Parity** — checks if positive outcome rates are equal across groups. Good baseline but can mask underlying issues. (2) **Equalized Odds** — checks if true positive and false positive rates are equal across groups. Stronger guarantee but harder to achieve. (3) **Equal Opportunity** — checks if true positive rates are equal (focuses on qualified individuals getting fair treatment). Often the most defensible for hiring/lending. (4) **Predictive Parity** — checks if positive predictive values are equal across groups. (5) **Counterfactual Fairness** — tests if changing a protected attribute changes the outcome. Critical for LLM-based systems where you can test by swapping names/demographics. (6) **Intersectional analysis** — tests fairness across combinations of protected attributes (e.g., Black women vs. white men). Often reveals disparities hidden in single-attribute analysis. For EU AI Act compliance, document which metrics you chose and why, set thresholds, monitor continuously, and include results in Article 11 technical documentation."},
+     "a": "The EU AI Act doesn't prescribe specific fairness metrics, but compliance best practice requires multiple complementary metrics: (1) **Demographic Parity** - checks if positive outcome rates are equal across groups. Good baseline but can mask underlying issues. (2) **Equalized Odds** - checks if true positive and false positive rates are equal across groups. Stronger guarantee but harder to achieve. (3) **Equal Opportunity** - checks if true positive rates are equal (focuses on qualified individuals getting fair treatment). Often the most defensible for hiring/lending. (4) **Predictive Parity** - checks if positive predictive values are equal across groups. (5) **Counterfactual Fairness** - tests if changing a protected attribute changes the outcome. Critical for LLM-based systems where you can test by swapping names/demographics. (6) **Intersectional analysis** - tests fairness across combinations of protected attributes (e.g., Black women vs. white men). Often reveals disparities hidden in single-attribute analysis. For EU AI Act compliance, document which metrics you chose and why, set thresholds, monitor continuously, and include results in Article 11 technical documentation."},
     {"q": "How do you test an LLM-based system for bias under the EU AI Act?",
-     "a": "Testing LLM-based systems for bias requires specific techniques because you can't inspect model internals like traditional ML: (1) **Counterfactual testing**: Create paired test cases where only demographic indicators change (names, pronouns, cultural references) and check if outputs differ materially. For hiring: does changing 'James' to 'Lakisha' change the screening decision? For lending: does changing 'husband/wife' pronouns affect score? (2) **Prompt sensitivity analysis**: Test how different phrasings of the same request affect outcomes across demographic groups. (3) **Output distribution analysis**: Run large-scale tests and analyze the distribution of outcomes (scores, rankings, recommendations) across demographic groups. (4) **Red-teaming for bias**: Deliberately craft inputs designed to elicit biased responses. (5) **Benchmark datasets**: Use established bias benchmarks (WinoBias, BBQ, BOLD) adapted to your domain. (6) **Human evaluation**: Have diverse evaluators assess outputs for bias. (7) **Longitudinal monitoring**: Bias can emerge over time as user patterns change — implement continuous monitoring. Document all testing methodology, results, and mitigation steps in your Article 11 technical documentation. For Annex III high-risk applications, this testing is mandatory, not optional."},
+     "a": "Testing LLM-based systems for bias requires specific techniques because you can't inspect model internals like traditional ML: (1) **Counterfactual testing**: Create paired test cases where only demographic indicators change (names, pronouns, cultural references) and check if outputs differ materially. For hiring: does changing 'James' to 'Lakisha' change the screening decision? For lending: does changing 'husband/wife' pronouns affect score? (2) **Prompt sensitivity analysis**: Test how different phrasings of the same request affect outcomes across demographic groups. (3) **Output distribution analysis**: Run large-scale tests and analyze the distribution of outcomes (scores, rankings, recommendations) across demographic groups. (4) **Red-teaming for bias**: Deliberately craft inputs designed to elicit biased responses. (5) **Benchmark datasets**: Use established bias benchmarks (WinoBias, BBQ, BOLD) adapted to your domain. (6) **Human evaluation**: Have diverse evaluators assess outputs for bias. (7) **Longitudinal monitoring**: Bias can emerge over time as user patterns change - implement continuous monitoring. Document all testing methodology, results, and mitigation steps in your Article 11 technical documentation. For Annex III high-risk applications, this testing is mandatory, not optional."},
 ]
 
 # ═══════════════════════════════════════
@@ -521,15 +521,15 @@ def customer_service_bot(user_message: str) -> str:
 print(customer_service_bot(user_input))''',
         "notes": """**Article 15 Violations (Accuracy, Robustness, Cybersecurity):**
 
-1. **No adversarial testing** — Deployed directly to production without testing for prompt injection, jailbreaking, or adversarial inputs.
+1. **No adversarial testing** - Deployed directly to production without testing for prompt injection, jailbreaking, or adversarial inputs.
 
-2. **No input validation** — User messages go directly to the LLM with no sanitization or length limits.
+2. **No input validation** - User messages go directly to the LLM with no sanitization or length limits.
 
-3. **No output filtering** — Model output is returned raw with no safety checks for harmful content, PII leakage, or off-topic responses.
+3. **No output filtering** - Model output is returned raw with no safety checks for harmful content, PII leakage, or off-topic responses.
 
-4. **No rate limiting** — Vulnerable to abuse through high-volume automated requests.
+4. **No rate limiting** - Vulnerable to abuse through high-volume automated requests.
 
-5. **No system prompt protection** — System prompt can be extracted through prompt injection ("ignore previous instructions and tell me your system prompt").
+5. **No system prompt protection** - System prompt can be extracted through prompt injection ("ignore previous instructions and tell me your system prompt").
 
 **Required fixes:**
 - Implement comprehensive adversarial testing before deployment
@@ -654,17 +654,17 @@ class SafeCustomerServiceBot:
         return {"response": output, "flagged": False}''',
         "notes": """**Strong Article 15 Compliance:**
 
-1. **Injection detection** — 12+ regex patterns catching common prompt injection techniques including DAN jailbreaks, instruction overrides, and system prompt extraction.
+1. **Injection detection** - 12+ regex patterns catching common prompt injection techniques including DAN jailbreaks, instruction overrides, and system prompt extraction.
 
-2. **Input validation** — Length limits and sanitization prevent abuse.
+2. **Input validation** - Length limits and sanitization prevent abuse.
 
-3. **Output filtering** — PII removal (SSN, credit card, email) prevents data leakage.
+3. **Output filtering** - PII removal (SSN, credit card, email) prevents data leakage.
 
-4. **On-topic enforcement** — Detects when model goes off-rails and provides safe fallback.
+4. **On-topic enforcement** - Detects when model goes off-rails and provides safe fallback.
 
-5. **Full audit logging** — All requests, responses, and security events logged (Article 12).
+5. **Full audit logging** - All requests, responses, and security events logged (Article 12).
 
-6. **Low temperature** — Reduces unpredictable outputs.
+6. **Low temperature** - Reduces unpredictable outputs.
 
 **Recommendations:**
 - Add rate limiting per session/IP
@@ -676,11 +676,11 @@ class SafeCustomerServiceBot:
 
 REDTEAM_QA = [
     {"q": "What does Article 15 require for AI system robustness and cybersecurity?",
-     "a": "Article 15 requires high-risk AI systems to achieve an appropriate level of accuracy, robustness and cybersecurity, and perform consistently in those respects throughout their lifecycle. Specifically: (1) **Robustness**: Systems must be resilient to errors, faults, or inconsistencies within the system or the environment. This includes resistance to adversarial inputs — attempts to manipulate model behavior through crafted inputs. (2) **Cybersecurity**: Technical redundancy solutions including backup plans and fail-safe mechanisms must protect against unauthorized access, adversarial manipulation of training data (data poisoning), adversarial inputs designed to cause errors (evasion attacks), model manipulation, and confidentiality breaches. (3) **Testing obligation**: Providers must test systems against adversarial scenarios relevant to the intended purpose. This means red-teaming is not optional for high-risk systems — it's a legal requirement. (4) **Lifecycle commitment**: These protections must be maintained throughout the system's lifecycle, not just at deployment. This means continuous adversarial testing, not one-time assessment."},
+     "a": "Article 15 requires high-risk AI systems to achieve an appropriate level of accuracy, robustness and cybersecurity, and perform consistently in those respects throughout their lifecycle. Specifically: (1) **Robustness**: Systems must be resilient to errors, faults, or inconsistencies within the system or the environment. This includes resistance to adversarial inputs - attempts to manipulate model behavior through crafted inputs. (2) **Cybersecurity**: Technical redundancy solutions including backup plans and fail-safe mechanisms must protect against unauthorized access, adversarial manipulation of training data (data poisoning), adversarial inputs designed to cause errors (evasion attacks), model manipulation, and confidentiality breaches. (3) **Testing obligation**: Providers must test systems against adversarial scenarios relevant to the intended purpose. This means red-teaming is not optional for high-risk systems - it's a legal requirement. (4) **Lifecycle commitment**: These protections must be maintained throughout the system's lifecycle, not just at deployment. This means continuous adversarial testing, not one-time assessment."},
     {"q": "What red-team testing should be performed for EU AI Act compliance?",
      "a": "Comprehensive red-team testing for EU AI Act compliance should cover: (1) **Prompt injection**: Direct injection (overriding system instructions), indirect injection (malicious content in retrieved documents/tool outputs), multi-turn manipulation (gradually shifting model behavior across conversation turns). (2) **Jailbreaking**: Known jailbreak techniques (DAN, roleplay attacks, encoding tricks), novel attack generation (automated with tools like Garak, PyRIT, or ART), multi-modal attacks if applicable (images with embedded text). (3) **Data poisoning**: Test if training data could be manipulated to alter model behavior, verify data pipeline integrity and provenance. (4) **Model extraction/theft**: Test if model weights or training data can be inferred from API access, implement rate limiting and output perturbation. (5) **Privacy attacks**: Membership inference (can you tell if specific data was in training set?), attribute inference (can model leak personal information?), training data extraction (can model regurgitate training examples?). (6) **Adversarial robustness**: Evasion attacks (small perturbations that change predictions), boundary testing (edge cases near decision thresholds), out-of-distribution detection (does model know what it doesn't know?). Document all testing methodology, findings, and mitigations in Article 11 technical documentation."},
     {"q": "How often should adversarial testing be conducted under the EU AI Act?",
-     "a": "The EU AI Act requires lifecycle-long robustness (Article 15), which implies ongoing adversarial testing. Best practices: (1) **Pre-deployment**: Full red-team assessment before any production release. This is the baseline and most comprehensive test. (2) **Post-deployment continuous**: Automated adversarial monitoring on production traffic — detect anomalous inputs that may be attack attempts. (3) **Quarterly comprehensive**: Full red-team exercise with updated attack vectors. The adversarial landscape evolves rapidly — tests from 6 months ago may miss new techniques. (4) **After model updates**: Any fine-tuning, retraining, or model swap requires re-testing. A model that passed testing before retraining may fail after. (5) **After incident**: Any security incident triggers immediate re-assessment and expanded testing. (6) **Annual third-party**: Independent security audit for high-risk systems (recommended for Annex III). The key principle: Article 9's post-market monitoring requirement applies to cybersecurity too. Treat adversarial testing like penetration testing in traditional security — it's never 'done', it's continuous."},
+     "a": "The EU AI Act requires lifecycle-long robustness (Article 15), which implies ongoing adversarial testing. Best practices: (1) **Pre-deployment**: Full red-team assessment before any production release. This is the baseline and most comprehensive test. (2) **Post-deployment continuous**: Automated adversarial monitoring on production traffic - detect anomalous inputs that may be attack attempts. (3) **Quarterly comprehensive**: Full red-team exercise with updated attack vectors. The adversarial landscape evolves rapidly - tests from 6 months ago may miss new techniques. (4) **After model updates**: Any fine-tuning, retraining, or model swap requires re-testing. A model that passed testing before retraining may fail after. (5) **After incident**: Any security incident triggers immediate re-assessment and expanded testing. (6) **Annual third-party**: Independent security audit for high-risk systems (recommended for Annex III). The key principle: Article 9's post-market monitoring requirement applies to cybersecurity too. Treat adversarial testing like penetration testing in traditional security - it's never 'done', it's continuous."},
 ]
 
 # ═══════════════════════════════════════
@@ -689,11 +689,11 @@ REDTEAM_QA = [
 
 MODEL_CARD_QA = [
     {"q": "What should a model card include for EU AI Act Article 11 compliance?",
-     "a": "An Article 11-compliant model card extends the standard Mitchell et al. (2019) format with regulatory-specific sections: (1) **Model Details**: Name, version, type, architecture, training framework, intended purpose, and EU AI Act risk classification. (2) **Intended Use**: Primary intended uses AND explicitly documented out-of-scope uses. Critical because Article 9 requires assessing risks from reasonably foreseeable misuse. (3) **Training Data**: Data sources, collection methodology, preprocessing steps, known limitations, demographic representation, and data governance measures per Article 10. (4) **Evaluation Data**: Separate validation/test set description, statistical properties, representativeness assessment. (5) **Performance Metrics**: Accuracy/F1/etc. broken down by relevant demographic groups — not just aggregate metrics. Article 10 requires assessment with respect to specific groups of persons. (6) **Fairness Analysis**: Bias testing methodology, metrics used, results per protected group, mitigation measures applied. (7) **Limitations & Risks**: Known failure modes, adversarial vulnerabilities, out-of-distribution behavior, and risk mitigation measures. (8) **Explainability**: XAI methods available, explanation fidelity assessment, limitations of explanations. (9) **Human Oversight**: Required oversight mechanisms, override procedures, escalation paths. (10) **Maintenance**: Update/retraining schedule, monitoring plan, responsible party, incident response contact."},
+     "a": "An Article 11-compliant model card extends the standard Mitchell et al. (2019) format with regulatory-specific sections: (1) **Model Details**: Name, version, type, architecture, training framework, intended purpose, and EU AI Act risk classification. (2) **Intended Use**: Primary intended uses AND explicitly documented out-of-scope uses. Critical because Article 9 requires assessing risks from reasonably foreseeable misuse. (3) **Training Data**: Data sources, collection methodology, preprocessing steps, known limitations, demographic representation, and data governance measures per Article 10. (4) **Evaluation Data**: Separate validation/test set description, statistical properties, representativeness assessment. (5) **Performance Metrics**: Accuracy/F1/etc. broken down by relevant demographic groups - not just aggregate metrics. Article 10 requires assessment with respect to specific groups of persons. (6) **Fairness Analysis**: Bias testing methodology, metrics used, results per protected group, mitigation measures applied. (7) **Limitations & Risks**: Known failure modes, adversarial vulnerabilities, out-of-distribution behavior, and risk mitigation measures. (8) **Explainability**: XAI methods available, explanation fidelity assessment, limitations of explanations. (9) **Human Oversight**: Required oversight mechanisms, override procedures, escalation paths. (10) **Maintenance**: Update/retraining schedule, monitoring plan, responsible party, incident response contact."},
     {"q": "What is a system card and how does it differ from a model card for AI Act compliance?",
-     "a": "A system card documents the entire AI system — not just the model, but the full sociotechnical deployment. This distinction matters for the EU AI Act because Article 11 covers the 'high-risk AI system', not just the model component. Key differences: **Model card**: Covers the ML model in isolation — architecture, training data, performance metrics, fairness analysis. Think of it as the model's spec sheet. **System card**: Covers the deployed system including: the model(s) used, data pipelines feeding the model, pre/post-processing logic, human oversight mechanisms, deployment infrastructure, monitoring systems, user interfaces, and integration points. For EU AI Act compliance, you need both: the model card documents the AI component (relevant to Articles 10, 13, 15), while the system card documents the overall system (relevant to Articles 9, 11, 12, 14). Example: A hiring system's model card documents the resume scoring model, while the system card documents the full pipeline: how resumes enter the system, how scores are generated, how human recruiters review and override, how decisions are logged, and how candidates are notified."},
+     "a": "A system card documents the entire AI system - not just the model, but the full sociotechnical deployment. This distinction matters for the EU AI Act because Article 11 covers the 'high-risk AI system', not just the model component. Key differences: **Model card**: Covers the ML model in isolation - architecture, training data, performance metrics, fairness analysis. Think of it as the model's spec sheet. **System card**: Covers the deployed system including: the model(s) used, data pipelines feeding the model, pre/post-processing logic, human oversight mechanisms, deployment infrastructure, monitoring systems, user interfaces, and integration points. For EU AI Act compliance, you need both: the model card documents the AI component (relevant to Articles 10, 13, 15), while the system card documents the overall system (relevant to Articles 9, 11, 12, 14). Example: A hiring system's model card documents the resume scoring model, while the system card documents the full pipeline: how resumes enter the system, how scores are generated, how human recruiters review and override, how decisions are logged, and how candidates are notified."},
     {"q": "Generate an Article 11-compliant model card template",
-     "a": """# Model Card — [Model Name]
+     "a": """# Model Card - [Model Name]
 
 ## 1. Model Overview
 - **Model Name**: [e.g., air-compliance-llama-8b-v1]
@@ -707,7 +707,7 @@ MODEL_CARD_QA = [
 
 ## 2. Intended Use & Scope
 - **Primary Use Cases**: [List specific, validated use cases]
-- **Out-of-Scope Uses**: [Explicitly list uses NOT validated — Article 9 requires this]
+- **Out-of-Scope Uses**: [Explicitly list uses NOT validated - Article 9 requires this]
 - **Geographic Scope**: [Where the system is intended to operate]
 - **Target Users**: [Who will deploy and operate the system]
 
@@ -838,15 +838,15 @@ result = qa.invoke({"query": user_question})
 print(result["result"])''',
         "notes": """**Article 9 Violations (Post-Market Monitoring):**
 
-1. **No monitoring whatsoever** — 'Deploy and forget' violates Article 9's requirement for lifecycle-long risk management and Article 72's post-market monitoring obligation.
+1. **No monitoring whatsoever** - 'Deploy and forget' violates Article 9's requirement for lifecycle-long risk management and Article 72's post-market monitoring obligation.
 
-2. **No drift detection** — The vector store's content may become stale or corrupted over time. New documents added may shift the retrieval distribution. No mechanism to detect degradation.
+2. **No drift detection** - The vector store's content may become stale or corrupted over time. New documents added may shift the retrieval distribution. No mechanism to detect degradation.
 
-3. **No logging** — No record of queries, retrieved context, or generated answers. Impossible to investigate incidents or audit system behavior (Article 12).
+3. **No logging** - No record of queries, retrieved context, or generated answers. Impossible to investigate incidents or audit system behavior (Article 12).
 
-4. **No quality tracking** — No mechanism to measure answer quality, hallucination rate, or retrieval relevance over time.
+4. **No quality tracking** - No mechanism to measure answer quality, hallucination rate, or retrieval relevance over time.
 
-5. **No human oversight** — No alerting, no dashboards, no way for a human to monitor system behavior (Article 14).
+5. **No human oversight** - No alerting, no dashboards, no way for a human to monitor system behavior (Article 14).
 
 **Required fixes:**
 - Add comprehensive logging of queries, retrieved documents, and responses
@@ -922,7 +922,7 @@ class ComplianceMonitor(BaseCallbackHandler):
         self.retrieval_scores.extend(relevance_scores)
         self.response_lengths.append(len(response))
 
-        # Groundedness check — does response cite retrieved content?
+        # Groundedness check - does response cite retrieved content?
         groundedness = self._check_groundedness(response, retrieved_docs)
 
         log_entry = {
@@ -937,7 +937,7 @@ class ComplianceMonitor(BaseCallbackHandler):
 
         if groundedness < self.QUALITY_ALERT_THRESHOLD:
             self.flagged_responses += 1
-            logger.warning("Low groundedness detected — possible hallucination", extra=log_entry)
+            logger.warning("Low groundedness detected - possible hallucination", extra=log_entry)
         else:
             logger.info("Query processed", extra=log_entry)
 
@@ -970,17 +970,17 @@ class ComplianceMonitor(BaseCallbackHandler):
 monitor = ComplianceMonitor()''',
         "notes": """**Strong Article 9 + Article 72 Compliance:**
 
-1. **Distribution drift detection** — KS test comparing current query distribution against baseline catches when the system is being used outside its validated domain.
+1. **Distribution drift detection** - KS test comparing current query distribution against baseline catches when the system is being used outside its validated domain.
 
-2. **Groundedness monitoring** — Detects potential hallucinations by measuring how well responses are grounded in retrieved documents.
+2. **Groundedness monitoring** - Detects potential hallucinations by measuring how well responses are grounded in retrieved documents.
 
-3. **Periodic reporting** — Automated metrics reports enable Article 14 human oversight without requiring constant human attention.
+3. **Periodic reporting** - Automated metrics reports enable Article 14 human oversight without requiring constant human attention.
 
-4. **Full audit trail** — Every query logged with relevance scores, response length, groundedness, and timestamps (Article 12).
+4. **Full audit trail** - Every query logged with relevance scores, response length, groundedness, and timestamps (Article 12).
 
-5. **Alerting** — Low groundedness and drift detection trigger warnings for human review.
+5. **Alerting** - Low groundedness and drift detection trigger warnings for human review.
 
-6. **Sliding window** — Memory-efficient monitoring using deques with configurable window sizes.
+6. **Sliding window** - Memory-efficient monitoring using deques with configurable window sizes.
 
 **Recommendations:**
 - Add semantic groundedness checking (embedding similarity instead of word overlap)
@@ -994,7 +994,7 @@ MONITORING_QA = [
     {"q": "What is model drift and why does it matter for EU AI Act compliance?",
      "a": "Model drift occurs when the statistical properties of the data a model encounters in production diverge from the data it was trained on, causing performance degradation. There are two types: (1) **Data drift (covariate shift)**: The distribution of input features changes. Example: a hiring model trained on pre-pandemic resumes encounters post-pandemic candidates with career gaps. The model's assumptions about what 'normal' looks like no longer hold. (2) **Concept drift**: The relationship between inputs and the correct output changes. Example: a credit scoring model trained when interest rates were low encounters a high-rate environment where the same features predict different outcomes. For EU AI Act compliance, drift matters because: Article 9 requires risk management throughout the lifecycle, not just at deployment. Article 15 requires appropriate accuracy throughout the lifecycle. Article 72 requires post-market monitoring. If drift degrades performance, especially for specific demographic groups, it can create Article 10 bias violations that didn't exist at deployment. Detection methods include: Population Stability Index (PSI), Kolmogorov-Smirnov test, Page-Hinkley test, ADWIN (Adaptive Windowing), and CUSUM (Cumulative Sum Control Chart)."},
     {"q": "How should post-market monitoring be implemented for EU AI Act Article 72?",
-     "a": "Article 72 requires providers of high-risk AI systems to establish and document a post-market monitoring system that is proportionate to the nature of the AI technology and risks. Implementation should include: (1) **Data collection**: Systematically collect data on system performance throughout its lifecycle. This includes: prediction accuracy metrics, fairness metrics per demographic group, input data distribution statistics, error logs and failure modes, user feedback and complaints, human override frequency and patterns. (2) **Analysis**: Regularly analyze collected data to identify: performance degradation, emerging biases, new failure modes, concept/data drift, adversarial attack patterns. (3) **Action triggers**: Define clear thresholds that trigger action: accuracy drops below X → investigate; fairness metric exceeds Y → suspend and remediate; drift score exceeds Z → retrain. (4) **Reporting**: Maintain documentation of monitoring results, feed into Article 11 technical documentation updates, report serious incidents per Article 62, share relevant findings with downstream deployers. (5) **Integration**: Connect monitoring to incident response playbooks, update risk management system (Article 9) based on monitoring findings, inform conformity assessment updates when significant changes occur. The system must be 'proportionate' — a minimal-risk chatbot needs less monitoring than a high-risk medical diagnostic system."},
+     "a": "Article 72 requires providers of high-risk AI systems to establish and document a post-market monitoring system that is proportionate to the nature of the AI technology and risks. Implementation should include: (1) **Data collection**: Systematically collect data on system performance throughout its lifecycle. This includes: prediction accuracy metrics, fairness metrics per demographic group, input data distribution statistics, error logs and failure modes, user feedback and complaints, human override frequency and patterns. (2) **Analysis**: Regularly analyze collected data to identify: performance degradation, emerging biases, new failure modes, concept/data drift, adversarial attack patterns. (3) **Action triggers**: Define clear thresholds that trigger action: accuracy drops below X → investigate; fairness metric exceeds Y → suspend and remediate; drift score exceeds Z → retrain. (4) **Reporting**: Maintain documentation of monitoring results, feed into Article 11 technical documentation updates, report serious incidents per Article 62, share relevant findings with downstream deployers. (5) **Integration**: Connect monitoring to incident response playbooks, update risk management system (Article 9) based on monitoring findings, inform conformity assessment updates when significant changes occur. The system must be 'proportionate' - a minimal-risk chatbot needs less monitoring than a high-risk medical diagnostic system."},
 ]
 
 # ═══════════════════════════════════════
@@ -1003,11 +1003,11 @@ MONITORING_QA = [
 
 CONFORMITY_QA = [
     {"q": "What is a conformity assessment under the EU AI Act and when is it required?",
-     "a": "A conformity assessment is the process by which a provider demonstrates that their high-risk AI system complies with the EU AI Act requirements before placing it on the market. Under Article 43: (1) **Who needs it**: All providers of high-risk AI systems (Annex III) must undergo conformity assessment before placing their system on the EU market or putting it into service. (2) **Two paths**: (a) Internal conformity assessment (Article 43(2)) — the provider performs the assessment themselves following Annex VI procedures. Applies to most Annex III systems. (b) Third-party conformity assessment — requires involvement of a notified body. Required for biometric identification systems (Annex III point 1) and certain safety component systems. (3) **When to reassess**: A new conformity assessment is required when the AI system is 'substantially modified' — meaning a change not foreseen at initial assessment that affects compliance, or a change to the intended purpose. (4) **CE marking**: After successful conformity assessment, the provider affixes the CE marking (Article 48) and draws up an EU declaration of conformity (Article 47). (5) **Documentation**: The complete technical documentation (Article 11), quality management system documentation, and conformity assessment results must be kept for 10 years after the AI system is placed on the market."},
+     "a": "A conformity assessment is the process by which a provider demonstrates that their high-risk AI system complies with the EU AI Act requirements before placing it on the market. Under Article 43: (1) **Who needs it**: All providers of high-risk AI systems (Annex III) must undergo conformity assessment before placing their system on the EU market or putting it into service. (2) **Two paths**: (a) Internal conformity assessment (Article 43(2)) - the provider performs the assessment themselves following Annex VI procedures. Applies to most Annex III systems. (b) Third-party conformity assessment - requires involvement of a notified body. Required for biometric identification systems (Annex III point 1) and certain safety component systems. (3) **When to reassess**: A new conformity assessment is required when the AI system is 'substantially modified' - meaning a change not foreseen at initial assessment that affects compliance, or a change to the intended purpose. (4) **CE marking**: After successful conformity assessment, the provider affixes the CE marking (Article 48) and draws up an EU declaration of conformity (Article 47). (5) **Documentation**: The complete technical documentation (Article 11), quality management system documentation, and conformity assessment results must be kept for 10 years after the AI system is placed on the market."},
     {"q": "What documentation is required for an EU AI Act conformity assessment?",
      "a": "The conformity assessment requires comprehensive documentation per Annex IV (Technical Documentation): (1) **System description**: General description including intended purpose, provider identity, system version, hardware/software requirements, any previous versions. (2) **Detailed technical description**: How the system was developed, design specifications, system architecture, computational resources used, data processing flows, how the system makes decisions. (3) **Development methodology**: Development process description, design choices made and rationale, how the system was tested and validated, tools and frameworks used. (4) **Data documentation (Article 10)**: Training/validation/testing data descriptions, data governance measures, origin and scope of data, labeling methodology, data preparation processing, any data gaps or shortcomings. (5) **Risk management (Article 9)**: Risk management system documentation, identified risks and mitigation measures, risk assessment methodology, residual risk assessment. (6) **Monitoring (Article 72)**: Post-market monitoring plan, metrics to be tracked, escalation procedures. (7) **Performance metrics (Article 15)**: Accuracy metrics, robustness testing results, cybersecurity measures and testing, performance per relevant subgroups. (8) **Human oversight (Article 14)**: Measures enabling human oversight, interface documentation, override mechanisms. (9) **Standards applied**: List of harmonized standards, common specifications, or other normative documents applied. All documentation must be kept up-to-date and retained for 10 years."},
     {"q": "What is 'substantial modification' that triggers re-assessment under the EU AI Act?",
-     "a": "Under Article 43(4), a 'substantial modification' triggers a new conformity assessment. The EU AI Act defines this as a change to the AI system after placing it on the market or putting it into service which is not foreseen or planned in the initial conformity assessment and which affects the compliance of the system with the requirements of the regulation. Practical examples of substantial modifications: (1) **Clearly substantial**: Changing the model architecture (e.g., switching from BERT to GPT-4), changing the intended purpose (e.g., from customer service to medical triage), adding new data categories to training data, deploying to a new domain or population not covered in initial assessment. (2) **Likely substantial**: Retraining on significantly different data distribution, adding new input modalities (text → text + images), significant changes to decision thresholds, adding new tools or capabilities to an agent system. (3) **Usually NOT substantial**: Bug fixes that don't change system behavior, infrastructure changes (server migration), UI improvements that don't affect the AI model, minor hyperparameter adjustments during planned retraining. The provider must maintain a change management system that evaluates each modification against these criteria and documents the assessment. When in doubt, err on the side of re-assessment — the penalties for non-compliance are severe (up to 3% of global turnover)."},
+     "a": "Under Article 43(4), a 'substantial modification' triggers a new conformity assessment. The EU AI Act defines this as a change to the AI system after placing it on the market or putting it into service which is not foreseen or planned in the initial conformity assessment and which affects the compliance of the system with the requirements of the regulation. Practical examples of substantial modifications: (1) **Clearly substantial**: Changing the model architecture (e.g., switching from BERT to GPT-4), changing the intended purpose (e.g., from customer service to medical triage), adding new data categories to training data, deploying to a new domain or population not covered in initial assessment. (2) **Likely substantial**: Retraining on significantly different data distribution, adding new input modalities (text → text + images), significant changes to decision thresholds, adding new tools or capabilities to an agent system. (3) **Usually NOT substantial**: Bug fixes that don't change system behavior, infrastructure changes (server migration), UI improvements that don't affect the AI model, minor hyperparameter adjustments during planned retraining. The provider must maintain a change management system that evaluates each modification against these criteria and documents the assessment. When in doubt, err on the side of re-assessment - the penalties for non-compliance are severe (up to 3% of global turnover)."},
 ]
 
 # ═══════════════════════════════════════
@@ -1038,19 +1038,19 @@ pricing_task = Task(
 crew = Crew(agents=[pricing_agent], tasks=[pricing_task])
 result = crew.kickoff(inputs={"applicant_data": applicant_info})
 
-# Directly set premium — no human review
+# Directly set premium - no human review
 set_premium(applicant_id, float(result))''',
         "notes": """**CRITICAL Article 14 Violations (Insurance = Annex III):**
 
-1. **Fully autonomous decisions on high-risk domain** — Insurance pricing falls under Annex III Section 5(c) (health/life insurance). The system makes pricing decisions with zero human oversight.
+1. **Fully autonomous decisions on high-risk domain** - Insurance pricing falls under Annex III Section 5(c) (health/life insurance). The system makes pricing decisions with zero human oversight.
 
-2. **No override mechanism** — Once the agent outputs a price, it's set directly. No human can review, adjust, or override before the decision takes effect.
+2. **No override mechanism** - Once the agent outputs a price, it's set directly. No human can review, adjust, or override before the decision takes effect.
 
-3. **No explanation for reviewer** — Even if human review were added, the agent provides no reasoning breakdown for the human to evaluate.
+3. **No explanation for reviewer** - Even if human review were added, the agent provides no reasoning breakdown for the human to evaluate.
 
-4. **No confidence indication** — The agent doesn't indicate how certain it is about the price, so a human couldn't prioritize which decisions need review.
+4. **No confidence indication** - The agent doesn't indicate how certain it is about the price, so a human couldn't prioritize which decisions need review.
 
-5. **No escalation path** — No mechanism for edge cases, unusual applicants, or low-confidence decisions to be routed to human experts.
+5. **No escalation path** - No mechanism for edge cases, unusual applicants, or low-confidence decisions to be routed to human experts.
 
 **Required fixes:**
 - Add mandatory human review before any pricing decision takes effect
@@ -1163,17 +1163,17 @@ class HumanOversightPipeline:
         return review_record''',
         "notes": """**Strong Article 14 Compliance:**
 
-1. **AI recommends, humans decide** — The system generates recommendations, not decisions. Every pricing decision requires human review before taking effect.
+1. **AI recommends, humans decide** - The system generates recommendations, not decisions. Every pricing decision requires human review before taking effect.
 
-2. **Confidence-based routing** — Low-confidence recommendations escalate to senior actuaries, high-confidence go to standard review. Ensures human attention is focused where it's most needed.
+2. **Confidence-based routing** - Low-confidence recommendations escalate to senior actuaries, high-confidence go to standard review. Ensures human attention is focused where it's most needed.
 
-3. **Full factor breakdown** — AI must explain its reasoning with top factors and weights, giving reviewers the information they need to make informed decisions.
+3. **Full factor breakdown** - AI must explain its reasoning with top factors and weights, giving reviewers the information they need to make informed decisions.
 
-4. **Override mechanism** — Reviewers can approve, modify, reject, or escalate. Modified decisions are logged with reasoning.
+4. **Override mechanism** - Reviewers can approve, modify, reject, or escalate. Modified decisions are logged with reasoning.
 
-5. **Complete audit trail** — Every AI recommendation and human decision is logged with timestamps, reviewer ID, and notes (Article 12).
+5. **Complete audit trail** - Every AI recommendation and human decision is logged with timestamps, reviewer ID, and notes (Article 12).
 
-6. **Separation of concerns** — AI analysis is clearly separated from human decision-making authority.
+6. **Separation of concerns** - AI analysis is clearly separated from human decision-making authority.
 
 **Recommendations:**
 - Add fairness dashboard showing pricing distribution by demographic
@@ -1187,7 +1187,7 @@ OVERSIGHT_QA = [
     {"q": "What does Article 14 require for human oversight of high-risk AI systems?",
      "a": "Article 14 establishes specific human oversight requirements for high-risk AI systems: (1) **Design for oversight**: Systems must be designed and developed to be effectively overseen by natural persons during the period of use. Oversight mechanisms must be identified and built into the system by the provider, or identified as appropriate for implementation by the deployer. (2) **Capabilities required**: Oversight measures must enable the individuals overseeing to: (a) properly understand the relevant capacities and limitations of the system, (b) remain aware of automation bias (tendency to over-rely on AI output), (c) correctly interpret the system's output, taking into account the tools and methods of interpretation, (d) decide not to use the system or to override/reverse the output, (e) intervene in or interrupt the system through a 'stop button' or similar procedure. (3) **Risk-proportionate**: For Annex III point 1 (biometric identification) and other specific high-risk uses, the system must be designed so that no action or decision is taken based on AI output alone without independent verification by at least two natural persons. (4) **Deployer obligations**: Deployers must ensure that natural persons assigned to human oversight are competent, properly trained, and have the authority and resources to fulfill their oversight role."},
     {"q": "How should automation bias be addressed in AI systems under Article 14?",
-     "a": "Automation bias — the tendency of humans to over-rely on AI system outputs, even when they're wrong — is explicitly called out in Article 14(4)(b) as something oversight measures must address. Strategies include: (1) **Interface design**: Don't present AI outputs as facts. Use language like 'recommendation' or 'suggestion' rather than 'decision' or 'result'. Show confidence levels prominently. Display uncertainty. (2) **Forced engagement**: Require reviewers to actively confirm they've reviewed the underlying data, not just the AI output. Implement checklists or verification steps. Randomly withhold AI recommendations to test human judgment. (3) **Disagreement tracking**: Monitor cases where humans override AI and cases where they don't. If override rates are near 0%, humans may be rubber-stamping — investigate. (4) **Training**: Train human overseers on AI limitations, common failure modes, and automation bias awareness. Include real examples of AI errors in training. (5) **Cognitive load management**: Don't overwhelm reviewers with too many AI-assisted decisions per session. Implement workload limits. Vary AI-assisted and non-AI-assisted tasks. (6) **Explainability**: Provide feature-level explanations that help humans form their own judgment before seeing the AI's conclusion. Consider showing explanations before showing the AI's decision. (7) **Performance feedback**: Give reviewers feedback on their override accuracy — were their overrides correct? This builds calibration over time."},
+     "a": "Automation bias - the tendency of humans to over-rely on AI system outputs, even when they're wrong - is explicitly called out in Article 14(4)(b) as something oversight measures must address. Strategies include: (1) **Interface design**: Don't present AI outputs as facts. Use language like 'recommendation' or 'suggestion' rather than 'decision' or 'result'. Show confidence levels prominently. Display uncertainty. (2) **Forced engagement**: Require reviewers to actively confirm they've reviewed the underlying data, not just the AI output. Implement checklists or verification steps. Randomly withhold AI recommendations to test human judgment. (3) **Disagreement tracking**: Monitor cases where humans override AI and cases where they don't. If override rates are near 0%, humans may be rubber-stamping - investigate. (4) **Training**: Train human overseers on AI limitations, common failure modes, and automation bias awareness. Include real examples of AI errors in training. (5) **Cognitive load management**: Don't overwhelm reviewers with too many AI-assisted decisions per session. Implement workload limits. Vary AI-assisted and non-AI-assisted tasks. (6) **Explainability**: Provide feature-level explanations that help humans form their own judgment before seeing the AI's conclusion. Consider showing explanations before showing the AI's decision. (7) **Performance feedback**: Give reviewers feedback on their override accuracy - were their overrides correct? This builds calibration over time."},
 ]
 
 

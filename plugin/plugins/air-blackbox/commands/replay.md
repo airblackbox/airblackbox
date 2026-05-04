@@ -42,7 +42,7 @@ replayctl batch ./traces/ --last 10 --format json
 5. If drift is detected, explain what changed:
    - Token count differences suggest structural response changes
    - Low similarity with same model suggests non-determinism
-   - Low similarity with different model is expected — flag for review
+   - Low similarity with different model is expected - flag for review
 
 6. For CI integration, point the user to the GitHub Action:
 

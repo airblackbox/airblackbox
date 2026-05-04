@@ -5,7 +5,7 @@
 If you discover a security vulnerability in AIR Blackbox Gateway, please report it responsibly.
 
 **Email:** jason@airblackbox.ai
-**Subject line:** `[SECURITY] AIR Blackbox Gateway — <brief description>`
+**Subject line:** `[SECURITY] AIR Blackbox Gateway - <brief description>`
 
 We will acknowledge your report within 48 hours and aim to provide a fix or mitigation within 7 days for critical issues.
 
@@ -35,9 +35,9 @@ The gateway records AI system interactions. Here is exactly what is stored and w
 
 AIR Blackbox Gateway sits in the request path between your AI agent and the LLM provider. The primary security considerations are:
 
-1. **Vault access** — MinIO/S3 credentials control access to stored prompts and completions. Protect these credentials with the same rigor as your LLM API keys.
-2. **AIR record files** — These contain vault references and checksums, not raw content. However, metadata (model names, timestamps, token counts) may still be sensitive in some contexts. Apply appropriate filesystem permissions.
-3. **Network position** — The gateway terminates your agent's API call and forwards it. It sees the full request and response in transit. Deploy it in the same trust boundary as your agent.
+1. **Vault access** - MinIO/S3 credentials control access to stored prompts and completions. Protect these credentials with the same rigor as your LLM API keys.
+2. **AIR record files** - These contain vault references and checksums, not raw content. However, metadata (model names, timestamps, token counts) may still be sensitive in some contexts. Apply appropriate filesystem permissions.
+3. **Network position** - The gateway terminates your agent's API call and forwards it. It sees the full request and response in transit. Deploy it in the same trust boundary as your agent.
 
 ## Supported Versions
 

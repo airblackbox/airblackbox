@@ -1,9 +1,9 @@
-# AIR Blackbox — GitHub Community Outreach Posts
+# AIR Blackbox - GitHub Community Outreach Posts
 
 ## 1. Microsoft Agent Framework (github.com/microsoft/agent-framework)
 ### Post in: Discussions → Ideas or General
 
-**Title:** EU AI Act compliance plugin for Agent Framework — audit trails, runtime validation, evidence export
+**Title:** EU AI Act compliance plugin for Agent Framework - audit trails, runtime validation, evidence export
 
 **Body:**
 
@@ -15,8 +15,8 @@ Built an EU AI Act compliance layer that plugs into agent frameworks as a non-bl
 
 `pip install air-blackbox` gives you 5 commands:
 
-- `comply` — 20 EU AI Act checks across Articles 9-15, 90% auto-detected from observed traffic
-- `discover` — AI Bill of Materials (CycloneDX 1.6) + shadow AI detection from live traffic
-- `validate` — pre-execution runtime certification (schema validation, tool allowlists, content policy, hallucination guards)
-- `replay` — incident reconstruction from HMAC-SHA256 audit chain
-- `export` — signed evidence bundles for auditors
+- `comply` - 20 EU AI Act checks across Articles 9-15, 90% auto-detected from observed traffic
+- `discover` - AI Bill of Materials (CycloneDX 1.6) + shadow AI detection from live traffic
+- `validate` - pre-execution runtime certification (schema validation, tool allowlists, content policy, hallucination guards)
+- `replay` - incident reconstruction from HMAC-SHA256 audit chain
+- `export` - signed evidence bundles for auditors

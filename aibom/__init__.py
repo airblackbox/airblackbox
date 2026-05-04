@@ -1,1 +1,1 @@
-"""AIR Blackbox aibom module — part of the gateway monorepo."""
+"""AIR Blackbox aibom module - part of the gateway monorepo."""

@@ -1,1 +1,1 @@
-"""AIR Blackbox compliance module — part of the gateway monorepo."""
+"""AIR Blackbox compliance module - part of the gateway monorepo."""

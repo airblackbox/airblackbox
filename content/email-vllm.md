@@ -25,7 +25,7 @@ Per-article breakdown:
 | Art. 14 (Human Oversight) | Approval workflows, rate limiting | 4/9 passing |
 | Art. 15 (Security) | Injection defense, output validation | 3/8 passing |
 
-This is actually the highest score I have seen so far across ~50 projects in this batch. Article 14 (Human Oversight) stood out in particular — the scanner picked up rate limiting and execution bounding patterns that most frameworks simply do not have. The largest remaining gaps are in Article 10 (Data Governance) and Article 11 (Documentation) where the scanner did not detect explicit schema validation on inputs, PII handling patterns, or consistent system-level documentation for the serving layer.
+This is actually the highest score I have seen so far across ~50 projects in this batch. Article 14 (Human Oversight) stood out in particular - the scanner picked up rate limiting and execution bounding patterns that most frameworks simply do not have. The largest remaining gaps are in Article 10 (Data Governance) and Article 11 (Documentation) where the scanner did not detect explicit schema validation on inputs, PII handling patterns, or consistent system-level documentation for the serving layer.
 
 **To be clear**: this doesn't mean vLLM is non-compliant. The scanner checks for technical patterns mapped to EU AI Act Articles 9 through 15. It's a linter for AI governance, not a legal compliance tool. But it shows where the gaps are so teams can prioritize.
 

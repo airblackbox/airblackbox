@@ -14,12 +14,12 @@ ISO/IEC 42001:2023 defines requirements for an AI management system (AIMS). AIR 
 
 | AIR Check | EU AI Act Article | ISO 42001 Control | Coverage | How AIR Satisfies It |
 |-----------|-------------------|-------------------|----------|---------------------|
-| Risk classification (ConsentGate) | Art. 9 — Risk Management | 6.1.2 AI risk assessment | Full | Tool calls classified CRITICAL/HIGH/MEDIUM/LOW with gating |
-| PII scanning (DataVault) | Art. 10 — Data Governance | A.8.5 Data quality for AI | Full | Regex-based PII detection (email, SSN, phone, credit card, IBAN) |
-| Structured logging (TrustHandler) | Art. 11 — Technical Documentation | A.6.2.5 Documenting AI system | Full | Every operation logged as structured .air.json with timestamps |
-| HMAC audit chain (AuditLedger) | Art. 12 — Record-Keeping | A.6.2.6 Recording activity logs | Full | Tamper-evident HMAC-SHA256 chain per Audit Chain Spec v1.0 |
-| Approval gates (ConsentGate) | Art. 14 — Human Oversight | A.8.4 Human oversight of AI | Full | Permission handler blocks CRITICAL tools, requires approval for HIGH |
-| Injection scanning (InjectionDetector) | Art. 15 — Cybersecurity | A.8.6 AI system security | Full | 15 weighted injection patterns with confidence scoring |
+| Risk classification (ConsentGate) | Art. 9 - Risk Management | 6.1.2 AI risk assessment | Full | Tool calls classified CRITICAL/HIGH/MEDIUM/LOW with gating |
+| PII scanning (DataVault) | Art. 10 - Data Governance | A.8.5 Data quality for AI | Full | Regex-based PII detection (email, SSN, phone, credit card, IBAN) |
+| Structured logging (TrustHandler) | Art. 11 - Technical Documentation | A.6.2.5 Documenting AI system | Full | Every operation logged as structured .air.json with timestamps |
+| HMAC audit chain (AuditLedger) | Art. 12 - Record-Keeping | A.6.2.6 Recording activity logs | Full | Tamper-evident HMAC-SHA256 chain per Audit Chain Spec v1.0 |
+| Approval gates (ConsentGate) | Art. 14 - Human Oversight | A.8.4 Human oversight of AI | Full | Permission handler blocks CRITICAL tools, requires approval for HIGH |
+| Injection scanning (InjectionDetector) | Art. 15 - Cybersecurity | A.8.6 AI system security | Full | 15 weighted injection patterns with confidence scoring |
 
 **Additional ISO 42001 coverage:**
 
@@ -81,7 +81,7 @@ NIST AI 600-1 extends the AI RMF specifically for generative AI systems. AIR Bla
 
 | OECD Principle | AIR Check | Coverage |
 |----------------|-----------|----------|
-| 1.1 Inclusive growth | — | Not directly applicable (policy, not technical) |
+| 1.1 Inclusive growth | - | Not directly applicable (policy, not technical) |
 | 1.2 Human-centered values | Approval gates, PII scanning | Ensures human oversight and data protection |
 | 1.3 Transparency | Structured logging, audit chain | Full operation transparency via .air.json records |
 | 1.4 Robustness and security | Injection scanning, risk classification | Multi-layer security with pattern matching |
@@ -95,7 +95,7 @@ When writing compliance documentation for your AI system, you can reference spec
 
 ```
 Risk Management (ISO 42001 §6.1.2 / EU AI Act Art. 9):
-  Tool: AIR Blackbox v1.2.6 — ConsentGate risk classification
+  Tool: AIR Blackbox v1.2.6 - ConsentGate risk classification
   Evidence: .air.json records with risk_level field
   Verification: python verify_chain.py ./runs --key <signing-key>
 ```
@@ -118,4 +118,4 @@ This mapping covers **technical** controls only. AIR Blackbox does not address:
 - Legal compliance review (consult qualified legal counsel)
 - Human resource training requirements (ISO 42001 §7.2)
 
-AIR Blackbox is a technical compliance scanner — it checks code, not processes. Use it alongside organizational compliance frameworks, not as a replacement for them.
+AIR Blackbox is a technical compliance scanner - it checks code, not processes. Use it alongside organizational compliance frameworks, not as a replacement for them.

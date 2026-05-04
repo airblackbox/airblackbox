@@ -1,5 +1,5 @@
 """
-HMAC-SHA256 Audit Chain — shared chain state for all trust layers.
+HMAC-SHA256 Audit Chain - shared chain state for all trust layers.
 
 Implements the AIR Blackbox Audit Chain Specification v1.0.
 See: docs/spec/audit-chain-v1.md
@@ -36,7 +36,7 @@ class AuditChain:
     links to the previous one per the Audit Chain Spec v1.0.
     """
 
-    # Genesis hash — the initial previous_hash for the first record
+    # Genesis hash - the initial previous_hash for the first record
     GENESIS = b"genesis"
 
     def __init__(

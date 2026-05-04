@@ -1,6 +1,6 @@
-# AIR Blackbox — Claude Code Plugin
+# AIR Blackbox - Claude Code Plugin
 
-EU AI Act compliance scanning, audit chain verification, and evidence export — inside Claude Code.
+EU AI Act compliance scanning, audit chain verification, and evidence export - inside Claude Code.
 
 ## Install
 
@@ -22,12 +22,12 @@ claude plugin install air-blackbox@air-blackbox
 
 The plugin includes two skills that Claude can invoke automatically:
 
-- **compliance-scan** — Triggers when you ask about compliance, scanning, or EU AI Act requirements. Runs the scanner and explains results.
-- **interpret-results** — Triggers when you have scan output and need help understanding findings, prioritizing fixes, or implementing remediation.
+- **compliance-scan** - Triggers when you ask about compliance, scanning, or EU AI Act requirements. Runs the scanner and explains results.
+- **interpret-results** - Triggers when you have scan output and need help understanding findings, prioritizing fixes, or implementing remediation.
 
 ## Agent
 
-- **compliance-advisor** — An EU AI Act technical advisor that maps scan findings to specific articles, prioritizes remediation by enforcement risk, and helps implement code fixes.
+- **compliance-advisor** - An EU AI Act technical advisor that maps scan findings to specific articles, prioritizes remediation by enforcement risk, and helps implement code fixes.
 
 ## Requirements
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-AIR Blackbox — Full EU AI Act Coverage Generator (Phases 27-32)
+AIR Blackbox - Full EU AI Act Coverage Generator (Phases 27-32)
 ================================================================
 Fills the remaining gaps in our training data:
-  Phase 27: Article 5  — Prohibited Practices (social scoring, biometric, manipulation)
-  Phase 28: Article 6  — Risk Classification (high-risk vs limited vs minimal)
-  Phase 29: Article 13 — Transparency to Users (disclosure, labeling, UI)
-  Phase 30: Articles 20-24 — Provider Obligations (instructions for use, CE marking)
-  Phase 31: Article 52 — GPAI Transparency (model cards, systemic risk, downstream)
-  Phase 32: Articles 26, 56-61 — Deployer Obligations (monitoring, DPIA, logging)
+  Phase 27: Article 5  - Prohibited Practices (social scoring, biometric, manipulation)
+  Phase 28: Article 6  - Risk Classification (high-risk vs limited vs minimal)
+  Phase 29: Article 13 - Transparency to Users (disclosure, labeling, UI)
+  Phase 30: Articles 20-24 - Provider Obligations (instructions for use, CE marking)
+  Phase 31: Article 52 - GPAI Transparency (model cards, systemic risk, downstream)
+  Phase 32: Articles 26, 56-61 - Deployer Obligations (monitoring, DPIA, logging)
 
 No GPU required. Runs on Mac.
 """
@@ -18,7 +18,7 @@ import random
 import hashlib
 
 # ═══════════════════════════════════════
-# Phase 27: Article 5 — Prohibited Practices
+# Phase 27: Article 5 - Prohibited Practices
 # ═══════════════════════════════════════
 
 PROHIBITED_CODE_EXAMPLES = [
@@ -52,7 +52,7 @@ def calculate_citizen_score(citizen_id: str) -> float:
         restrict_public_transport(citizen_id)
         deny_loan_applications(citizen_id)
     return score''',
-        "notes": """**PROHIBITED under Article 5(1)(c) — Social Scoring**
+        "notes": """**PROHIBITED under Article 5(1)(c) - Social Scoring**
 
 This system is **explicitly banned** by the EU AI Act. Article 5(1)(c) prohibits:
 - AI systems that evaluate or classify natural persons based on their social behavior or personal characteristics
@@ -62,10 +62,10 @@ This system is **explicitly banned** by the EU AI Act. Article 5(1)(c) prohibits
 **Specific violations:**
 1. Aggregates data across unrelated domains (criminal, social media, financial, political)
 2. Uses the score to restrict public services (transport, loans)
-3. Includes political associations — also violates fundamental rights
+3. Includes political associations - also violates fundamental rights
 4. No human oversight, no right of appeal, no transparency
 
-**This system CANNOT be made compliant** — it must be discontinued entirely. No amount of documentation, human oversight, or risk management makes social scoring legal under the EU AI Act."""
+**This system CANNOT be made compliant** - it must be discontinued entirely. No amount of documentation, human oversight, or risk management makes social scoring legal under the EU AI Act."""
     },
     {
         "framework": "Real-time biometric identification",
@@ -98,7 +98,7 @@ def monitor_public_space(camera_feed_url: str):
                 match_id = results[0].iloc[0]["identity"]
                 log_detection(match_id, camera_feed_url, confidence=0.96)
                 alert_law_enforcement(match_id, frame)''',
-        "notes": """**PROHIBITED under Article 5(1)(h) — Real-time Remote Biometric Identification**
+        "notes": """**PROHIBITED under Article 5(1)(h) - Real-time Remote Biometric Identification**
 
 Article 5(1)(h) prohibits the use of real-time remote biometric identification systems in publicly accessible spaces for law enforcement purposes, except in narrowly defined exceptions (Article 5(2)):
 - Search for specific victims of abduction, trafficking, or sexual exploitation
@@ -116,8 +116,8 @@ Article 5(1)(h) prohibits the use of real-time remote biometric identification s
 2. No judicial authorization mechanism
 3. No fundamental rights impact assessment
 4. No geographic scope limitation
-5. Broad "criminal_watchlist" matching — not limited to serious offences in Annex IIa
-6. No human review before alert — automated law enforcement notification"""
+5. Broad "criminal_watchlist" matching - not limited to serious offences in Annex IIa
+6. No human review before alert - automated law enforcement notification"""
     },
     {
         "framework": "Subliminal manipulation",
@@ -156,21 +156,21 @@ content = generate_persuasive_content(
      "biases": ["authority_bias", "scarcity_bias"]},
     "purchase a $5000 supplement package"
 )''',
-        "notes": """**PROHIBITED under Article 5(1)(a) — Subliminal/Manipulative Techniques**
+        "notes": """**PROHIBITED under Article 5(1)(a) - Subliminal/Manipulative Techniques**
 
 Article 5(1)(a) prohibits AI systems that deploy subliminal techniques beyond a person's consciousness, or purposefully manipulative or deceptive techniques, with the objective or effect of materially distorting behavior in a way that causes or is reasonably likely to cause significant harm.
 
-**Article 5(1)(b) also applies** — exploiting vulnerabilities of specific groups (age, disability, social/economic situation) to materially distort behavior causing significant harm.
+**Article 5(1)(b) also applies** - exploiting vulnerabilities of specific groups (age, disability, social/economic situation) to materially distort behavior causing significant harm.
 
 **This code is prohibited because:**
 1. Explicitly targets psychological vulnerabilities (anxieties, emotional state)
-2. Exploits elderly users (age-based vulnerability — Article 5(1)(b))
+2. Exploits elderly users (age-based vulnerability - Article 5(1)(b))
 3. Exploits financial stress (economic vulnerability)
 4. Uses detected cognitive biases as attack vectors
 5. Goal is to manipulate without user awareness ("without them realizing")
 6. Causes financial harm ($5000 purchase through manipulation)
 
-**This cannot be made compliant.** The entire purpose is manipulation — no amount of transparency, documentation, or human oversight changes the prohibited nature of the system."""
+**This cannot be made compliant.** The entire purpose is manipulation - no amount of transparency, documentation, or human oversight changes the prohibited nature of the system."""
     },
     {
         "framework": "Emotion recognition in workplace",
@@ -196,13 +196,13 @@ def monitor_employee_emotions(camera_id: str, employee_id: str):
         adjust_performance_score(employee_id, penalty=-5)
 
     return {"employee": employee_id, "emotion": dominant_emotion}''',
-        "notes": """**PROHIBITED under Article 5(1)(f) — Emotion Recognition in Workplace**
+        "notes": """**PROHIBITED under Article 5(1)(f) - Emotion Recognition in Workplace**
 
 Article 5(1)(f) prohibits the use of emotion recognition systems in the workplace and in education institutions, except where the system is intended to be put into service for medical or safety reasons.
 
 **This code violates the prohibition because:**
 1. Emotion recognition deployed in workplace context
-2. Not for medical or safety purposes — used for performance management
+2. Not for medical or safety purposes - used for performance management
 3. Adjusts performance scores based on detected emotions
 4. Flags employees for manager review based on emotional state
 5. Continuous monitoring without consent mechanism
@@ -258,7 +258,7 @@ This is **PROHIBITED under Article 5(1)(f)**. Emotion recognition in the workpla
 **If analyzing customer emotions:**
 Customers in a sales interaction are not in a workplace or educational institution, so Article 5(1)(f) doesn't directly apply to their side. However:
 
-1. **Article 50(3) — Transparency obligation**: You must inform the customer that an emotion recognition system is being used on them. This requires clear, real-time notification BEFORE the system processes their data.
+1. **Article 50(3) - Transparency obligation**: You must inform the customer that an emotion recognition system is being used on them. This requires clear, real-time notification BEFORE the system processes their data.
 
 2. **GDPR implications**: Emotion detection from facial expressions involves processing biometric data (special category under GDPR Article 9). You need explicit consent or another lawful basis.
 
@@ -272,7 +272,7 @@ Customers in a sales interaction are not in a workplace or educational instituti
 
 **1. Multi-domain data aggregation about individuals:**
 ```python
-# Red flags — combining unrelated personal data sources
+# Red flags - combining unrelated personal data sources
 get_criminal_records(user_id)
 get_social_media_activity(user_id)
 get_financial_history(user_id)
@@ -282,7 +282,7 @@ get_health_records(user_id)
 
 **2. Score computation from personal characteristics:**
 ```python
-# Red flags — computing composite "trustworthiness" or "reliability" scores
+# Red flags - computing composite "trustworthiness" or "reliability" scores
 citizen_score = compute_trustworthiness(aggregated_data)
 social_credit = calculate_social_score(person_data)
 reliability_rating = assess_person(behavioral_data)
@@ -290,7 +290,7 @@ reliability_rating = assess_person(behavioral_data)
 
 **3. Consequence mechanisms based on scores:**
 ```python
-# Red flags — restricting services/access based on computed scores
+# Red flags - restricting services/access based on computed scores
 if score < threshold:
     deny_service(user_id)
     restrict_access(user_id)
@@ -300,7 +300,7 @@ if score < threshold:
 
 **4. Cross-context detrimental treatment:**
 ```python
-# Red flag — using data from context A to restrict in context B
+# Red flag - using data from context A to restrict in context B
 social_behavior = get_social_media_activity(user)  # Context A
 deny_loan_application(user)  # Context B (unrelated)
 ```
@@ -312,7 +312,7 @@ deny_loan_application(user)  # Context B (unrelated)
 ]
 
 # ═══════════════════════════════════════
-# Phase 28: Article 6 — Risk Classification
+# Phase 28: Article 6 - Risk Classification
 # ═══════════════════════════════════════
 
 RISK_CLASSIFICATION_QA = [
@@ -326,9 +326,9 @@ Systems that pose unacceptable risks. Completely banned. Examples: social scorin
 **2. HIGH-RISK (Articles 6-7 + Annex III)**
 Systems that must comply with strict requirements (Articles 9-15). Two pathways to high-risk classification:
 
-*Pathway A — Article 6(1):* AI systems that are safety components of products covered by EU harmonisation legislation listed in Annex I (e.g., machinery, medical devices, vehicles, toys, lifts, radio equipment). These require third-party conformity assessment.
+*Pathway A - Article 6(1):* AI systems that are safety components of products covered by EU harmonisation legislation listed in Annex I (e.g., machinery, medical devices, vehicles, toys, lifts, radio equipment). These require third-party conformity assessment.
 
-*Pathway B — Article 6(2) + Annex III:* Standalone AI systems in specific high-risk use cases:
+*Pathway B - Article 6(2) + Annex III:* Standalone AI systems in specific high-risk use cases:
 - Biometric identification and categorization
 - Management of critical infrastructure (energy, water, transport, digital)
 - Education and vocational training (admissions, assessments)
@@ -348,32 +348,32 @@ Systems with specific transparency obligations:
 **4. MINIMAL RISK**
 All other AI systems. No specific obligations beyond voluntary codes of practice. Examples: spam filters, AI in video games, inventory management.
 
-**Important exception — Article 6(3):** A high-risk system listed in Annex III is NOT considered high-risk if it does not pose a significant risk of harm to health, safety, or fundamental rights. The provider must document this assessment and register in the EU database before placing on market."""
+**Important exception - Article 6(3):** A high-risk system listed in Annex III is NOT considered high-risk if it does not pose a significant risk of harm to health, safety, or fundamental rights. The provider must document this assessment and register in the EU database before placing on market."""
     },
     {
         "instruction": "I'm building a resume screening tool that ranks job applicants. What risk level is this under the EU AI Act?",
         "response": """A resume screening tool that ranks job applicants is classified as **HIGH-RISK** under Article 6(2) and Annex III, point 4(a).
 
-**Annex III, Area 4 — Employment, workers management, and access to self-employment:**
+**Annex III, Area 4 - Employment, workers management, and access to self-employment:**
 Specifically point 4(a) covers: *"AI systems intended to be used for the recruitment or selection of natural persons, in particular to place targeted job advertisements, to screen or filter applications, and to evaluate candidates."*
 
 Your resume screening tool falls squarely under "screen or filter applications" and "evaluate candidates."
 
 **This means you must comply with:**
 
-1. **Article 9 — Risk Management System:** Identify risks of discriminatory outcomes, test for bias across protected characteristics (gender, age, ethnicity, disability), implement mitigation measures.
+1. **Article 9 - Risk Management System:** Identify risks of discriminatory outcomes, test for bias across protected characteristics (gender, age, ethnicity, disability), implement mitigation measures.
 
-2. **Article 10 — Data Governance:** Ensure training data is representative, examine for bias, document data collection methodology. Particularly critical — historical hiring data often encodes existing biases.
+2. **Article 10 - Data Governance:** Ensure training data is representative, examine for bias, document data collection methodology. Particularly critical - historical hiring data often encodes existing biases.
 
-3. **Article 11 — Technical Documentation:** Document the system's purpose, algorithm design, training data, performance metrics, known limitations.
+3. **Article 11 - Technical Documentation:** Document the system's purpose, algorithm design, training data, performance metrics, known limitations.
 
-4. **Article 12 — Record-Keeping:** Log all screening decisions, input CVs, ranking outputs, with sufficient detail for post-hoc auditing.
+4. **Article 12 - Record-Keeping:** Log all screening decisions, input CVs, ranking outputs, with sufficient detail for post-hoc auditing.
 
-5. **Article 13 — Transparency:** Inform candidates that AI is being used in the screening process. Provide meaningful information about the logic involved.
+5. **Article 13 - Transparency:** Inform candidates that AI is being used in the screening process. Provide meaningful information about the logic involved.
 
-6. **Article 14 — Human Oversight:** A human must be able to override the AI's rankings. The system cannot be fully automated for reject decisions.
+6. **Article 14 - Human Oversight:** A human must be able to override the AI's rankings. The system cannot be fully automated for reject decisions.
 
-7. **Article 15 — Accuracy & Robustness:** Test for adversarial manipulation (keyword stuffing), ensure consistent results, validate accuracy across demographic groups.
+7. **Article 15 - Accuracy & Robustness:** Test for adversarial manipulation (keyword stuffing), ensure consistent results, validate accuracy across demographic groups.
 
 **Additional obligations:**
 - Fundamental rights impact assessment (Article 27) before deployment
@@ -471,7 +471,7 @@ Provide your code and I'll classify it with specific article references."""
 ]
 
 # ═══════════════════════════════════════
-# Phase 29: Article 13 — Transparency to Users
+# Phase 29: Article 13 - Transparency to Users
 # ═══════════════════════════════════════
 
 TRANSPARENCY_CODE_EXAMPLES = [
@@ -496,13 +496,13 @@ def chat():
     message = request.json["message"]
     reply = handle_customer_query(message)
     return jsonify({"reply": reply})''',
-        "notes": """**Article 50(1) Violation — AI System Transparency**
+        "notes": """**Article 50(1) Violation - AI System Transparency**
 
 Article 50(1) requires that providers of AI systems intended to interact directly with natural persons shall design the system so that it **informs the person that they are interacting with an AI system**, unless this is obvious from the circumstances.
 
 **Violations:**
 1. No disclosure to users that they are talking to an AI system
-2. Deployed as "customer support" chat — user likely assumes they're talking to a human
+2. Deployed as "customer support" chat - user likely assumes they're talking to a human
 3. No transparency notice at start of conversation
 4. No mechanism to request human handoff
 
@@ -547,7 +547,7 @@ def generate_social_media_post(topic: str) -> dict:
     image = generate_news_image(topic)
     caption = llm.invoke(f"Write a factual news caption about: {topic}")
     return {"image": image, "caption": caption, "source": "Staff Reporter"}''',
-        "notes": """**Article 50(2) and 50(4) Violations — AI-Generated Content Labeling**
+        "notes": """**Article 50(2) and 50(4) Violations - AI-Generated Content Labeling**
 
 Article 50(2) requires providers of AI systems that generate synthetic content (audio, image, video, text) to ensure outputs are **marked in a machine-readable format** and detectable as artificially generated.
 
@@ -556,8 +556,8 @@ Article 50(4) requires deployers using AI to generate or manipulate image, audio
 **Violations:**
 1. No machine-readable AI-generation markers in image metadata (Article 50(2))
 2. No visible labeling of AI-generated images (Article 50(4))
-3. Deliberately misleading — "Photorealistic news photograph" prompt
-4. Attributes content to "Staff Reporter" — active deception
+3. Deliberately misleading - "Photorealistic news photograph" prompt
+4. Attributes content to "Staff Reporter" - active deception
 5. No C2PA or watermarking to enable downstream detection
 
 **Required fixes:**
@@ -591,19 +591,19 @@ TRANSPARENCY_QA_EXAMPLES = [
         "instruction": "What are the transparency requirements under Article 50 of the EU AI Act?",
         "response": """Article 50 establishes transparency obligations for specific AI system categories:
 
-**Article 50(1) — AI interacting with persons:**
+**Article 50(1) - AI interacting with persons:**
 AI systems designed to interact directly with natural persons must be designed so the person is informed they are interacting with an AI system. Exception: where it's obvious from the circumstances and context of use.
 
-**Article 50(2) — Synthetic content generation:**
+**Article 50(2) - Synthetic content generation:**
 Providers of AI systems that generate synthetic audio, image, video, or text content must ensure outputs are marked in a machine-readable format and are detectable as artificially generated or manipulated. The technical solution must be effective, interoperable, robust, and reliable.
 
-**Article 50(3) — Emotion recognition and biometric categorization:**
+**Article 50(3) - Emotion recognition and biometric categorization:**
 Deployers of emotion recognition or biometric categorization systems must inform natural persons exposed to the system about its operation and process personal data in accordance with GDPR and the Law Enforcement Directive.
 
-**Article 50(4) — Deep fakes:**
+**Article 50(4) - Deep fakes:**
 Deployers using AI to generate or manipulate image, audio, or video content that constitutes a deep fake must disclose that content has been artificially generated or manipulated. Exception: AI-generated content that assists editorial or creative work where a human reviews and takes editorial responsibility.
 
-**Article 50(5) — AI-generated text on public interest:**
+**Article 50(5) - AI-generated text on public interest:**
 Deployers using AI to generate or manipulate text published for the purpose of informing the public on matters of public interest must disclose that the content was AI-generated. Exception: where content undergoes human review and a person holds editorial responsibility.
 
 **Implementation in code:**
@@ -670,7 +670,7 @@ Every decision must be traceable with enough context for a human to understand w
 ]
 
 # ═══════════════════════════════════════
-# Phase 30: Articles 20-24 — Provider Obligations
+# Phase 30: Articles 20-24 - Provider Obligations
 # ═══════════════════════════════════════
 
 PROVIDER_OBLIGATIONS_QA = [
@@ -678,7 +678,7 @@ PROVIDER_OBLIGATIONS_QA = [
         "instruction": "What are the provider obligations for high-risk AI systems under Articles 16-24?",
         "response": """Providers of high-risk AI systems have extensive obligations under the EU AI Act:
 
-**Article 16 — General Provider Obligations:**
+**Article 16 - General Provider Obligations:**
 - Ensure compliance with Articles 9-15
 - Have a quality management system (Article 17)
 - Maintain technical documentation (Article 11)
@@ -688,7 +688,7 @@ PROVIDER_OBLIGATIONS_QA = [
 - Take corrective action for non-conforming systems
 - Affix CE marking (Article 48)
 
-**Article 17 — Quality Management System:**
+**Article 17 - Quality Management System:**
 Must cover:
 - Compliance strategy and regulatory procedures
 - Design and development techniques
@@ -699,25 +699,25 @@ Must cover:
 - Communication with authorities
 - Record-keeping
 
-**Article 18 — Technical Documentation:**
+**Article 18 - Technical Documentation:**
 Draw up documentation BEFORE the system is placed on market. Must demonstrate compliance with Articles 9-15. Keep updated throughout system lifetime.
 
-**Article 19 — Automatically Generated Logs:**
+**Article 19 - Automatically Generated Logs:**
 Must be designed to retain logs for a period appropriate to the intended purpose (minimum 6 months unless otherwise specified by Union or national law).
 
-**Article 20 — Corrective Actions:**
+**Article 20 - Corrective Actions:**
 If a system is non-conforming, providers must immediately take corrective action (bring into conformity, withdraw, recall). Must inform distributors, deployers, and authorities.
 
-**Article 21 — Cooperation with Competent Authorities:**
+**Article 21 - Cooperation with Competent Authorities:**
 Must provide all information and documentation requested, in a language the authority can understand. Grant access to logs and source code where necessary.
 
-**Article 22 — Authorised Representatives:**
+**Article 22 - Authorised Representatives:**
 Providers established outside the EU must appoint an authorised representative in the EU BEFORE placing system on the market.
 
-**Article 23 — Obligations of Importers:**
+**Article 23 - Obligations of Importers:**
 Verify the provider has carried out conformity assessment, has technical documentation, has CE marking. If non-conforming, do not place on market.
 
-**Article 24 — Obligations of Distributors:**
+**Article 24 - Obligations of Distributors:**
 Verify CE marking exists, provider and importer have complied with their obligations, storage/transport conditions don't compromise compliance.
 
 **Code implementation tip:** Build a compliance checklist into your CI/CD pipeline:
@@ -831,7 +831,7 @@ The CE marking indicates that a high-risk AI system conforms with the EU AI Act 
 
 *Third-party assessment (Article 43(1)):* Required for:
 - Biometric identification/categorization systems (Annex III, point 1)
-- Critical infrastructure AI (Annex III, point 2) — if the AI is a safety component
+- Critical infrastructure AI (Annex III, point 2) - if the AI is a safety component
 - Systems covered by Annex I harmonization legislation requiring third-party assessment
 
 **Registration in EU Database (Article 49):**
@@ -870,7 +870,7 @@ class ConformityDeclaration:
 ]
 
 # ═══════════════════════════════════════
-# Phase 31: Article 52 — GPAI Transparency
+# Phase 31: Article 52 - GPAI Transparency
 # ═══════════════════════════════════════
 
 GPAI_CODE_EXAMPLES = [
@@ -897,7 +897,7 @@ def generate():
 # No downstream provider notification
 # No copyright policy
 # No technical documentation summary''',
-        "notes": """**Article 53 Violations — GPAI Model Provider Obligations**
+        "notes": """**Article 53 Violations - GPAI Model Provider Obligations**
 
 If you're making a general-purpose AI model available (including via API), Article 53 requires:
 
@@ -1004,11 +1004,11 @@ def estimate_training_flops(
 
 # Example: 70B model trained on 2T tokens
 flops = estimate_training_flops(70e9, 2e12)
-# = 8.4e23 FLOPS — below 10^25 threshold
+# = 8.4e23 FLOPS - below 10^25 threshold
 
 # Example: 400B model trained on 15T tokens
 flops = estimate_training_flops(400e9, 15e12)
-# = 3.6e25 FLOPS — ABOVE threshold → systemic risk
+# = 3.6e25 FLOPS - ABOVE threshold → systemic risk
 ```
 
 **If your model exceeds the threshold:**
@@ -1025,7 +1025,7 @@ flops = estimate_training_flops(400e9, 15e12)
     },
     {
         "instruction": "What does the open-source exception for GPAI models actually cover?",
-        "response": """**Article 53(2) — Open-Source GPAI Exception:**
+        "response": """**Article 53(2) - Open-Source GPAI Exception:**
 
 Providers of GPAI models released under a free and open-source licence (as defined: model weights, architecture, and usage information are publicly available) are exempt from MOST provider obligations.
 
@@ -1109,12 +1109,12 @@ OpenAI (GPAI provider)          You (downstream provider)
                                 └── Conformity assessment
 ```
 
-**Practical tip:** Request OpenAI's downstream provider documentation (Article 53(1)(b)) and incorporate it into your own technical documentation. If OpenAI doesn't provide sufficient information for you to comply, document this gap — regulators will look at the full supply chain."""
+**Practical tip:** Request OpenAI's downstream provider documentation (Article 53(1)(b)) and incorporate it into your own technical documentation. If OpenAI doesn't provide sufficient information for you to comply, document this gap - regulators will look at the full supply chain."""
     },
 ]
 
 # ═══════════════════════════════════════
-# Phase 32: Articles 26, 56-61 — Deployer Obligations
+# Phase 32: Articles 26, 56-61 - Deployer Obligations
 # ═══════════════════════════════════════
 
 DEPLOYER_CODE_EXAMPLES = [
@@ -1145,16 +1145,16 @@ def process_applications(applications: list) -> list:
 
 As a deployer of a high-risk AI system (resume screening = Annex III area 4), you have specific obligations:
 
-**Article 26(1) — Use in accordance with instructions:**
+**Article 26(1) - Use in accordance with instructions:**
 Violation: Auto-rejecting 80% of applicants without human review likely violates the provider's instructions for use, which almost certainly require human oversight for rejection decisions.
 
-**Article 26(2) — Human oversight:**
+**Article 26(2) - Human oversight:**
 Violation: No human reviews the AI's screening decisions before rejection emails are sent. Article 26(2) requires deployers to assign human oversight to natural persons who have the competence, training, and authority to fulfill that role.
 
-**Article 26(5) — Monitoring:**
+**Article 26(5) - Monitoring:**
 Violation: No monitoring of the system's outputs for accuracy, bias, or drift. Deployers must monitor operation based on the instructions for use and inform the provider of any serious incidents.
 
-**Article 26(9) — DPIA under GDPR:**
+**Article 26(9) - DPIA under GDPR:**
 Missing: For employment AI, deployers must carry out a Data Protection Impact Assessment per GDPR Article 35 before deployment.
 
 **Required fixes:**
@@ -1173,7 +1173,7 @@ def process_applications(applications: list) -> list:
     # Log all scores for monitoring (Article 26(5))
     log_screening_results(results)
 
-    # Flag for human review — NO auto-rejection
+    # Flag for human review - NO auto-rejection
     for r in results:
         assign_to_human_reviewer(r)
 
@@ -1207,7 +1207,7 @@ def evaluate_loan_application(applicant_data: dict) -> dict:
 # - Registration in EU database (Article 49(3))''',
         "notes": """**Deployer Obligation Violations (Articles 26, 27):**
 
-**Article 27 — Fundamental Rights Impact Assessment (FRIA):**
+**Article 27 - Fundamental Rights Impact Assessment (FRIA):**
 Before deploying a high-risk AI system, deployers that are bodies governed by public law or private entities providing public services, AND deployers of systems in Annex III areas 1(a), 2, 3, 4, 5(b)(c), 7, 8, MUST carry out an assessment of the impact on fundamental rights.
 
 Credit scoring falls under Annex III area 5(a), so FRIA requirements apply.
@@ -1221,10 +1221,10 @@ The FRIA must include:
 6. Measures to act on AI system outputs
 7. Measures to address identified risks
 
-**Article 26(11) — Informing Affected Persons:**
+**Article 26(11) - Informing Affected Persons:**
 Deployers of high-risk AI systems that make decisions about natural persons must inform those persons that they are subject to AI-assisted decision making. For credit scoring, applicants must be told AI is being used.
 
-**Article 26(8) — EU Database Registration:**
+**Article 26(8) - EU Database Registration:**
 Deployers must register their use of the high-risk AI system in the EU database (Article 49(3)).
 
 **Required additions:**
@@ -1295,7 +1295,7 @@ Register your deployment of the high-risk system in the EU database."""
     },
     {
         "instruction": "What's the difference between a provider and a deployer under the EU AI Act? When does a deployer become a provider?",
-        "response": """**Provider vs. Deployer — Key Definitions:**
+        "response": """**Provider vs. Deployer - Key Definitions:**
 
 **Provider (Article 3(3)):** A natural or legal person that develops an AI system or GPAI model, or has one developed, and places it on the market or puts it into service under its own name or trademark.
 
@@ -1330,7 +1330,7 @@ A change to the AI system after placing on market which:
 - Repurposing a general text classifier as a medical diagnostic tool (changing intended purpose to high-risk)
 
 **Why this matters:**
-Providers have much heavier obligations — full Articles 9-15 compliance, conformity assessment, CE marking, quality management system. If you accidentally become a provider, you inherit ALL of these obligations.
+Providers have much heavier obligations - full Articles 9-15 compliance, conformity assessment, CE marking, quality management system. If you accidentally become a provider, you inherit ALL of these obligations.
 
 **Code check for provider status:**
 ```python
@@ -1352,12 +1352,12 @@ def assess_provider_status(deployment):
 
 **1. Human Oversight Implementation (Article 26(2)):**
 ```python
-# GOOD — human review before consequential decisions
+# GOOD - human review before consequential decisions
 result = ai_system.predict(data)
 human_decision = assign_to_reviewer(result)
 execute_decision(human_decision)
 
-# BAD — fully automated consequential decisions
+# BAD - fully automated consequential decisions
 result = ai_system.predict(data)
 execute_decision(result)  # No human in loop
 ```
@@ -1365,13 +1365,13 @@ Scan for: direct execution of AI outputs without human review in high-risk conte
 
 **2. Monitoring Implementation (Article 26(5)):**
 ```python
-# GOOD — systematic monitoring
+# GOOD - systematic monitoring
 log_prediction(input_data, output, timestamp)
 check_accuracy_drift(recent_predictions)
 check_demographic_parity(recent_predictions)
 alert_if_anomaly_detected()
 
-# BAD — fire and forget
+# BAD - fire and forget
 result = ai_system.predict(data)
 return result  # No logging, no monitoring
 ```
@@ -1379,38 +1379,38 @@ Scan for: presence of logging, drift detection, accuracy monitoring.
 
 **3. Input Data Validation (Article 26(4)):**
 ```python
-# GOOD — validate inputs match expected format
+# GOOD - validate inputs match expected format
 def process(data):
     validate_schema(data, expected_schema)
     check_data_quality(data)
     result = ai_system.predict(data)
 
-# BAD — pass anything through
+# BAD - pass anything through
 def process(data):
     result = ai_system.predict(data)  # No validation
 ```
 
 **4. Person Notification (Article 26(11)):**
 ```python
-# GOOD — inform affected persons
+# GOOD - inform affected persons
 notify_user("This decision was assisted by an AI system.")
 provide_system_info(system_name, provider, purpose)
 
-# BAD — no notification
+# BAD - no notification
 decision = ai_system.decide(user_data)
 apply_decision(user_id, decision)  # User never told AI was involved
 ```
 
 **5. Incident Reporting Mechanism (Article 26(5)):**
 ```python
-# GOOD — incident detection and reporting
+# GOOD - incident detection and reporting
 if prediction_confidence < THRESHOLD:
     log_incident(severity="warning")
     notify_provider(incident_details)
 if harm_detected:
     report_serious_incident(authorities, provider)
 
-# BAD — no incident handling
+# BAD - no incident handling
 result = ai_system.predict(data)
 ```
 
@@ -1466,7 +1466,7 @@ def main():
     all_examples = []
 
     # Phase 27: Prohibited Practices
-    print("Phase 27: Article 5 — Prohibited Practices")
+    print("Phase 27: Article 5 - Prohibited Practices")
     for ex in PROHIBITED_CODE_EXAMPLES:
         all_examples.append(format_code_example(ex))
     for ex in PROHIBITED_QA_EXAMPLES:
@@ -1474,13 +1474,13 @@ def main():
     print(f"  {len(PROHIBITED_CODE_EXAMPLES)} code + {len(PROHIBITED_QA_EXAMPLES)} QA = {len(PROHIBITED_CODE_EXAMPLES) + len(PROHIBITED_QA_EXAMPLES)} examples")
 
     # Phase 28: Risk Classification
-    print("Phase 28: Article 6 — Risk Classification")
+    print("Phase 28: Article 6 - Risk Classification")
     for ex in RISK_CLASSIFICATION_QA:
         all_examples.append(format_qa_example(ex))
     print(f"  {len(RISK_CLASSIFICATION_QA)} QA examples")
 
     # Phase 29: Transparency
-    print("Phase 29: Article 13/50 — Transparency to Users")
+    print("Phase 29: Article 13/50 - Transparency to Users")
     for ex in TRANSPARENCY_CODE_EXAMPLES:
         all_examples.append(format_code_example(ex))
     for ex in TRANSPARENCY_QA_EXAMPLES:
@@ -1488,13 +1488,13 @@ def main():
     print(f"  {len(TRANSPARENCY_CODE_EXAMPLES)} code + {len(TRANSPARENCY_QA_EXAMPLES)} QA = {len(TRANSPARENCY_CODE_EXAMPLES) + len(TRANSPARENCY_QA_EXAMPLES)} examples")
 
     # Phase 30: Provider Obligations
-    print("Phase 30: Articles 16-24 — Provider Obligations")
+    print("Phase 30: Articles 16-24 - Provider Obligations")
     for ex in PROVIDER_OBLIGATIONS_QA:
         all_examples.append(format_qa_example(ex))
     print(f"  {len(PROVIDER_OBLIGATIONS_QA)} QA examples")
 
     # Phase 31: GPAI Transparency
-    print("Phase 31: Article 52-56 — GPAI Transparency")
+    print("Phase 31: Article 52-56 - GPAI Transparency")
     for ex in GPAI_CODE_EXAMPLES:
         all_examples.append(format_code_example(ex))
     for ex in GPAI_QA_EXAMPLES:
@@ -1502,7 +1502,7 @@ def main():
     print(f"  {len(GPAI_CODE_EXAMPLES)} code + {len(GPAI_QA_EXAMPLES)} QA = {len(GPAI_CODE_EXAMPLES) + len(GPAI_QA_EXAMPLES)} examples")
 
     # Phase 32: Deployer Obligations
-    print("Phase 32: Articles 26, 56-61 — Deployer Obligations")
+    print("Phase 32: Articles 26, 56-61 - Deployer Obligations")
     for ex in DEPLOYER_CODE_EXAMPLES:
         all_examples.append(format_code_example(ex))
     for ex in DEPLOYER_QA_EXAMPLES:

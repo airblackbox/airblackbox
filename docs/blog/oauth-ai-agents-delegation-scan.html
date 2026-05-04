@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It | AIR Blackbox</title>
+<title>OAuth Isn't Enough for AI Agents - We Scanned 7 Frameworks to Prove It | AIR Blackbox</title>
 <meta name="description" content="We scanned OpenAI Agents SDK, LangChain, Haystack, CrewAI, and 3 other AI agent frameworks for EU AI Act compliance. Most have zero OAuth delegation accountability.">
 <meta name="keywords" content="EU AI Act compliance, AI agent OAuth, agent delegation, AI governance, LangChain compliance, OpenAI agents security">
-<meta property="og:title" content="OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It">
+<meta property="og:title" content="OAuth Isn't Enough for AI Agents - We Scanned 7 Frameworks to Prove It">
 <meta property="og:description" content="We scanned 7 AI agent frameworks for OAuth delegation tracking. Most have zero accountability.">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://airblackbox.ai/blog/oauth-ai-agents-delegation-scan">
@@ -48,7 +48,7 @@
 
 <div class="container">
 
-<h1>OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It</h1>
+<h1>OAuth Isn't Enough for AI Agents - We Scanned 7 Frameworks to Prove It</h1>
 <p class="meta">March 12, 2026 · Jason Shotwell · 6 min read</p>
 
 <p>OAuth was built for humans clicking login buttons. AI agents are a completely different trust model.</p>
@@ -75,7 +75,7 @@
 
 <p><strong>Token expiry and revocation handling.</strong> Can you kill a rogue agent instantly? If an agent starts behaving unexpectedly at 3am, is there a mechanism to revoke its credentials in real time?</p>
 
-<p><strong>Agent action audit trail.</strong> Most frameworks log LLM calls. Almost none log the actions the agent takes as a result — the emails sent, the APIs called, the data modified.</p>
+<p><strong>Agent action audit trail.</strong> Most frameworks log LLM calls. Almost none log the actions the agent takes as a result - the emails sent, the APIs called, the data modified.</p>
 
 <p><strong>Agent action boundaries.</strong> Is there a defined set of tools and actions the agent is allowed to use?</p>
 
@@ -104,11 +104,11 @@
 
 <p>The pattern is consistent. LLM call logging exists. Action-level logging does not. Token scoping exists in some. User identity binding is rare. Action boundaries are almost nonexistent.</p>
 
-<blockquote>OAuth says the agent is allowed. Nobody tracks what it does. That is how you get 1,000 emails sent overnight — technically authorized, zero accountability.</blockquote>
+<blockquote>OAuth says the agent is allowed. Nobody tracks what it does. That is how you get 1,000 emails sent overnight - technically authorized, zero accountability.</blockquote>
 
 <h2>Why This Matters Now</h2>
 
-<p>The EU AI Act high-risk system rules take effect August 2, 2026. Article 14 requires human oversight mechanisms. Article 12 requires automatic logging of events during operation. If your agent acts on behalf of a user and you cannot reconstruct who authorized it, what it did, and why — you have a compliance gap.</p>
+<p>The EU AI Act high-risk system rules take effect August 2, 2026. Article 14 requires human oversight mechanisms. Article 12 requires automatic logging of events during operation. If your agent acts on behalf of a user and you cannot reconstruct who authorized it, what it did, and why - you have a compliance gap.</p>
 
 <h2>Scan Your Own Code</h2>
 
@@ -125,7 +125,7 @@ air-blackbox comply --scan . -v</code></pre>
 
 
 <footer>
-  <p>AIR Blackbox — The flight recorder for AI agents. Open source. Apache 2.0.</p>
+  <p>AIR Blackbox - The flight recorder for AI agents. Open source. Apache 2.0.</p>
   <p><a href="/">Home</a> · <a href="/blog/">Blog</a> · <a href="https://github.com/airblackbox/airblackbox">GitHub</a></p>
 </footer>
 

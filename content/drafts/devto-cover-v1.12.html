@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AIR Blackbox Scanner Output — v1.12.0</title>
+<title>AIR Blackbox Scanner Output - v1.12.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -218,30 +218,30 @@
       <div class="chrome-dot dot-red"></div>
       <div class="chrome-dot dot-yellow"></div>
       <div class="chrome-dot dot-green"></div>
-      <div class="chrome-title">~/projects/my-agent &nbsp; — &nbsp; air-blackbox comply --scan .</div>
+      <div class="chrome-title">~/projects/my-agent &nbsp; - &nbsp; air-blackbox comply --scan .</div>
     </div>
     <div class="body">
 <pre><span class="prompt">$</span> <span class="cmd">air-blackbox comply --scan .</span>
 <span class="dim">Scanning 47 Python files across 7 EU AI Act articles...</span>
 
-<span class="section">Article 12 — Record-Keeping</span>
+<span class="section">Article 12 - Record-Keeping</span>
   <span class="fail">FAIL</span>  <span class="check">Agent identity binding</span>
         <span class="dim">Autonomous agent detected in 3 file(s). Checked air-trust, AAR, SCC.</span>
   <span class="warn">WARN</span>  <span class="check">Tamper-evident audit chain</span>
         <span class="dim">Logging found, but no HMAC chaining on decisions.</span>
 
-<span class="section">Article 13 — Transparency</span>
+<span class="section">Article 13 - Transparency</span>
   <span class="pass">PASS</span>  <span class="check">AI disclosure to users</span>
   <span class="fail">FAIL</span>  <span class="check">Capability and limitation documentation</span>
         <span class="dim">No MODEL_CARD.md, SYSTEM_CARD.md, or capability docs found.</span>
   <span class="warn">WARN</span>  <span class="check">Output interpretation support</span>
         <span class="dim">No confidence scores, rationale, or explanation patterns detected.</span>
 
-<span class="section">Article 14 — Human Oversight</span>
+<span class="section">Article 14 - Human Oversight</span>
   <span class="pass">PASS</span>  <span class="check">Human-in-the-loop mechanism</span>
   <span class="pass">PASS</span>  <span class="check">Kill switch / emergency stop</span>
 
-<span class="section">Article 15 — Accuracy, Robustness &amp; Cybersecurity</span>
+<span class="section">Article 15 - Accuracy, Robustness &amp; Cybersecurity</span>
   <span class="fail">FAIL</span>  <span class="check">RNG seed determinism</span>
         <span class="dim">torch detected but no seed set. Outputs will vary across runs.</span>
   <span class="fail">FAIL</span>  <span class="check">Deterministic algorithm flags</span>

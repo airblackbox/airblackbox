@@ -1,4 +1,4 @@
-"""AIR Gate — pre-execution policy enforcement with bilateral receipts.
+"""AIR Gate - pre-execution policy enforcement with bilateral receipts.
 
 The gate sits between your agent and the actions it takes. Every action
 goes through a policy check, and every decision produces a bilateral

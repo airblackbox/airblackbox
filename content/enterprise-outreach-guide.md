@@ -1,7 +1,7 @@
 # Enterprise Outreach Campaign Guide
 
 **Total targets**: 139 companies
-**All Priority 1** — confirmed AI agent deployments in production
+**All Priority 1** - confirmed AI agent deployments in production
 **EU AI Act enforcement**: August 2, 2026 (104 days from April 20, 2026)
 
 ## Email Templates
@@ -208,6 +208,6 @@
 ## Contact Status
 
 Only 1 company has a verified contact:
-- **AAA Washington** — Dr. William Lidster, CISO, williamlidster@aaawa.com
+- **AAA Washington** - Dr. William Lidster, CISO, williamlidster@aaawa.com
 
 **Next step**: Use LinkedIn Sales Navigator, RocketReach, or Apollo.io to find contacts for the remaining 138 companies. Target the suggested buyer persona listed in each template.
