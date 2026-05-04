@@ -214,5 +214,57 @@ class ComplianceHistory:
             "audit_report_generated",
             extra={"scans": total_scans, "issues": total_issues}
         )
-        
+
         return report
+
+
+# Module-level singleton and convenience functions for MCP server compatibility.
+_default_history = ComplianceHistory()
+
+
+def get_history() -> list:
+    """Get list of recent scan records (module-level convenience function)."""
+    records = _default_history.get_scan_history()
+    return [
+        {
+            "scan_id": r.scan_id,
+            "target": r.target,
+            "articles": r.articles_checked,
+            "issues": r.issues_found,
+            "status": r.remediation_status,
+            "timestamp": r.timestamp.isoformat(),
+        }
+        for r in records
+    ]
+
+
+def get_trend() -> dict:
+    """Analyze compliance trend over time (module-level convenience function)."""
+    records = _default_history.get_scan_history()
+    if not records:
+        return {"trend": "no_data", "scans": 0, "message": "No scans recorded yet."}
+    total = len(records)
+    resolved = sum(1 for r in records if r.remediation_status == "resolved")
+    avg_issues = sum(r.issues_found for r in records) / total if total else 0
+    return {
+        "trend": "improving" if resolved > total // 2 else "needs_attention",
+        "scans": total,
+        "resolved": resolved,
+        "avg_issues_per_scan": round(avg_issues, 1),
+    }
+
+
+def get_latest_score() -> dict:
+    """Get the most recent compliance score (module-level convenience function)."""
+    records = _default_history.get_scan_history()
+    if not records:
+        return {"score": None, "message": "No scans recorded yet."}
+    latest = records[-1]
+    return {
+        "scan_id": latest.scan_id,
+        "target": latest.target,
+        "issues_found": latest.issues_found,
+        "severity": latest.severity_distribution,
+        "status": latest.remediation_status,
+        "timestamp": latest.timestamp.isoformat(),
+    }

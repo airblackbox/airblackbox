@@ -188,5 +188,77 @@ class BiasScanner:
                 "critical": critical_count
             }
         )
-        
+
         return report
+
+
+# Module-level convenience function for MCP server compatibility.
+
+def scan_bias(file_path: str) -> dict:
+    """Scan a Python file for bias and fairness issues.
+
+    Module-level function that wraps BiasScanner for the MCP server.
+
+    Args:
+        file_path: Path to a Python file to scan.
+
+    Returns:
+        Bias analysis report dict.
+    """
+    import re
+    import os
+
+    if not os.path.exists(file_path):
+        return {"error": f"File not found: {file_path}", "findings": []}
+
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        code = f.read()
+
+    findings = []
+
+    # Check for protected attribute references
+    protected_pats = [
+        (r'\b(?:gender|sex|race|ethnicity|age|religion|disability|nationality)\b', "protected_attribute_reference"),
+        (r'\b(?:male|female|man|woman|boy|girl)\b', "gender_reference"),
+        (r'\b(?:white|black|asian|hispanic|latino)\b', "race_reference"),
+    ]
+    for pattern, bias_type in protected_pats:
+        matches = re.findall(pattern, code, re.IGNORECASE)
+        if matches:
+            findings.append({
+                "type": bias_type,
+                "count": len(matches),
+                "severity": "medium",
+                "description": f"Found {len(matches)} reference(s) to protected attributes. Review for potential bias.",
+            })
+
+    # Check for fairness-aware patterns (positive signals)
+    fairness_pats = [
+        r"fairness", r"bias_mitigat", r"disparate_impact",
+        r"demographic_parity", r"equalized_odds", r"calibration",
+        r"protected_group", r"sensitive_attribute",
+    ]
+    fairness_combined = "|".join(fairness_pats)
+    has_fairness = bool(re.search(fairness_combined, code, re.IGNORECASE))
+
+    # Check for hardcoded thresholds that might encode bias
+    threshold_pats = re.findall(r'(?:threshold|cutoff|minimum_score)\s*[=<>]+\s*[\d.]+', code)
+    if threshold_pats and not has_fairness:
+        findings.append({
+            "type": "unvalidated_threshold",
+            "count": len(threshold_pats),
+            "severity": "high",
+            "description": "Hardcoded thresholds found without fairness validation. These may encode bias.",
+        })
+
+    return {
+        "file": file_path,
+        "findings": findings,
+        "fairness_aware": has_fairness,
+        "risk_level": "high" if any(f["severity"] == "high" for f in findings) else "medium" if findings else "low",
+        "recommendation": (
+            "Fairness controls detected. Verify they cover all protected groups."
+            if has_fairness
+            else "No fairness controls detected. Add bias testing before deployment."
+        ),
+    }
