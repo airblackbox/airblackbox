@@ -1,16 +1,16 @@
 ##
-## AIR Blackbox Enterprise — Air-Gapped Deployment
+## AIR Blackbox Enterprise - Air-Gapped Deployment
 ##
 ## Self-contained compliance scanner. Everything runs locally:
 ##   - Ollama + fine-tuned air-compliance model (baked into image)
 ##   - Gateway (OpenAI-compatible proxy with audit recording)
-##   - OTel Collector (single local pipeline — no crowd export)
+##   - OTel Collector (single local pipeline - no crowd export)
 ##   - Jaeger (trace observability dashboard)
 ##   - MinIO (object storage for prompt vault / audit artifacts)
 ##
 ## Zero data leaves this machine. Deploy on client VPS or on-prem.
 ##
-## Build (first time only — bakes the fine-tuned model into the image):
+## Build (first time only - bakes the fine-tuned model into the image):
 ##   cp ~/Desktop/untitled\ folder/air-compliance-v3.gguf model/air-compliance-v3.gguf
 ##   docker build -f model/Dockerfile.ollama -t airblackbox/ollama-compliance:v3 .
 ##
@@ -19,9 +19,9 @@
 ##   air-blackbox comply --scan  (from any project directory)
 ##
 ## Ports exposed (bind to localhost only in production):
-##   8080  — Gateway API (OpenAI-compatible)
-##   16686 — Jaeger UI (trace dashboard)
-##   9001  — MinIO Console (object storage admin)
+##   8080  - Gateway API (OpenAI-compatible)
+##   16686 - Jaeger UI (trace dashboard)
+##   9001  - MinIO Console (object storage admin)
 ##
 
 services:

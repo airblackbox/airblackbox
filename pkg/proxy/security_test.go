@@ -16,7 +16,7 @@ import (
 // vault references, not raw prompt/response content. This is the fundamental
 // security guarantee: traces and logs never contain customer data.
 func TestSecurity_NoPlaintextInAIRRecords(t *testing.T) {
-	// Use the PII fixture — it contains SSN, email, account numbers.
+	// Use the PII fixture - it contains SSN, email, account numbers.
 	fix := testdata.SensitivePayload()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func TestSecurity_NoPlaintextInAIRRecords(t *testing.T) {
 	runID := w.Header().Get("x-run-id")
 	airFile := waitForAIRRecord(t, dir, runID)
 
-	// Read the raw AIR file as bytes — don't just check struct fields,
+	// Read the raw AIR file as bytes - don't just check struct fields,
 	// check the ENTIRE file for plaintext leaks.
 	data, err := os.ReadFile(airFile)
 	if err != nil {

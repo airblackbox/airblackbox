@@ -39,12 +39,12 @@ air-blackbox comply --scan . --format json
 
 The scanner checks 6 EU AI Act articles. For each one:
 
-- **Article 9 — Risk Management**: Looks for risk assessment patterns, try/except blocks around AI calls, fallback handling, and confidence thresholds.
-- **Article 10 — Data Governance**: Checks for data validation, schema enforcement, data quality checks, and provenance tracking.
-- **Article 11 — Technical Documentation**: Looks for MODEL_CARD.md, SYSTEM_CARD.md, docstrings on model functions, and architecture docs.
-- **Article 12 — Record-Keeping**: Checks for audit logging, HMAC chains, agent identity binding (air-trust, AAR, SCC), and structured logging of AI decisions.
-- **Article 14 — Human Oversight**: Looks for human-in-the-loop patterns, approval workflows, confidence-based escalation, and delegation logging.
-- **Article 15 — Accuracy & Robustness**: Checks for RNG seed setting, deterministic algorithm flags, hardware abstraction, input validation, and error handling.
+- **Article 9 - Risk Management**: Looks for risk assessment patterns, try/except blocks around AI calls, fallback handling, and confidence thresholds.
+- **Article 10 - Data Governance**: Checks for data validation, schema enforcement, data quality checks, and provenance tracking.
+- **Article 11 - Technical Documentation**: Looks for MODEL_CARD.md, SYSTEM_CARD.md, docstrings on model functions, and architecture docs.
+- **Article 12 - Record-Keeping**: Checks for audit logging, HMAC chains, agent identity binding (air-trust, AAR, SCC), and structured logging of AI decisions.
+- **Article 14 - Human Oversight**: Looks for human-in-the-loop patterns, approval workflows, confidence-based escalation, and delegation logging.
+- **Article 15 - Accuracy & Robustness**: Checks for RNG seed setting, deterministic algorithm flags, hardware abstraction, input validation, and error handling.
 
 ## Result Statuses
 

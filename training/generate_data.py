@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AIR Blackbox — Training Data Generation Pipeline
+AIR Blackbox - Training Data Generation Pipeline
 =================================================
 Generates additional EU AI Act compliance training examples by:
   1. Mining real code from top GitHub AI agent repos
@@ -261,7 +261,7 @@ def generate_full_analysis(code, filepath, framework):
         config = ARTICLE_CHECKS[article]
         status = "PASS" if passed else "FAIL"
         desc = config["pass_desc"] if passed else config["fail_desc"]
-        lines.append(f"**Article {article} — {config['name']}**: {status}")
+        lines.append(f"**Article {article} - {config['name']}**: {status}")
         lines.append(f"{desc}")
         if not passed:
             lines.append(f"Recommendation: Address {config['name'].lower()} requirements to comply with Article {article}.")
@@ -524,7 +524,7 @@ task3 = Task(description="Review for accuracy", agent=reviewer)
 crew = Crew(agents=[researcher, writer, reviewer], tasks=[task1, task2, task3])
 result = crew.kickoff()''',
         "framework": "CrewAI",
-        "notes": "Multi-agent with delegation — Article 14 concern: who is accountable when agents delegate?",
+        "notes": "Multi-agent with delegation - Article 14 concern: who is accountable when agents delegate?",
     },
     # RAG with external data
     {
@@ -544,7 +544,7 @@ qa_chain = RetrievalQA.from_chain_type(
 )
 answer = qa_chain.invoke({"query": user_input})''',
         "framework": "LangChain",
-        "notes": "RAG pipeline — Article 10 concern: external data governance, PII in vector store. Article 15: no input sanitization on user_input.",
+        "notes": "RAG pipeline - Article 10 concern: external data governance, PII in vector store. Article 15: no input sanitization on user_input.",
     },
     # Agent writing and executing code
     {
@@ -564,7 +564,7 @@ agent = create_openai_tools_agent(llm, [execute_python])
 executor = AgentExecutor(agent=agent, tools=[execute_python])
 result = executor.invoke({"input": "Calculate the average salary from the database"})''',
         "framework": "LangChain",
-        "notes": "Code execution agent — CRITICAL: Article 15 fail (arbitrary code execution), Article 14 fail (no approval gate for exec), Article 9 fail (no risk classification).",
+        "notes": "Code execution agent - CRITICAL: Article 15 fail (arbitrary code execution), Article 14 fail (no approval gate for exec), Article 9 fail (no risk classification).",
     },
     # TypeScript-style agent (Python wrapper)
     {
@@ -581,7 +581,7 @@ def run_ts_agent(prompt: str) -> dict:
 
 output = run_ts_agent("Summarize all customer complaints from last month")''',
         "framework": "Unknown",
-        "notes": "Subprocess agent — all articles fail: no logging, no oversight, no error handling, shell injection risk.",
+        "notes": "Subprocess agent - all articles fail: no logging, no oversight, no error handling, shell injection risk.",
     },
     # Agent with MCP server tools
     {
@@ -607,7 +607,7 @@ for block in response.content:
     if block.type == "tool_use":
         result = execute_tool(block.name, block.input)''',
         "framework": "Anthropic SDK",
-        "notes": "Tool-use agent with powerful capabilities — Article 14: no approval for send_email or run_bash. Article 9: no risk classification per tool.",
+        "notes": "Tool-use agent with powerful capabilities - Article 14: no approval for send_email or run_bash. Article 9: no risk classification per tool.",
     },
     # Fine-tuned model deployment without model card
     {
@@ -630,7 +630,7 @@ app = Flask(__name__)
 def predict():
     return {"result": generate(request.json["prompt"])}''',
         "framework": "Unknown",
-        "notes": "Deployed fine-tuned model — Article 11: no model card, no documentation of training data or intended use. Article 10: no input validation on API endpoint.",
+        "notes": "Deployed fine-tuned model - Article 11: no model card, no documentation of training data or intended use. Article 10: no input validation on API endpoint.",
     },
     # Agent with database access
     {
@@ -645,7 +645,7 @@ agent = create_sql_agent(llm=llm, db=db, verbose=True)
 result = agent.invoke({"input": user_query})
 print(result)''',
         "framework": "LangChain",
-        "notes": "SQL agent with production database — CRITICAL: credentials in code, Article 10 fail (PII access without governance), Article 15 fail (SQL injection risk).",
+        "notes": "SQL agent with production database - CRITICAL: credentials in code, Article 10 fail (PII access without governance), Article 15 fail (SQL injection risk).",
     },
     # Compliant agent with all controls
     {
@@ -714,7 +714,7 @@ def stream_agent(prompt: str):
 result = stream_agent(user_input)
 save_to_database(result)''',
         "framework": "OpenAI SDK",
-        "notes": "Streaming without output validation — Article 15: unvalidated output saved directly to DB. Article 12: no logging of streamed content. Article 10: no input sanitization.",
+        "notes": "Streaming without output validation - Article 15: unvalidated output saved directly to DB. Article 12: no logging of streamed content. Article 10: no input sanitization.",
     },
     # 10. Autonomous web scraping agent
     {
@@ -741,7 +741,7 @@ task = Task(
 crew = Crew(agents=[researcher], tasks=[task])
 result = crew.kickoff(inputs={"competitors": competitor_list})''',
         "framework": "CrewAI",
-        "notes": "Web scraping agent — Article 10: scraping external data with no governance. Article 14: no human approval for what gets scraped. Article 15: no content filtering on scraped data.",
+        "notes": "Web scraping agent - Article 10: scraping external data with no governance. Article 14: no human approval for what gets scraped. Article 15: no content filtering on scraped data.",
     },
     # 11. LangGraph stateful agent with memory
     {
@@ -766,7 +766,7 @@ app = graph.compile(checkpointer=memory)
 config = {"configurable": {"thread_id": "user_123"}}
 result = app.invoke({"messages": [("human", user_input)]}, config)''',
         "framework": "LangChain",
-        "notes": "Stateful agent with persistent memory — Article 10: user data stored without governance. Article 12: no audit of conversation history. Article 14: no session limits or memory bounds.",
+        "notes": "Stateful agent with persistent memory - Article 10: user data stored without governance. Article 12: no audit of conversation history. Article 14: no session limits or memory bounds.",
     },
     # 12. Multi-model orchestration
     {
@@ -788,7 +788,7 @@ def multi_model_decision(prompt: str) -> str:
 decision = multi_model_decision("Should we approve this loan application?")
 execute_decision(decision)''',
         "framework": "LiteLLM",
-        "notes": "Multi-model voting on high-stakes decision — Article 14: automated loan decision with no human review. Article 9: no risk assessment for financial decisions. Article 12: no audit trail of which model decided what.",
+        "notes": "Multi-model voting on high-stakes decision - Article 14: automated loan decision with no human review. Article 9: no risk assessment for financial decisions. Article 12: no audit trail of which model decided what.",
     },
     # 13. Agent with file system access
     {
@@ -823,7 +823,7 @@ agent = create_openai_tools_agent(llm, [list_files, read_file, delete_file])
 executor = AgentExecutor(agent=agent, tools=[list_files, read_file, delete_file])
 result = executor.invoke({"input": "Clean up all temporary files in /tmp"})''',
         "framework": "LangChain",
-        "notes": "File system agent with delete capability — CRITICAL: Article 9 fail (destructive operations without risk classification). Article 14: no approval gate for delete. Article 15: path traversal risk.",
+        "notes": "File system agent with delete capability - CRITICAL: Article 9 fail (destructive operations without risk classification). Article 14: no approval gate for delete. Article 15: path traversal risk.",
     },
     # 14. Healthcare AI agent
     {
@@ -845,7 +845,7 @@ def diagnose_symptoms(symptoms: str, patient_history: str) -> str:
 diagnosis = diagnose_symptoms(patient_symptoms, patient_medical_history)
 send_to_patient_portal(diagnosis)''',
         "framework": "OpenAI SDK",
-        "notes": "Healthcare AI — HIGH RISK: Article 9 fail (medical decisions require highest risk management). Article 14 fail (no physician review). Article 10 fail (patient data handling, HIPAA). Article 11 fail (no model limitations documented).",
+        "notes": "Healthcare AI - HIGH RISK: Article 9 fail (medical decisions require highest risk management). Article 14 fail (no physician review). Article 10 fail (patient data handling, HIPAA). Article 11 fail (no model limitations documented).",
     },
     # 15. Autonomous hiring/screening agent
     {
@@ -872,7 +872,7 @@ agent = create_openai_tools_agent(llm, tools)
 executor = AgentExecutor(agent=agent, tools=tools, max_iterations=20)
 result = executor.invoke({"input": f"Screen these 50 resumes and reject anyone below 7: {resumes}"})''',
         "framework": "LangChain",
-        "notes": "Automated hiring — HIGH RISK: Article 14 fail (automated employment decisions). Article 9 fail (bias risk in scoring). Article 10 fail (PII in resumes without governance). Article 12 fail (no audit of rejection decisions).",
+        "notes": "Automated hiring - HIGH RISK: Article 14 fail (automated employment decisions). Article 9 fail (bias risk in scoring). Article 10 fail (PII in resumes without governance). Article 12 fail (no audit of rejection decisions).",
     },
     # 16. Agent deploying infrastructure
     {
@@ -898,7 +898,7 @@ response = client.messages.create(
     messages=[{"role": "user", "content": "Deploy v2.3.1 to production cluster"}],
 )''',
         "framework": "Anthropic SDK",
-        "notes": "Production deployment agent — CRITICAL: shell=True with arbitrary commands. Article 9: no risk classification for production changes. Article 14: no human approval for deployments. Article 15: command injection risk.",
+        "notes": "Production deployment agent - CRITICAL: shell=True with arbitrary commands. Article 9: no risk classification for production changes. Article 14: no human approval for deployments. Article 15: command injection risk.",
     },
     # 17. PII extraction agent
     {
@@ -919,7 +919,7 @@ import json
 with open("extracted_pii.json", "w") as f:
     json.dump(pii_data, f)''',
         "framework": "LangChain",
-        "notes": "PII extraction and storage — CRITICAL: Article 10 fail (extracting and storing PII without governance). Article 15 fail (no encryption, plaintext PII to disk). Article 12 fail (no audit of data access).",
+        "notes": "PII extraction and storage - CRITICAL: Article 10 fail (extracting and storing PII without governance). Article 15 fail (no encryption, plaintext PII to disk). Article 12 fail (no audit of data access).",
     },
     # 18. Haystack RAG pipeline with web retrieval
     {
@@ -944,7 +944,7 @@ rag_pipeline.connect("prompt_builder", "generator")
 
 result = rag_pipeline.run({"retriever": {"query": user_query}, "prompt_builder": {"query": user_query}})''',
         "framework": "Haystack",
-        "notes": "Haystack RAG — Article 10: no document provenance tracking. Article 12: no logging of retrieval decisions. Article 15: no input validation on user_query.",
+        "notes": "Haystack RAG - Article 10: no document provenance tracking. Article 12: no logging of retrieval decisions. Article 15: no input validation on user_query.",
     },
     # 19. AutoGen multi-agent conversation
     {
@@ -965,7 +965,7 @@ manager = GroupChatManager(groupchat=groupchat, llm_config={"config_list": confi
 
 planner.initiate_chat(manager, message="Build a web scraper for product prices")''',
         "framework": "AutoGen",
-        "notes": "AutoGen multi-agent with code execution — Article 14: no human in the loop for 20 rounds. Article 9: code execution without Docker (use_docker=False). Article 15: web scraping with no content filtering.",
+        "notes": "AutoGen multi-agent with code execution - Article 14: no human in the loop for 20 rounds. Article 9: code execution without Docker (use_docker=False). Article 15: web scraping with no content filtering.",
     },
     # 20. Semantic Kernel with plugins
     {
@@ -987,7 +987,7 @@ planner = SequentialPlanner(kernel)
 plan = await planner.create_plan("Read customer data from file, calculate totals, and send HTTP report")
 result = await plan.invoke(kernel)''',
         "framework": "Semantic Kernel",
-        "notes": "SK planner with file/HTTP plugins — Article 14: autonomous planning with no approval. Article 10: reading customer data without governance. Article 9: no risk classification for HTTP calls.",
+        "notes": "SK planner with file/HTTP plugins - Article 14: autonomous planning with no approval. Article 10: reading customer data without governance. Article 9: no risk classification for HTTP calls.",
     },
     # 21. Instructor structured extraction (partially compliant)
     {
@@ -1013,7 +1013,7 @@ profile = client.chat.completions.create(
 )
 store_in_database(profile)''',
         "framework": "Instructor",
-        "notes": "Instructor with validation — PARTIAL: Article 10 pass (Pydantic validation), Article 11 pass (type annotations), but Article 10 fail (PII extraction without consent), Article 12 fail (no logging), Article 14 fail (no human review of extracted data).",
+        "notes": "Instructor with validation - PARTIAL: Article 10 pass (Pydantic validation), Article 11 pass (type annotations), but Article 10 fail (PII extraction without consent), Article 12 fail (no logging), Article 14 fail (no human review of extracted data).",
     },
     # 22. DSPy optimization pipeline
     {
@@ -1040,7 +1040,7 @@ optimizer = BootstrapFewShotWithRandomSearch(metric=lambda x, y: y.decision.star
 optimized = optimizer.compile(moderator, trainset=training_data)
 result = optimized(content=user_post)''',
         "framework": "Unknown",
-        "notes": "DSPy content moderation — Article 14: automated content decisions with no human review. Article 9: optimizer biased toward APPROVE (metric rewards approval). Article 11: no documentation of moderation criteria.",
+        "notes": "DSPy content moderation - Article 14: automated content decisions with no human review. Article 9: optimizer biased toward APPROVE (metric rewards approval). Article 11: no documentation of moderation criteria.",
     },
     # 23. FastAPI AI endpoint with no auth
     {
@@ -1067,7 +1067,7 @@ async def ask(question: str):
     result = executor.invoke({"input": question})
     return {"answer": result["output"]}''',
         "framework": "LangChain",
-        "notes": "Public API with SQL access — CRITICAL: no authentication, no rate limiting. Article 15: SQL injection via natural language. Article 14: no access control. Article 10: direct database access without governance.",
+        "notes": "Public API with SQL access - CRITICAL: no authentication, no rate limiting. Article 15: SQL injection via natural language. Article 14: no access control. Article 10: direct database access without governance.",
     },
     # 24. Embedding pipeline with no data provenance
     {
@@ -1088,7 +1088,7 @@ vectorstore.save_local("./faiss_index")
 
 print(f"Indexed {len(chunks)} chunks from {len(documents)} documents")''',
         "framework": "LangChain",
-        "notes": "Embedding pipeline — Article 10: no tracking of document sources or data lineage. Article 11: no documentation of what data is indexed. Article 12: no audit trail of indexing operations.",
+        "notes": "Embedding pipeline - Article 10: no tracking of document sources or data lineage. Article 11: no documentation of what data is indexed. Article 12: no audit trail of indexing operations.",
     },
     # 25. Guardrails-wrapped agent (partially compliant)
     {
@@ -1112,7 +1112,7 @@ raw_response = client.chat.completions.create(
 validated_response = guard.validate(raw_response.choices[0].message.content)
 return validated_response.validated_output''',
         "framework": "Unknown",
-        "notes": "Guardrails-wrapped output — PARTIAL: Article 15 pass (toxicity filter, PII redaction), Article 10 partial (PII detection but not on input), Article 12 fail (no logging of guard actions), Article 14 fail (no human review).",
+        "notes": "Guardrails-wrapped output - PARTIAL: Article 15 pass (toxicity filter, PII redaction), Article 10 partial (PII detection but not on input), Article 12 fail (no logging of guard actions), Article 14 fail (no human review).",
     },
     # 26. CrewAI with custom tool and memory
     {
@@ -1151,7 +1151,7 @@ task = Task(
 crew = Crew(agents=[analyst], tasks=[task], process=Process.sequential, memory=True)
 result = crew.kickoff(inputs={"stock": ticker_symbol})''',
         "framework": "CrewAI",
-        "notes": "Investment recommendation agent — HIGH RISK: Article 14 fail (financial advice without human advisor). Article 9 fail (no risk classification for financial decisions). Article 11 pass (Pydantic schema). Article 12 fail (verbose logging but no structured audit).",
+        "notes": "Investment recommendation agent - HIGH RISK: Article 14 fail (financial advice without human advisor). Article 9 fail (no risk classification for financial decisions). Article 11 pass (Pydantic schema). Article 12 fail (verbose logging but no structured audit).",
     },
     # 27. Phidata agent with knowledge base
     {
@@ -1177,7 +1177,7 @@ agent = Agent(
 
 agent.print_response("What is our refund policy? Email it to customer@example.com")''',
         "framework": "Unknown",
-        "notes": "Phidata agent with email — Article 14: automated email sending with no approval. Article 10: external PDF ingestion without governance. Article 15: no validation of email recipients. Article 9: no risk classification for email tool.",
+        "notes": "Phidata agent with email - Article 14: automated email sending with no approval. Article 10: external PDF ingestion without governance. Article 15: no validation of email recipients. Article 9: no risk classification for email tool.",
     },
     # 28. LlamaIndex agent with query engine
     {
@@ -1202,7 +1202,7 @@ tools = [
 agent = ReActAgent.from_tools(tools, verbose=True)
 response = agent.chat("What were our Q3 revenue numbers and how do they compare to competitors?")''',
         "framework": "LlamaIndex",
-        "notes": "LlamaIndex ReAct agent — Article 10: company data indexed without access controls. Article 12: verbose but no structured logging. Article 11: no documentation of data sources. Article 14: financial data access without authorization.",
+        "notes": "LlamaIndex ReAct agent - Article 10: company data indexed without access controls. Article 12: verbose but no structured logging. Article 11: no documentation of data sources. Article 14: financial data access without authorization.",
     },
     # 29. NeMo Guardrails config (compliant example)
     {
@@ -1249,7 +1249,7 @@ rails = LLMRails(config)
 response = rails.generate(messages=[{"role": "user", "content": user_input}])
 logger.info(f"Guardrailed response generated: {response}")''',
         "framework": "Unknown",
-        "notes": "NeMo Guardrails — HIGH COMPLIANCE: Article 15 pass (input/output filtering, jailbreak detection, toxicity checks). Article 12 pass (logging). Article 9 partial (guardrails but no explicit risk classification). Article 14 fail (no human fallback for edge cases).",
+        "notes": "NeMo Guardrails - HIGH COMPLIANCE: Article 15 pass (input/output filtering, jailbreak detection, toxicity checks). Article 12 pass (logging). Article 9 partial (guardrails but no explicit risk classification). Article 14 fail (no human fallback for edge cases).",
     },
     # 30. Batch processing agent (no rate limits)
     {
@@ -1280,7 +1280,7 @@ scores = asyncio.run(process_all_customers(all_customers))
 with open("credit_scores.json", "w") as f:
     json.dump(scores, f)''',
         "framework": "OpenAI SDK",
-        "notes": "Batch credit scoring — HIGH RISK: Article 14 fail (automated credit decisions for 10K people). Article 9 fail (no risk assessment for financial scoring). Article 10 fail (bulk PII processing). Article 12 fail (no per-decision audit trail).",
+        "notes": "Batch credit scoring - HIGH RISK: Article 14 fail (automated credit decisions for 10K people). Article 9 fail (no risk assessment for financial scoring). Article 10 fail (bulk PII processing). Article 12 fail (no per-decision audit trail).",
     },
     # 31. Agent with environment variable secrets
     {
@@ -1308,7 +1308,7 @@ agent = create_openai_tools_agent(llm, [access_aws])
 executor = AgentExecutor(agent=agent, tools=[access_aws])
 result = executor.invoke({"input": "List all files in the customer-data bucket and delete old backups"})''',
         "framework": "LangChain",
-        "notes": "AWS access agent with delete capability — CRITICAL: Article 9 fail (destructive cloud operations). Article 14 fail (no approval for delete). Article 15 fail (no access boundary on S3 operations). Article 12 fail (no audit of cloud actions).",
+        "notes": "AWS access agent with delete capability - CRITICAL: Article 9 fail (destructive cloud operations). Article 14 fail (no approval for delete). Article 15 fail (no access boundary on S3 operations). Article 12 fail (no audit of cloud actions).",
     },
     # 32. Compliant CrewAI with full controls
     {
@@ -1387,7 +1387,7 @@ while True:
     user_input = input("You: ")
     print(f"Bot: {chat(user_input)}")''',
         "framework": "Anthropic SDK",
-        "notes": "Unbounded chatbot — Article 14: no conversation limits (runs forever, unbounded history). Article 12: no logging. Article 15: no input filtering or output validation. Article 9: no risk management for growing context.",
+        "notes": "Unbounded chatbot - Article 14: no conversation limits (runs forever, unbounded history). Article 12: no logging. Article 15: no input filtering or output validation. Article 9: no risk management for growing context.",
     },
     # 34. Compliant OpenAI agent with full stack
     {
@@ -1540,7 +1540,7 @@ DIVERSE_INSTRUCTIONS = [
     # Quick check
     "Quick compliance check: is this code safe to deploy in the EU?",
     "Red flags in this AI code for EU AI Act compliance?",
-    "EU AI Act compliance summary for this code — pass or fail?",
+    "EU AI Act compliance summary for this code - pass or fail?",
     "Thumbs up or thumbs down on this code's EU AI Act compliance? Explain.",
 ]
 

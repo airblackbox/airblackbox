@@ -22,7 +22,7 @@ processors:
     timeout: 5s
     send_batch_size: 512
 
-  # Smaller batch for crowd pipeline — sends less frequently.
+  # Smaller batch for crowd pipeline - sends less frequently.
   batch/crowd:
     timeout: 30s
     send_batch_size: 50
@@ -31,7 +31,7 @@ processors:
   # This is the stock-collector equivalent of genaisafe/crowd.
   attributes/crowd_scrub:
     actions:
-      # Remove any prompt/completion content — never send to crowd endpoint
+      # Remove any prompt/completion content - never send to crowd endpoint
       - key: gen_ai.prompt
         action: delete
       - key: gen_ai.completion
@@ -85,14 +85,14 @@ service:
       level: info
 
   pipelines:
-    ## Local pipeline — full traces to Jaeger + debug log.
+    ## Local pipeline - full traces to Jaeger + debug log.
     ## Always active.
     traces/local:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp/jaeger, debug]
 
-    ## Crowd-source pipeline — scrubbed traces to crowd exporter.
+    ## Crowd-source pipeline - scrubbed traces to crowd exporter.
     ## Strips all prompt/completion content before export.
     ## In test mode: exports to debug/crowd so we can see what would be sent.
     traces/crowd:

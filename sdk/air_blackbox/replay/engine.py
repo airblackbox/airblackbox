@@ -1,5 +1,5 @@
 """
-Replay engine — incident reconstruction and HMAC audit chain verification.
+Replay engine - incident reconstruction and HMAC audit chain verification.
 
 Reads .air.json records and provides:
 - Full episode timeline reconstruction

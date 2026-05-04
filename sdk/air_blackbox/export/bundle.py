@@ -1,5 +1,5 @@
 """
-Export engine — generates signed evidence bundles.
+Export engine - generates signed evidence bundles.
 
 Packages compliance scan + AI-BOM + audit chain + stats into
 one signed, verifiable JSON document for auditors and insurers.

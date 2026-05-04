@@ -1,4 +1,4 @@
-## AIR Blackbox Gateway — Enterprise Air-Gapped Configuration
+## AIR Blackbox Gateway - Enterprise Air-Gapped Configuration
 ##
 ## Locked down for high-security environments. No data leaves this machine.
 ## Deploy inside client VPS / on-prem with docker-compose.enterprise.yaml.
@@ -72,7 +72,7 @@ trust:
 ## The collector runs a single local pipeline with no crowd export.
 telemetry:
   mode: "air_gapped"
-  endpoint: ""           # No external endpoint — all local
+  endpoint: ""           # No external endpoint - all local
   batch_size: 0
   flush_interval: 0
   include_model_metrics: false

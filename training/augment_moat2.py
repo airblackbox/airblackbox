@@ -147,7 +147,7 @@ def augment_code_examples(seed_path, output_path, multiplier=6):
                         core_q = core_q[len(prefix):]
                         break
 
-                new_instruction = f"{new_inst.rstrip('.')} — {core_q}" if random.random() < 0.3 else core_q
+                new_instruction = f"{new_inst.rstrip('.')} - {core_q}" if random.random() < 0.3 else core_q
                 if random.random() < 0.5:
                     new_instruction = random.choice(AUGMENT_INSTRUCTIONS_QA).rstrip('.') + ": " + core_q
 
@@ -254,7 +254,7 @@ def generate_cross_article_examples(seed_path, output_path):
 
 **Post-Market Monitoring (Article 72)**: No monitoring infrastructure exists to track system performance, detect degradation, or identify emerging risks after deployment.
 
-**Conformity Assessment Readiness (Article 43)**: The system is not ready for conformity assessment — missing documentation, testing evidence, and quality management system integration."""
+**Conformity Assessment Readiness (Article 43)**: The system is not ready for conformity assessment - missing documentation, testing evidence, and quality management system integration."""
 
             examples.append({
                 "instruction": inst,

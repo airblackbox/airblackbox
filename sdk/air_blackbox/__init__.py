@@ -1,5 +1,5 @@
 """
-AIR Blackbox — AI governance control plane.
+AIR Blackbox - AI governance control plane.
 
 One install. Four commands. 79% automated compliance.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIR Blackbox Gateway — Live Demo</title>
+<title>AIR Blackbox Gateway - Live Demo</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.6; }
@@ -86,12 +86,12 @@ h1 { font-size: 28px; color: #fff; margin-bottom: 4px; }
 <body>
 <div class="container">
 <h1>AIR Blackbox Gateway</h1>
-<p class="subtitle">Interactive Demo — <a href="https://github.com/nostalgicskinco/air-blackbox-gateway" target="_blank">github.com/nostalgicskinco/air-blackbox-gateway</a></p>
+<p class="subtitle">Interactive Demo - <a href="https://github.com/nostalgicskinco/air-blackbox-gateway" target="_blank">github.com/nostalgicskinco/air-blackbox-gateway</a></p>
 <div class="metrics">
   <div class="metric"><div class="metric-value" id="m-calls">0</div><div class="metric-label">LLM Calls Recorded</div></div>
   <div class="metric"><div class="metric-value" id="m-tokens">0</div><div class="metric-label">Tokens Tracked</div></div>
   <div class="metric"><div class="metric-value" id="m-chain">0</div><div class="metric-label">Chain Length</div></div>
-  <div class="metric"><div class="metric-value" id="m-integrity">—</div><div class="metric-label">Chain Integrity</div></div>
+  <div class="metric"><div class="metric-value" id="m-integrity">-</div><div class="metric-label">Chain Integrity</div></div>
 </div>
 <div class="tabs">
   <div class="tab active" onclick="showTab('agent')">Agent Conversation</div>
@@ -145,7 +145,7 @@ const agentSteps = [
   { role: "user", content: "Check our refund policy and draft a response to this customer complaint: 'I received the wrong product and want a full refund.'" },
   { role: "tool", content: "→ tool_call: search_knowledge_base(query=\"refund policy\")\n← result: \"Full refunds within 30 days for wrong items. Customer must return item. Shipping covered by company.\"", tokens: 340 },
   { role: "assistant", content: "Based on our refund policy, I'll draft a response offering a full refund since they received the wrong product. This falls within our 30-day return window.", tokens: 180 },
-  { role: "tool", content: "→ tool_call: draft_email(\n  to: \"customer@example.com\",\n  subject: \"Re: Wrong Product Received — Full Refund Approved\",\n  body: \"We sincerely apologize for sending the wrong product. We've approved a full refund. A prepaid return label is attached. Your refund will process within 3-5 business days after we receive the return.\"\n)", tokens: 420 },
+  { role: "tool", content: "→ tool_call: draft_email(\n  to: \"customer@example.com\",\n  subject: \"Re: Wrong Product Received - Full Refund Approved\",\n  body: \"We sincerely apologize for sending the wrong product. We've approved a full refund. A prepaid return label is attached. Your refund will process within 3-5 business days after we receive the return.\"\n)", tokens: 420 },
   { role: "assistant", content: "I've drafted the refund response email. The customer will receive a prepaid return label and full refund within 3-5 business days of return. Shall I send it?", tokens: 150 }
 ];function simpleHash(data, prevHash) {
   let hash = 0;
@@ -254,13 +254,13 @@ function verifyChain() {
     document.getElementById("m-integrity").style.color = "#e03131";
     const status = document.getElementById("chain-status");
     status.className = "status-bar fail";
-    status.innerHTML = '<div class="status-dot red"></div>Chain verification FAILED — tampering detected at Record #2. Hash mismatch: stored hash does not match computed hash. The content was modified after recording.';
+    status.innerHTML = '<div class="status-dot red"></div>Chain verification FAILED - tampering detected at Record #2. Hash mismatch: stored hash does not match computed hash. The content was modified after recording.';
   } else {
     document.getElementById("m-integrity").textContent = "✓ VALID";
     document.getElementById("m-integrity").style.color = "#51cf66";
     const status = document.getElementById("chain-status");
     status.className = "status-bar ok";
-    status.innerHTML = `<div class="status-dot green"></div>Chain verification PASSED — all ${entries.length} records verified. No tampering detected. HMAC-SHA256 chain is intact.`;
+    status.innerHTML = `<div class="status-dot green"></div>Chain verification PASSED - all ${entries.length} records verified. No tampering detected. HMAC-SHA256 chain is intact.`;
   }
   renderChain();
 }function updateChainStatus() {
@@ -270,16 +270,16 @@ function verifyChain() {
     status.innerHTML = '<div class="status-dot gray"></div>Run the agent simulation first to generate an audit chain';
   } else if (tampered && verified) {
     status.className = "status-bar fail";
-    status.innerHTML = '<div class="status-dot red"></div>Chain verification FAILED — tampering detected at Record #2';
+    status.innerHTML = '<div class="status-dot red"></div>Chain verification FAILED - tampering detected at Record #2';
   } else if (verified) {
     status.className = "status-bar ok";
-    status.innerHTML = `<div class="status-dot green"></div>Chain verification PASSED — all ${entries.length} records intact`;
+    status.innerHTML = `<div class="status-dot green"></div>Chain verification PASSED - all ${entries.length} records intact`;
   } else if (tampered) {
     status.className = "status-bar fail";
-    status.innerHTML = '<div class="status-dot red"></div>Record #2 has been modified — click "Verify Chain" to detect the tampering';
+    status.innerHTML = '<div class="status-dot red"></div>Record #2 has been modified - click "Verify Chain" to detect the tampering';
   } else {
     status.className = "status-bar ok";
-    status.innerHTML = `<div class="status-dot green"></div>${entries.length} records in chain — ready for verification`;
+    status.innerHTML = `<div class="status-dot green"></div>${entries.length} records in chain - ready for verification`;
   }
 }
 function renderCompliance() {
@@ -310,7 +310,7 @@ function renderCompliance() {
   });
   const status = document.getElementById("compliance-status");
   status.className = "status-bar ok";
-  status.innerHTML = `<div class="status-dot green"></div>10 of 10 controls passing — episode compliant across SOC 2, ISO 27001, and EU AI Act`;
+  status.innerHTML = `<div class="status-dot green"></div>10 of 10 controls passing - episode compliant across SOC 2, ISO 27001, and EU AI Act`;
 }
 function showExport() {
   const exportData = {
@@ -339,7 +339,7 @@ function resetAll() {
   document.getElementById("m-calls").textContent = "0";
   document.getElementById("m-tokens").textContent = "0";
   document.getElementById("m-chain").textContent = "0";
-  document.getElementById("m-integrity").textContent = "—";
+  document.getElementById("m-integrity").textContent = "-";
   document.getElementById("m-integrity").style.color = "#e0e0e0";
   document.getElementById("btn-tamper").disabled = true;
   document.getElementById("btn-verify").disabled = true;

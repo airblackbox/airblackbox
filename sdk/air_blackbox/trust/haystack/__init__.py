@@ -262,7 +262,7 @@ class AirHaystackTracer(Tracer):
                 with open(fpath, "w") as f:
                     json.dump(record, f, indent=2)
             except Exception:
-                pass  # Non-blocking — never crash the user's pipeline
+                pass  # Non-blocking - never crash the user's pipeline
 
     @property
     def event_count(self) -> int:

@@ -1,5 +1,5 @@
 """
-Bilateral Action Receipt — cryptographic proof of authorization AND execution.
+Bilateral Action Receipt - cryptographic proof of authorization AND execution.
 
 A receipt has two phases:
   1. Authorization: the gate evaluates the covenant and signs the decision
@@ -10,7 +10,7 @@ This gives you both sides of Art. 12:
   - What the agent was ALLOWED to do (authorization)
   - What the agent ACTUALLY did (execution result)
 
-Both signatures use Ed25519 for non-repudiation — any third party can
+Both signatures use Ed25519 for non-repudiation - any third party can
 verify without needing the signing key (unlike HMAC which requires
 the shared secret).
 
@@ -28,7 +28,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Any
 
-# Ed25519 signing — use cryptography library if available, fall back to
+# Ed25519 signing - use cryptography library if available, fall back to
 # HMAC-SHA256 if not (still tamper-evident, just not non-repudiable)
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -143,7 +143,7 @@ class ActionReceipt:
         """The canonical bytes that the seal signature covers.
 
         Includes the authorization signature, so the seal covers
-        the entire lifecycle — you can't forge a seal without
+        the entire lifecycle - you can't forge a seal without
         having the valid authorization.
         """
         data = {
@@ -198,7 +198,7 @@ class ReceiptSigner:
     """Signs and verifies receipts using Ed25519 or HMAC-SHA256 fallback.
 
     Ed25519 is preferred because any third party can verify the signature
-    using only the public key — no shared secret needed. This is what
+    using only the public key - no shared secret needed. This is what
     regulators want: independent verifiability.
 
     If the cryptography library isn't installed, falls back to HMAC-SHA256

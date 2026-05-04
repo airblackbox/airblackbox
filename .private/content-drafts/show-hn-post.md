@@ -8,9 +8,9 @@ Think ESLint for AI governance. You run it locally on your codebase. It checks f
 
 **What it does:**
 - Scans 7 frameworks (LangChain, CrewAI, OpenAI Agents SDK, Claude Agent SDK, Google ADK, AutoGen, Haystack)
-- Gap analysis across 48 checks
+- Gap analysis across 51 checks
 - Generates audit-ready evidence bundles with HMAC-SHA256 tamper-evident chains and ML-DSA-65 quantum-safe signing
-- Runs 100% locally — no cloud, no API keys
+- Runs 100% locally - no cloud, no API keys
 - 1,500+ tests, 74% coverage, zero lint warnings
 
 **Important:** This checks technical requirements, not legal compliance. It's a linter, not a lawyer. Real legal review is still required.
@@ -29,7 +29,7 @@ A few things upfront since this will likely come up:
 
 **On the deadline:** August 2, 2026 is real. NIST's AI Risk Management Framework and various EU guidance documents map to these same articles. This tool handles the repetitive scanning so human reviewers can focus on context and risk judgment.
 
-**On coverage:** The 48 checks target detectible technical patterns — error handling, logging depth, injection defense, rate limiting, HITL design, documentation. We don't check business logic, training data decisions, or fairness at scale (those require different tooling). If a check doesn't apply to your agent, it still runs but you can triage false positives.
+**On coverage:** The 51 checks target detectible technical patterns - error handling, logging depth, injection defense, rate limiting, HITL design, documentation. We don't check business logic, training data decisions, or fairness at scale (those require different tooling). If a check doesn't apply to your agent, it still runs but you can triage false positives.
 
 **On the frameworks:** We auto-detect which framework you're using. If we're missing one or the detection is wrong, file an issue or ping us. This is early and we're actively maintaining.
 

@@ -1,5 +1,5 @@
 ---
-title: AIR Gate v0.2.0 — Local-First AI Action Firewall
+title: AIR Gate v0.2.0 - Local-First AI Action Firewall
 published: false
 tags: ai, python, opensource, euaiact
 ---
@@ -12,7 +12,7 @@ Until now, the gap between "AI agents can do anything" and "humans need to appro
 
 ## The Problem
 
-AI agents are finally powerful enough to be dangerous. They can send emails, delete records, call APIs, transfer funds. But most deployments ship with zero visibility into what actions agents are taking—and zero controls on what they're allowed to do.
+AI agents are finally powerful enough to be dangerous. They can send emails, delete records, call APIs, transfer funds. But most deployments ship with zero visibility into what actions agents are taking-and zero controls on what they're allowed to do.
 
 The EU AI Act (Articles 9, 12, 14, 15) requires:
 - Risk management: Know which actions are high-risk
@@ -24,7 +24,7 @@ Most teams treat this as a legal problem. It's actually an engineering problem.
 
 ## What I Built
 
-AIR Gate is an open-source action firewall that sits between your AI agents and the tools they call. You define a policy, attach a GateClient to your agent, and every action gets scanned, redacted, approved or blocked—with an immutable HMAC-SHA256 audit chain for every decision.
+AIR Gate is an open-source action firewall that sits between your AI agents and the tools they call. You define a policy, attach a GateClient to your agent, and every action gets scanned, redacted, approved or blocked-with an immutable HMAC-SHA256 audit chain for every decision.
 
 **Install:**
 ```bash
@@ -66,7 +66,7 @@ policy:
 ```
 ━━━ 1. Agent searches for candidates ━━━
 POST /actions  tool: search_candidates
-✓ AUTO-ALLOWED  — matched rule: allow-search
+✓ AUTO-ALLOWED  - matched rule: allow-search
 
 ━━━ 2. Agent sends email (PII auto-redacted) ━━━
 POST /actions  tool: send_email
@@ -80,12 +80,12 @@ Payload:
   → phone: payload.body [hash_sha256]
   → ssn: payload.ssn [hash_sha256]
 
-⏳ PENDING APPROVAL  — sent to Slack #ai-approvals
+⏳ PENDING APPROVAL  - sent to Slack #ai-approvals
 ✓ APPROVED by jason@airblackbox.ai (via Slack)
 
 ━━━ 3. Agent tries to delete records ━━━
 POST /actions  tool: delete_records
-✗ BLOCKED  — matched rule: block-delete
+✗ BLOCKED  - matched rule: block-delete
   AI agents cannot delete data
 
 ━━━ 4. Verify HMAC-SHA256 audit chain ━━━
@@ -129,7 +129,7 @@ search_tool = Tool(
 )
 
 gated = GatedTool(tool=search_tool, agent_id="research-agent")
-# Use gated in your agent — every call goes through Gate
+# Use gated in your agent - every call goes through Gate
 ```
 
 **OpenAI Agents:**
@@ -144,7 +144,7 @@ def send_email(to: str, subject: str, body: str) -> str:
     return f"Email sent to {to}"
 ```
 
-Both integrations are transparent—your agent code barely changes. The gate wraps your tools, not the reverse.
+Both integrations are transparent-your agent code barely changes. The gate wraps your tools, not the reverse.
 
 ## Callback URLs for Async Approval
 
@@ -167,7 +167,7 @@ Be clear on scope:
 
 - **Not legal compliance**: AIR Gate provides the technical controls. You still need lawyers.
 - **Not a WAF**: It doesn't monitor existing traffic or intercept network calls. It operates at agent-action boundaries.
-- **Not monitoring**: It doesn't watch what your agent thinks—only what it does.
+- **Not monitoring**: It doesn't watch what your agent thinks-only what it does.
 - **Not a replacement for training**: Proper guardrails come from both policy + model behavior.
 
 ## Try It

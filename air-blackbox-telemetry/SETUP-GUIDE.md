@@ -1,4 +1,4 @@
-# AIR Blackbox Telemetry — Setup Guide
+# AIR Blackbox Telemetry - Setup Guide
 
 This guide walks you through adding anonymous usage telemetry to AIR Blackbox so you can see real adoption data (not just PyPI download counts).
 
@@ -74,7 +74,7 @@ After the comply command finishes printing results (near the end of the function
         pass  # Telemetry should never break the tool
 ```
 
-**Where exactly?** Put this right before the function ends — after all the output/printing is done but before the function returns. Look for the last line of the `comply` function (before the next `@main.command()` decorator).
+**Where exactly?** Put this right before the function ends - after all the output/printing is done but before the function returns. Look for the last line of the `comply` function (before the next `@main.command()` decorator).
 
 ### 2b. The `discover` command
 
@@ -219,7 +219,7 @@ pip install air-blackbox  # (after publishing the new version with telemetry)
 air-blackbox comply --scan .
 ```
 
-Then check the dashboard — you should see a new event appear.
+Then check the dashboard - you should see a new event appear.
 
 ---
 
@@ -232,7 +232,7 @@ Make sure `httpx` is listed as a dependency (it probably already is since air-bl
 dependencies = [
     "click>=8.0",
     "rich>=13.0",
-    "httpx>=0.25.0",    # Already there — telemetry uses this too
+    "httpx>=0.25.0",    # Already there - telemetry uses this too
     "pydantic>=2.0",
 ]
 ```
@@ -278,7 +278,7 @@ Before publishing, verify these privacy guarantees:
 | **Unique Users Today** | Daily active users |
 | **Total Scans (30 Days)** | How active your user base is |
 | **Most Used Command** | Which feature matters most (comply vs discover vs export) |
-| **OS Distribution** | Linux/Mac/Windows split — guides testing priorities |
+| **OS Distribution** | Linux/Mac/Windows split - guides testing priorities |
 | **Python Versions** | Which Python versions to support/drop |
 | **Recent Events** | Live feed of what's happening right now |
 

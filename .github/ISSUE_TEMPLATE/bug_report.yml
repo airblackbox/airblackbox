@@ -1,0 +1,49 @@
+name: Bug Report
+description: Something isn't working
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: air-blackbox version
+      placeholder: pip show air-blackbox
+    validations:
+      required: true
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework
+      options:
+        - LangChain
+        - CrewAI
+        - OpenAI Agents SDK
+        - AutoGen
+        - Google ADK
+        - Haystack
+        - Direct gateway
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect vs. what did you get?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. pip install air-blackbox
+        2. air-blackbox comply --scan .
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: air-record
+    attributes:
+      label: Relevant .air.json record
+      description: If applicable - redact any credentials
+      render: json

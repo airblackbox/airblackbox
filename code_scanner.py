@@ -1,5 +1,5 @@
 """
-Code-level scanner — reads Python files and detects compliance-relevant patterns.
+Code-level scanner - reads Python files and detects compliance-relevant patterns.
 
 This module makes every project get a DIFFERENT score by actually reading
 the Python source code and checking for real patterns.
@@ -104,7 +104,7 @@ def _rel(filepath: str, scan_path: str) -> str:
 
 
 # ─────────────────────────────────────────────
-# Article 9 — Risk Management
+# Article 9 - Risk Management
 # ─────────────────────────────────────────────
 
 def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -162,7 +162,7 @@ def _check_fallback_patterns(file_contents: dict, scan_path: str) -> List[CodeFi
 
 
 # ─────────────────────────────────────────────
-# Article 10 — Data Governance
+# Article 10 - Data Governance
 # ─────────────────────────────────────────────
 
 def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -227,7 +227,7 @@ def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding
 
 
 # ─────────────────────────────────────────────
-# Article 11 — Technical Documentation
+# Article 11 - Technical Documentation
 # ─────────────────────────────────────────────
 
 def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -332,7 +332,7 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 # ─────────────────────────────────────────────
-# Article 12 — Record-Keeping
+# Article 12 - Record-Keeping
 # ─────────────────────────────────────────────
 
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -377,7 +377,7 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 # ─────────────────────────────────────────────
-# Article 14 — Human Oversight
+# Article 14 - Human Oversight
 # ─────────────────────────────────────────────
 
 def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -423,7 +423,7 @@ def _check_rate_limiting(file_contents: dict, scan_path: str) -> List[CodeFindin
 
 
 # ─────────────────────────────────────────────
-# Article 15 — Robustness & Cybersecurity
+# Article 15 - Robustness & Cybersecurity
 # ─────────────────────────────────────────────
 
 def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]:

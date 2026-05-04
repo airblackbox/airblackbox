@@ -48,7 +48,7 @@ print("\n=== COVENANT TESTS ===")
 from air_blackbox.gate.covenant import Covenant, Rule, RuleAction, _eval_condition
 
 
-@test("Covenant from YAML string — basic parsing")
+@test("Covenant from YAML string - basic parsing")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test-agent
@@ -70,7 +70,7 @@ rules:
 _()
 
 
-@test("Covenant with conditions — when/unless parsing")
+@test("Covenant with conditions - when/unless parsing")
 def _():
     c = Covenant.from_yaml_string("""
 agent: loan-bot
@@ -123,7 +123,7 @@ rules:
 _()
 
 
-@test("Covenant evaluate — permit wins when matched")
+@test("Covenant evaluate - permit wins when matched")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -135,7 +135,7 @@ rules:
 _()
 
 
-@test("Covenant evaluate — default deny for unmatched actions")
+@test("Covenant evaluate - default deny for unmatched actions")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -147,7 +147,7 @@ rules:
 _()
 
 
-@test("Covenant evaluate — forbid wins over permit")
+@test("Covenant evaluate - forbid wins over permit")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -160,7 +160,7 @@ rules:
 _()
 
 
-@test("Covenant evaluate — require_approval wins over permit")
+@test("Covenant evaluate - require_approval wins over permit")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -173,7 +173,7 @@ rules:
 _()
 
 
-@test("Covenant evaluate — condition 'when' numeric greater than")
+@test("Covenant evaluate - condition 'when' numeric greater than")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -184,14 +184,14 @@ rules:
   - require_approval: approve_loan
     when: "amount > 50000"
 """)
-    # Small loan — should be permitted
+    # Small loan - should be permitted
     assert c.evaluate("approve_loan", {"amount": 30000}) == RuleAction.PERMIT
-    # Large loan — should require approval
+    # Large loan - should require approval
     assert c.evaluate("approve_loan", {"amount": 75000}) == RuleAction.REQUIRE_APPROVAL
 _()
 
 
-@test("Covenant evaluate — 'unless' exception overrides rule")
+@test("Covenant evaluate - 'unless' exception overrides rule")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -208,7 +208,7 @@ rules:
 _()
 
 
-@test("Covenant evaluate — wildcard rule")
+@test("Covenant evaluate - wildcard rule")
 def _():
     c = Covenant.from_yaml_string("""
 agent: test
@@ -238,7 +238,7 @@ rules:
 _()
 
 
-@test("Condition eval — all operators")
+@test("Condition eval - all operators")
 def _():
     assert _eval_condition("x > 5", {"x": 10}) == True
     assert _eval_condition("x > 5", {"x": 3}) == False
@@ -251,20 +251,20 @@ def _():
 _()
 
 
-@test("Condition eval — missing field returns False")
+@test("Condition eval - missing field returns False")
 def _():
     assert _eval_condition("x > 5", {}) == False
 _()
 
 
-@test("Condition eval — string comparison")
+@test("Condition eval - string comparison")
 def _():
     assert _eval_condition("status == active", {"status": "active"}) == True
     assert _eval_condition("status != active", {"status": "inactive"}) == True
 _()
 
 
-@test("Empty covenant — all actions forbidden by default")
+@test("Empty covenant - all actions forbidden by default")
 def _():
     c = Covenant.from_yaml_string("""
 agent: empty
@@ -298,7 +298,7 @@ def _():
 _()
 
 
-@test("Receipt creation — auto-generates ID and timestamp")
+@test("Receipt creation - auto-generates ID and timestamp")
 def _():
     r = ActionReceipt(agent_id="test", action_name="read")
     assert r.receipt_id != ""
@@ -307,7 +307,7 @@ def _():
 _()
 
 
-@test("hash_payload — deterministic")
+@test("hash_payload - deterministic")
 def _():
     h1 = hash_payload({"to": "jane@example.com", "amount": 500})
     h2 = hash_payload({"amount": 500, "to": "jane@example.com"})
@@ -315,7 +315,7 @@ def _():
 _()
 
 
-@test("hash_payload — different payloads produce different hashes")
+@test("hash_payload - different payloads produce different hashes")
 def _():
     h1 = hash_payload({"to": "jane@example.com"})
     h2 = hash_payload({"to": "bob@example.com"})
@@ -323,7 +323,7 @@ def _():
 _()
 
 
-@test("Receipt sign and verify — authorization phase")
+@test("Receipt sign and verify - authorization phase")
 def _():
     signer = ReceiptSigner()
     r = ActionReceipt(
@@ -340,7 +340,7 @@ def _():
 _()
 
 
-@test("Receipt sign and verify — tampered authorization fails")
+@test("Receipt sign and verify - tampered authorization fails")
 def _():
     signer = ReceiptSigner()
     r = ActionReceipt(
@@ -357,7 +357,7 @@ def _():
 _()
 
 
-@test("Receipt sign and verify — full lifecycle (authorize + seal)")
+@test("Receipt sign and verify - full lifecycle (authorize + seal)")
 def _():
     signer = ReceiptSigner()
     r = ActionReceipt(
@@ -381,7 +381,7 @@ def _():
 _()
 
 
-@test("Receipt sign and verify — tampered result fails seal")
+@test("Receipt sign and verify - tampered result fails seal")
 def _():
     signer = ReceiptSigner()
     r = ActionReceipt(
@@ -403,7 +403,7 @@ def _():
 _()
 
 
-@test("Receipt to_dict and to_json — serialization")
+@test("Receipt to_dict and to_json - serialization")
 def _():
     r = ActionReceipt(
         agent_id="test",
@@ -455,7 +455,7 @@ def make_gate(yaml_str, tmpdir=None, **kwargs):
     return Gate(covenant=covenant, runs_dir=runs_dir, **kwargs), runs_dir
 
 
-@test("Gate authorize — permitted action")
+@test("Gate authorize - permitted action")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -473,7 +473,7 @@ rules:
 _()
 
 
-@test("Gate authorize — forbidden action")
+@test("Gate authorize - forbidden action")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -489,7 +489,7 @@ rules:
 _()
 
 
-@test("Gate authorize — unmatched action defaults to deny")
+@test("Gate authorize - unmatched action defaults to deny")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -504,7 +504,7 @@ rules:
 _()
 
 
-@test("Gate authorize — require_approval with callback")
+@test("Gate authorize - require_approval with callback")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -519,7 +519,7 @@ rules:
 _()
 
 
-@test("Gate authorize — require_approval rejected by callback")
+@test("Gate authorize - require_approval rejected by callback")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -533,7 +533,7 @@ rules:
 _()
 
 
-@test("Gate authorize — require_approval with no callback defaults to deny")
+@test("Gate authorize - require_approval with no callback defaults to deny")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -548,7 +548,7 @@ rules:
 _()
 
 
-@test("Gate authorize — payload hash is computed correctly")
+@test("Gate authorize - payload hash is computed correctly")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -564,7 +564,7 @@ rules:
 _()
 
 
-@test("Gate authorize — condition evaluation with context")
+@test("Gate authorize - condition evaluation with context")
 def _():
     gate, tmpdir = make_gate("""
 agent: loan-bot
@@ -579,7 +579,7 @@ rules:
     r1 = gate.authorize("agent-1", "approve_loan", context={"amount": 30000})
     assert r1.authorized == True
     assert r1.decision == "permit"
-    # Large loan — needs approval (callback returns True)
+    # Large loan - needs approval (callback returns True)
     r2 = gate.authorize("agent-1", "approve_loan", context={"amount": 75000})
     assert r2.authorized == True
     assert r2.decision == "require_approval"
@@ -587,7 +587,7 @@ rules:
 _()
 
 
-@test("Gate seal — full authorize + execute + seal lifecycle")
+@test("Gate seal - full authorize + execute + seal lifecycle")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -612,7 +612,7 @@ rules:
 _()
 
 
-@test("Gate seal — failed execution")
+@test("Gate seal - failed execution")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -628,7 +628,7 @@ rules:
 _()
 
 
-@test("Gate verify — full lifecycle verification")
+@test("Gate verify - full lifecycle verification")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -648,7 +648,7 @@ rules:
 _()
 
 
-@test("Gate verify — tampered receipt detected")
+@test("Gate verify - tampered receipt detected")
 def _():
     gate, tmpdir = make_gate("""
 agent: test
@@ -674,7 +674,7 @@ _()
 print("\n=== DELEGATION CHAIN TESTS ===")
 
 
-@test("Delegation chain — parent receipt linked")
+@test("Delegation chain - parent receipt linked")
 def _():
     gate, tmpdir = make_gate("""
 agent: multi
@@ -691,7 +691,7 @@ rules:
 _()
 
 
-@test("Delegation chain — walk back to root")
+@test("Delegation chain - walk back to root")
 def _():
     gate, tmpdir = make_gate("""
 agent: chain
@@ -714,7 +714,7 @@ rules:
 _()
 
 
-@test("Delegation chain — each receipt independently verifiable")
+@test("Delegation chain - each receipt independently verifiable")
 def _():
     gate, tmpdir = make_gate("""
 agent: chain
@@ -855,7 +855,7 @@ rules:
 _()
 
 
-@test("Stress: covenant with 50 rules — evaluation still correct")
+@test("Stress: covenant with 50 rules - evaluation still correct")
 def _():
     rules_yaml = "\n".join([f"  - permit: action_{i}" for i in range(48)])
     rules_yaml += "\n  - forbid: blocked_action"

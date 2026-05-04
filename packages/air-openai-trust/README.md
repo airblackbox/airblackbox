@@ -1,6 +1,6 @@
 # air-openai-trust
 
-**AIR Trust Layer for OpenAI Python SDK** — EU AI Act compliance infrastructure for every OpenAI API call.
+**AIR Trust Layer for OpenAI Python SDK** - EU AI Act compliance infrastructure for every OpenAI API call.
 
 Wraps your existing OpenAI client to automatically add:
 
@@ -11,7 +11,7 @@ Wraps your existing OpenAI client to automatically add:
 - **Human delegation verification** (Art. 14)
 - **Output validation** for robustness (Art. 15)
 
-Part of the [AIR Blackbox](https://airblackbox.ai) ecosystem — open-source EU AI Act compliance tooling for Python AI frameworks.
+Part of the [AIR Blackbox](https://airblackbox.ai) ecosystem - open-source EU AI Act compliance tooling for Python AI frameworks.
 
 ## Install
 
@@ -30,7 +30,7 @@ from air_openai_trust import attach_trust
 client = OpenAI()
 client = attach_trust(client)
 
-# Use normally — every call is now audit-logged
+# Use normally - every call is now audit-logged
 response = client.chat.completions.create(
     model="gpt-4o-mini",
     messages=[{"role": "user", "content": "Hello"}],
@@ -53,7 +53,7 @@ Both approaches produce `.air.json` audit records in the `./runs/` directory (co
 
 ## What It Does
 
-### Audit Trail (Art. 12 — Record-Keeping)
+### Audit Trail (Art. 12 - Record-Keeping)
 
 Every API call generates a `.air.json` file with:
 
@@ -64,9 +64,9 @@ Every API call generates a `.air.json` file with:
 - Injection alerts (if detected)
 - HMAC-SHA256 chain hash linking to the previous record
 
-The chain hashes create a **tamper-evident sequence** — modifying any record invalidates all subsequent hashes. This gives auditors cryptographic proof that logs haven't been altered.
+The chain hashes create a **tamper-evident sequence** - modifying any record invalidates all subsequent hashes. This gives auditors cryptographic proof that logs haven't been altered.
 
-### PII Detection (Art. 10 — Data Governance)
+### PII Detection (Art. 10 - Data Governance)
 
 Automatically scans prompts and responses for:
 
@@ -77,7 +77,7 @@ Automatically scans prompts and responses for:
 
 Detected PII is logged as alerts (with values redacted) in the audit record. Your API calls still work normally.
 
-### Prompt Injection Scanning (Art. 15 — Robustness)
+### Prompt Injection Scanning (Art. 15 - Robustness)
 
 Scans for common injection patterns like:
 
@@ -98,7 +98,7 @@ result = validate_output("Some LLM response text")
 # Returns: {"safe": True, "pii_alerts": [], "injection_alerts": []}
 ```
 
-### Human Delegation (Art. 14 — Human Oversight)
+### Human Delegation (Art. 14 - Human Oversight)
 
 ```python
 from air_openai_trust import check_delegation
@@ -139,8 +139,8 @@ All audit logging is non-blocking. If logging fails for any reason, your OpenAI 
 
 | API | Audit Logged |
 |-----|-------------|
-| `chat.completions.create()` | Yes — full scanning + audit chain |
-| `embeddings.create()` | Yes — usage tracking + audit chain |
+| `chat.completions.create()` | Yes - full scanning + audit chain |
+| `embeddings.create()` | Yes - usage tracking + audit chain |
 | All other endpoints | Passed through to OpenAI client |
 
 ## Audit Record Format
@@ -173,7 +173,7 @@ All audit logging is non-blocking. If logging fails for any reason, your OpenAI 
 
 | Package | Purpose |
 |---------|---------|
-| `air-compliance` | CLI scanner — `air-compliance scan .` |
+| `air-compliance` | CLI scanner - `air-compliance scan .` |
 | `air-blackbox` | Governance control plane |
 | `air-blackbox-mcp` | MCP server for AI editors |
 | `air-blackbox-sdk` | Python SDK |

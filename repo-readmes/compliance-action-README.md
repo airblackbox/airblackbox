@@ -6,7 +6,7 @@ A GitHub Action that runs EU AI Act compliance checks on Python codebases in pul
 
 ## What It Does
 
-Automatically scans Python code for EU AI Act compliance (Articles 9–15) on every PR, posts findings as comments, and enforces score thresholds.
+Automatically scans Python code for EU AI Act compliance (Articles 9-15) on every PR, posts findings as comments, and enforces score thresholds.
 
 ## Quick Start
 
@@ -45,13 +45,13 @@ Commit and push. The action runs on every PR and posts results as a comment.
 | `python-files` | Yes | | Path to Python files or directory to scan (e.g., `./src`, `./app.py`) |
 | `strict` | No | `false` | Exit with error if any findings detected |
 | `articles` | No | `9,10,11,12,14,15` | Comma-separated EU AI Act articles to check (9, 10, 11, 12, 14, 15) |
-| `fail-threshold` | No | `0` | Compliance score threshold (0–100). Fails if score is below this value |
+| `fail-threshold` | No | `0` | Compliance score threshold (0-100). Fails if score is below this value |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `compliance-score` | Numeric compliance score (0–100) |
+| `compliance-score` | Numeric compliance score (0-100) |
 | `status` | `pass` or `fail` |
 | `findings-count` | Number of findings detected |
 

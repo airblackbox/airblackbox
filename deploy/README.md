@@ -1,4 +1,4 @@
-# AIR Blackbox — Deployment
+# AIR Blackbox - Deployment
 
 ## Quick Start (Core Stack)
 
@@ -28,8 +28,8 @@ Adds Prometheus (`:9091`) for metrics collection.
 | Jaeger UI | 16686 | http://localhost:16686 |
 | MinIO Console | 9001 | http://localhost:9001 |
 | Prometheus | 9091 | http://localhost:9091 |
-| OTel gRPC | 4317 | — |
-| OTel HTTP | 4318 | — |
+| OTel gRPC | 4317 | - |
+| OTel HTTP | 4318 | - |
 
 ## After Starting
 

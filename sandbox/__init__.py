@@ -1,1 +1,1 @@
-"""AIR Blackbox sandbox module — part of the gateway monorepo."""
+"""AIR Blackbox sandbox module - part of the gateway monorepo."""

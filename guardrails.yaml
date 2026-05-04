@@ -1,4 +1,4 @@
-## AIR Blackbox Gateway — Guardrails Configuration
+## AIR Blackbox Gateway - Guardrails Configuration
 ## Copy this file and set GUARDRAILS_CONFIG to enable agent safety detection.
 ##
 ## When a guardrail triggers, the gateway returns HTTP 429 with a
@@ -112,9 +112,9 @@ trust:
 ## model for everyone. Enterprise can opt out completely.
 ##
 ## Modes:
-##   crowd_source  — Anonymized metadata sent to telemetry.airblackbox.ai (default for free tier)
-##   private       — Metadata stays local, but you get benchmarking dashboard access (pro tier)
-##   air_gapped    — Nothing leaves this network. Full isolation. (enterprise tier)
+##   crowd_source  - Anonymized metadata sent to telemetry.airblackbox.ai (default for free tier)
+##   private       - Metadata stays local, but you get benchmarking dashboard access (pro tier)
+##   air_gapped    - Nothing leaves this network. Full isolation. (enterprise tier)
 ##
 ## What IS sent (crowd_source mode):
 ##   - Framework detected (LangChain, CrewAI, AutoGen, etc.)

@@ -78,7 +78,7 @@ class AirADKTrust:
         trust = AirADKTrust()
         agent = trust.wrap(your_agent)
 
-        # Use agent normally — all calls are logged
+        # Use agent normally - all calls are logged
         print(f"Logged {trust.event_count} compliance events")
     """
 
@@ -130,7 +130,7 @@ class AirADKTrust:
         if error:
             record["error"] = error[:500]
 
-        # Scan for PII and injection — sanitize before processing
+        # Scan for PII and injection - sanitize before processing
         sanitized_prompt = str(input_text or "")
         sanitized_output = str(output_text or "")
         all_text = " ".join([sanitized_prompt, sanitized_output])

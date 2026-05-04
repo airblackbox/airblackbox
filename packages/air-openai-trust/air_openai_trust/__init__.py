@@ -9,20 +9,20 @@ Wraps the OpenAI client to add EU AI Act compliance infrastructure:
 - Delegation verification for agent actions (Art. 14)
 - Output validation for robustness (Art. 15)
 
-Usage — wrap an existing client:
+Usage - wrap an existing client:
 
     from openai import OpenAI
     from air_openai_trust import attach_trust
 
     client = OpenAI()
     client = attach_trust(client)
-    # Use normally — every call is now audit-logged
+    # Use normally - every call is now audit-logged
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": "Hello"}],
     )
 
-Usage — create a pre-configured client:
+Usage - create a pre-configured client:
 
     from air_openai_trust import air_openai_client
 
@@ -53,7 +53,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# PII detection patterns (Art. 10 — Data Governance)
+# PII detection patterns (Art. 10 - Data Governance)
 # ---------------------------------------------------------------------------
 _PII_PATTERNS = [
     (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), 'email'),
@@ -63,7 +63,7 @@ _PII_PATTERNS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Injection detection patterns (Art. 15 — Robustness)
+# Injection detection patterns (Art. 15 - Robustness)
 # ---------------------------------------------------------------------------
 _INJECTION_PATTERNS = [
     re.compile(r'ignore\s+(?:all\s+)?previous\s+instructions', re.I),
@@ -95,7 +95,7 @@ def _scan_injection(text: str) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# HMAC-SHA256 Audit Chain (Art. 12 — Record-Keeping)
+# HMAC-SHA256 Audit Chain (Art. 12 - Record-Keeping)
 # ---------------------------------------------------------------------------
 
 class AuditChain:
@@ -162,7 +162,7 @@ class AirOpenAIWrapper:
     """Wraps an OpenAI client to log every call as .air.json records.
 
     Transparent proxy: use it exactly like a normal OpenAI client.
-    All audit logging is non-blocking — if it fails, your calls still work.
+    All audit logging is non-blocking - if it fails, your calls still work.
     """
 
     def __init__(self, client, runs_dir: Optional[str] = None):
@@ -405,7 +405,7 @@ def air_openai_client(runs_dir: Optional[str] = None, **kwargs) -> AirOpenAIWrap
 
 
 def validate_output(text: str) -> Dict[str, Any]:
-    """Validate LLM output for compliance issues (Art. 15 — Robustness).
+    """Validate LLM output for compliance issues (Art. 15 - Robustness).
 
     Scans response text for prompt injection markers and PII leakage.
 
@@ -422,7 +422,7 @@ def validate_output(text: str) -> Dict[str, Any]:
 
 
 def check_delegation(authorized_by: str, action: str, scope: Optional[str] = None) -> bool:
-    """Verify human delegation before agent action (Art. 14 — Human Oversight).
+    """Verify human delegation before agent action (Art. 14 - Human Oversight).
 
     Args:
         authorized_by: Identity of the human who authorized the action.
@@ -433,7 +433,7 @@ def check_delegation(authorized_by: str, action: str, scope: Optional[str] = Non
         True if delegation is valid.
     """
     if not authorized_by:
-        logger.warning("[AIR] Art.14 — no authorized_by for action=%s", action)
+        logger.warning("[AIR] Art.14 - no authorized_by for action=%s", action)
         return False
     logger.info("[AIR] delegation verified: user=%s action=%s scope=%s",
                 authorized_by, action, scope)

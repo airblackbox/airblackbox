@@ -45,7 +45,7 @@ outputs:
     description: 'Traces with detected drift'
     value: ${{ steps.replay.outputs.drifted }}
   pass-rate:
-    description: 'Pass rate (0.0–1.0)'
+    description: 'Pass rate (0.0-1.0)'
     value: ${{ steps.replay.outputs.pass_rate }}
   mean-similarity:
     description: 'Mean similarity across replayed traces'
@@ -128,7 +128,7 @@ runs:
         fi
 
         cat >> $GITHUB_STEP_SUMMARY << EOF
-        ## $ICON AIR Blackbox — Replay Regression Report
+        ## $ICON AIR Blackbox - Replay Regression Report
 
         | Metric | Value |
         |--------|-------|

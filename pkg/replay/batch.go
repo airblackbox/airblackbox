@@ -1,4 +1,4 @@
-// Package replay — batch replay support.
+// Package replay - batch replay support.
 // RunBatch loads .air.json files from a directory, replays each through the
 // provider, and returns an aggregate report with per-trace drift flags.
 package replay
@@ -22,7 +22,7 @@ type BatchResult struct {
 	Replayed     int     `json:"replayed"`
 	Drifted      int     `json:"drifted"`
 	Errored      int     `json:"errored"`
-	PassRate     float64 `json:"pass_rate"`     // 0.0–1.0
+	PassRate     float64 `json:"pass_rate"`     // 0.0-1.0
 	MeanSimilar  float64 `json:"mean_similarity"`
 	OverallDrift bool    `json:"overall_drift"` // true if ANY trace drifted
 
@@ -45,7 +45,7 @@ type TraceResult struct {
 
 // BatchOptions extends Options with batch-specific settings.
 type BatchOptions struct {
-	Options            // embedded — provider URL, vault client, API key
+	Options            // embedded - provider URL, vault client, API key
 	Last    int        // replay only the N most recent traces (0 = all)
 }
 

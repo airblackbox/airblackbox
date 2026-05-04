@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIR Blackbox Gateway — Interactive Demo</title>
+<title>AIR Blackbox Gateway - Interactive Demo</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;600;700;800&display=swap');
 
@@ -313,7 +313,7 @@
 <!-- Progress bar -->
 <div id="progress-bar" style="width:0%"></div>
 
-<!-- ═══════════════ SCENE 0 — TITLE ═══════════════ -->
+<!-- ═══════════════ SCENE 0 - TITLE ═══════════════ -->
 <div id="scene-container">
 <div class="scene active" id="scene-0">
   <div class="pill pill-accent" style="margin-bottom: 20px;">AIR BLACKBOX</div>
@@ -330,7 +330,7 @@
   <div style="color:var(--text-dim); font-size:0.85rem;">Press <span class="mono" style="color:var(--accent)">→</span> or click <strong>Next</strong> to begin</div>
 </div>
 
-<!-- ═══════════════ SCENE 1 — THE QUESTION ═══════════════ -->
+<!-- ═══════════════ SCENE 1 - THE QUESTION ═══════════════ -->
 <div class="scene" id="scene-1">
   <h2>The Question</h2>
   <div class="gap-sm"></div>
@@ -348,7 +348,7 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 2 — THE FIX ═══════════════ -->
+<!-- ═══════════════ SCENE 2 - THE FIX ═══════════════ -->
 <div class="scene" id="scene-2">
   <h2>The Fix: <span class="gradient-text">One Line</span></h2>
   <div class="gap-md"></div>
@@ -371,7 +371,7 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 3 — HOW IT WORKS ═══════════════ -->
+<!-- ═══════════════ SCENE 3 - HOW IT WORKS ═══════════════ -->
 <div class="scene" id="scene-3">
   <h2>How It Works</h2>
   <div class="gap-sm"></div>
@@ -417,19 +417,19 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 4 — VAULT ═══════════════ -->
+<!-- ═══════════════ SCENE 4 - VAULT ═══════════════ -->
 <div class="scene" id="scene-4">
-  <h2><span style="color:var(--accent)">Prompt Vault</span> — Your Data, Your Infrastructure</h2>
+  <h2><span style="color:var(--accent)">Prompt Vault</span> - Your Data, Your Infrastructure</h2>
   <div class="gap-sm"></div>
-  <h3>Prompts and completions stay in <strong>your</strong> MinIO/S3 — never a third-party cloud</h3>
+  <h3>Prompts and completions stay in <strong>your</strong> MinIO/S3 - never a third-party cloud</h3>
   <div class="gap-md"></div>
   <div class="terminal" id="vault-terminal">
     <div class="term-line" data-delay="300"><span class="prompt">agent →</span> <span class="output">chat.completions.create("What is a flight recorder?")</span></div>
     <div class="term-line" data-delay="800"><span class="info">[AIR:gateway]</span> Assigned run_id: 550e8400-e29b-...</div>
     <div class="term-line" data-delay="1200"><span class="info">[AIR:vault]</span> Storing request → <span class="success">vault://air-runs/550e8400.../request.json</span></div>
     <div class="term-line" data-delay="1600"><span class="info">[AIR:vault]</span> Storing response → <span class="success">vault://air-runs/550e8400.../response.json</span></div>
-    <div class="term-line" data-delay="2000"><span class="info">[AIR:otel]</span> Trace span emitted — contains <span class="warn">vault references only</span>, no raw content</div>
-    <div class="term-line" data-delay="2400"><span class="info">[AIR:record]</span> <span class="success">550e8400.air.json written — checksums: sha256:a1b2c3...</span></div>
+    <div class="term-line" data-delay="2000"><span class="info">[AIR:otel]</span> Trace span emitted - contains <span class="warn">vault references only</span>, no raw content</div>
+    <div class="term-line" data-delay="2400"><span class="info">[AIR:record]</span> <span class="success">550e8400.air.json written - checksums: sha256:a1b2c3...</span></div>
   </div>
   <div class="gap-md"></div>
   <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
@@ -440,11 +440,11 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 5 — AUDIT CHAIN ═══════════════ -->
+<!-- ═══════════════ SCENE 5 - AUDIT CHAIN ═══════════════ -->
 <div class="scene" id="scene-5">
   <h2><span style="color:var(--green)">Tamper-Proof Audit Chain</span></h2>
   <div class="gap-sm"></div>
-  <h3>HMAC-SHA256 signed entries — each references the previous hash</h3>
+  <h3>HMAC-SHA256 signed entries - each references the previous hash</h3>
   <div class="gap-md"></div>
   <div class="chain-blocks" id="chain-blocks">
     <div class="chain-block" data-delay="200">#0<br><span style="font-size:0.5rem">a7f3...</span></div>
@@ -470,18 +470,18 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 6 — GUARDRAILS ═══════════════ -->
+<!-- ═══════════════ SCENE 6 - GUARDRAILS ═══════════════ -->
 <div class="scene" id="scene-6">
-  <h2><span style="color:var(--orange)">Guardrails</span> — Runtime Safety</h2>
+  <h2><span style="color:var(--orange)">Guardrails</span> - Runtime Safety</h2>
   <div class="gap-sm"></div>
   <h3>Cost limits, loop detection, PII blocking, tool allowlists, and kill-switch</h3>
   <div class="gap-md"></div>
   <div class="terminal" id="guardrails-terminal">
     <div class="term-line" data-delay="300"><span class="prompt">agent →</span> <span class="output">Request #47 to gpt-4o (total: $12.40)</span></div>
-    <div class="term-line" data-delay="800"><span class="warn">[AIR:guardrails]</span> <span class="warn">Cost approaching limit ($15.00) — 82% consumed</span></div>
+    <div class="term-line" data-delay="800"><span class="warn">[AIR:guardrails]</span> <span class="warn">Cost approaching limit ($15.00) - 82% consumed</span></div>
     <div class="term-line" data-delay="1300"><span class="prompt">agent →</span> <span class="output">Request #48: same prompt as #44, #45, #46, #47</span></div>
-    <div class="term-line" data-delay="1800"><span class="error">[AIR:guardrails]</span> <span class="error">LOOP DETECTED — 4 identical requests in sequence</span></div>
-    <div class="term-line" data-delay="2300"><span class="error">[AIR:guardrails]</span> <span class="error">KILL-SWITCH activated — agent halted</span></div>
+    <div class="term-line" data-delay="1800"><span class="error">[AIR:guardrails]</span> <span class="error">LOOP DETECTED - 4 identical requests in sequence</span></div>
+    <div class="term-line" data-delay="2300"><span class="error">[AIR:guardrails]</span> <span class="error">KILL-SWITCH activated - agent halted</span></div>
     <div class="term-line" data-delay="2800"><span class="info">[AIR:audit]</span> Logged: guardrail_triggered | type: loop_detection | action: kill</div>
   </div>
   <div class="gap-md"></div>
@@ -494,11 +494,11 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 7 — COMPLIANCE ═══════════════ -->
+<!-- ═══════════════ SCENE 7 - COMPLIANCE ═══════════════ -->
 <div class="scene" id="scene-7">
   <h2><span style="color:var(--purple)">Compliance Reporting</span></h2>
   <div class="gap-sm"></div>
-  <h3>22 controls. SOC 2 + ISO 27001. Self-evaluating — no forms to fill.</h3>
+  <h3>22 controls. SOC 2 + ISO 27001. Self-evaluating - no forms to fill.</h3>
   <div class="gap-md"></div>
   <div class="terminal" id="compliance-terminal">
     <div class="term-line" data-delay="300"><span class="prompt">>>> </span><span class="output">GET /v1/audit/export</span></div>
@@ -514,11 +514,11 @@
   <h3 style="font-size:1rem;">Hand it to your auditor as a single JSON document.</h3>
 </div>
 
-<!-- ═══════════════ SCENE 8 — VS OBSERVABILITY ═══════════════ -->
+<!-- ═══════════════ SCENE 8 - VS OBSERVABILITY ═══════════════ -->
 <div class="scene" id="scene-8">
   <h2>Observability vs <span class="gradient-text">Accountability</span></h2>
   <div class="gap-sm"></div>
-  <h3>They answer "how is it performing?" — AIR answers "what happened, and can we prove it?"</h3>
+  <h3>They answer "how is it performing?" - AIR answers "what happened, and can we prove it?"</h3>
   <div class="gap-md"></div>
   <table class="compare-table" id="compare-table">
     <thead><tr class="visible"><th></th><th>Observability Tools</th><th style="color:var(--accent)">AIR Gateway</th></tr></thead>
@@ -533,7 +533,7 @@
   </table>
 </div>
 
-<!-- ═══════════════ SCENE 9 — STATS ═══════════════ -->
+<!-- ═══════════════ SCENE 9 - STATS ═══════════════ -->
 <div class="scene" id="scene-9">
   <h2>By The Numbers</h2>
   <div class="gap-lg"></div>
@@ -550,10 +550,10 @@
     <div class="stat-card" data-delay="1400"><div class="stat-number" style="color:var(--accent)">1</div><div class="stat-label">Line to Record</div></div>
   </div>
   <div class="gap-sm"></div>
-  <div style="color:var(--text-dim); font-size:0.7rem;">*Non-blocking proxy — vault failure never stops your AI.</div>
+  <div style="color:var(--text-dim); font-size:0.7rem;">*Non-blocking proxy - vault failure never stops your AI.</div>
 </div>
 
-<!-- ═══════════════ SCENE 10 — ECOSYSTEM ═══════════════ -->
+<!-- ═══════════════ SCENE 10 - ECOSYSTEM ═══════════════ -->
 <div class="scene" id="scene-10">
   <h2>The <span class="gradient-text">AIR Blackbox</span> Ecosystem</h2>
   <div class="gap-sm"></div>
@@ -573,7 +573,7 @@
   </div>
 </div>
 
-<!-- ═══════════════ SCENE 11 — CTA ═══════════════ -->
+<!-- ═══════════════ SCENE 11 - CTA ═══════════════ -->
 <div class="scene" id="scene-11">
   <div class="pill pill-accent" style="margin-bottom: 20px;">GET STARTED</div>
   <h1><span class="gradient-text">Record Everything</span></h1>
@@ -592,7 +592,7 @@
     <span class="pill pill-accent" style="cursor:pointer; font-size:0.9rem; padding:10px 24px;">github.com/airblackbox</span>
   </div>
   <div class="gap-lg"></div>
-  <div style="color:var(--text-dim); font-size:0.8rem;">AIR Blackbox — Agent Infrastructure Runtime</div>
+  <div style="color:var(--text-dim); font-size:0.8rem;">AIR Blackbox - Agent Infrastructure Runtime</div>
 </div>
 </div>
 

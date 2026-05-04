@@ -30,7 +30,7 @@ I added a system called Gate to [AIR Blackbox](https://github.com/airblackbox/ai
 
 It has three components:
 
-### 1. Covenants — Policy as YAML
+### 1. Covenants - Policy as YAML
 
 A covenant is a YAML file that declares the rules before the agent runs. Three rule types: `permit`, `forbid`, `require_approval`. Conditions are supported via `when` and `unless`.
 
@@ -48,15 +48,15 @@ rules:
   - forbid: modify_credit_score
 ```
 
-Precedence is strict: `forbid` > `require_approval` > `permit` > default deny. If no rule matches, the action is denied. This is deliberate — fail closed, not open.
+Precedence is strict: `forbid` > `require_approval` > `permit` > default deny. If no rule matches, the action is denied. This is deliberate - fail closed, not open.
 
 The covenant is SHA-256 hashed, and that hash is embedded in every receipt. Change one rule, and every subsequent receipt carries a different hash. An auditor can verify exactly which policy was active for any past action.
 
-### 2. Bilateral Receipts — Two-Phase Proof
+### 2. Bilateral Receipts - Two-Phase Proof
 
 Every action produces a receipt with two cryptographic phases:
 
-**Phase 1 (Authorization):** The gate evaluates the covenant, makes a decision, and signs the authorization with Ed25519. The action payload is SHA-256 hashed — raw data (PII, financial details) never enters the receipt.
+**Phase 1 (Authorization):** The gate evaluates the covenant, makes a decision, and signs the authorization with Ed25519. The action payload is SHA-256 hashed - raw data (PII, financial details) never enters the receipt.
 
 **Phase 2 (Seal):** After execution, the result is hashed and sealed into the same receipt with a second Ed25519 signature. The seal covers the authorization signature, binding the entire lifecycle.
 
@@ -93,7 +93,7 @@ A single receipt answers all three hard questions:
 
 ### 3. HMAC-SHA256 Audit Chains
 
-Individual receipts are strong. But an attacker could delete a receipt entirely. To prevent that, every receipt is also chained into an HMAC-SHA256 audit trail — each entry includes the hash of the previous entry. Delete or alter one, and every entry after it breaks.
+Individual receipts are strong. But an attacker could delete a receipt entirely. To prevent that, every receipt is also chained into an HMAC-SHA256 audit trail - each entry includes the hash of the previous entry. Delete or alter one, and every entry after it breaks.
 
 This is the same principle behind blockchain, but without the overhead. No consensus, no network, no tokens. Just a hash chain stored locally.
 
@@ -120,7 +120,7 @@ Every receipt in the chain is independently verifiable. If a sub-agent misbehave
 
 ## Human Approval
 
-When a covenant rule says `require_approval`, Gate pauses execution and calls your callback. You decide the interface — Slack, email, CLI prompt, whatever:
+When a covenant rule says `require_approval`, Gate pauses execution and calls your callback. You decide the interface - Slack, email, CLI prompt, whatever:
 
 ```python
 def slack_approval(receipt):
@@ -148,7 +148,7 @@ I stress-tested the system with 58 tests covering covenants, receipts, the gate 
 
 Performance on Apple Silicon: 9,300+ authorizations per second, 3,500+ full lifecycles (authorize + seal + verify) per second with Ed25519 signing. A 100-deep delegation chain verifies correctly. A 50-rule covenant evaluates correctly.
 
-Adversarial tests: swapping receipt IDs after signing, changing covenant hashes, flipping the authorized flag, altering the decision field — all detected by signature verification.
+Adversarial tests: swapping receipt IDs after signing, changing covenant hashes, flipping the authorized flag, altering the decision field - all detected by signature verification.
 
 ## Try It
 
@@ -180,7 +180,7 @@ The full source is at [github.com/airblackbox/airblackbox](https://github.com/ai
 
 The covenant DSL today handles simple field-operator-value conditions. Next up: boolean logic (`and`/`or`), regex matching on action names, and rate-limit rules (e.g., "permit send_email unless more than 10 in the last hour").
 
-The receipt format is designed for interoperability. The long-term goal is a published spec that any framework can implement — so receipts from a LangChain agent and a CrewAI agent chain together seamlessly.
+The receipt format is designed for interoperability. The long-term goal is a published spec that any framework can implement - so receipts from a LangChain agent and a CrewAI agent chain together seamlessly.
 
 If this is useful to you, [star the repo](https://github.com/airblackbox/airblackbox). If you find a bug, open an issue. If you have a use case that doesn't fit, I want to hear about it.
 

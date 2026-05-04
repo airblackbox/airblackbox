@@ -17,13 +17,13 @@ pip install air-blackbox
 air-blackbox comply --scan .
 ```
 
-That's it. 39 checks across 6 EU AI Act articles. No config, no API keys, no Docker.
+That's it. 51 checks across 6 EU AI Act articles. No config, no API keys, no Docker.
 
 ### What we ship
 
 | Package | What it does | Install |
 |---|---|---|
-| **[air-blackbox](https://github.com/airblackbox/gateway)** | CLI compliance scanner: 4 frameworks, 39 checks, evidence export | `pip install air-blackbox` |
+| **[air-blackbox](https://github.com/airblackbox/gateway)** | CLI compliance scanner: 4 frameworks, 51 checks, evidence export | `pip install air-blackbox` |
 | **[air-trust](https://github.com/airblackbox/gateway)** | Tamper-evident HMAC-SHA256 audit chain + Ed25519 signed handoffs | `pip install air-trust` |
 | **[air-gate](https://github.com/airblackbox/air-gate)** | Human-in-the-loop tool approval with audit trail | `pip install air-gate` |
 | **[air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp)** | Compliance scanning inside Claude Desktop, Cursor, Claude Code | `pip install air-blackbox-mcp` |

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIR Trust — Signed Handoff Demo</title>
+<title>AIR Trust - Signed Handoff Demo</title>
 <meta name="description" content="Interactive demo: Ed25519 signed handoffs between AI agents with tamper-evident audit chain verification.">
 <style>
   :root {
@@ -417,7 +417,7 @@
   <header>
     <h1>air-trust <span>signed handoffs</span></h1>
     <p>Two AI agents. One task. Cryptographic proof of every step.<br>
-    Click through to see the Ed25519 handoff protocol in action — then try to tamper with it.</p>
+    Click through to see the Ed25519 handoff protocol in action - then try to tamper with it.</p>
   </header>
 
   <div class="steps" id="steps"></div>
@@ -429,7 +429,7 @@
   <div class="agents" id="agents-container">
     <div class="agent-card" id="agent-a">
       <div class="agent-name agent-a-color">research-bot</div>
-      <div class="agent-role">Agent A — Researcher</div>
+      <div class="agent-role">Agent A - Researcher</div>
       <div class="agent-key" id="key-a" style="display:none">
         <span class="key-label">pub:</span> <span class="key-value" id="pub-a"></span><br>
         <span class="key-label">priv:</span> <span class="key-private">~/.air-trust/keys/5a3a.key</span>
@@ -443,7 +443,7 @@
 
     <div class="agent-card" id="agent-b">
       <div class="agent-name agent-b-color">writer-bot</div>
-      <div class="agent-role">Agent B — Writer</div>
+      <div class="agent-role">Agent B - Writer</div>
       <div class="agent-key" id="key-b" style="display:none">
         <span class="key-label">pub:</span> <span class="key-value" id="pub-b"></span><br>
         <span class="key-label">priv:</span> <span class="key-private">~/.air-trust/keys/b72e.key</span>
@@ -517,14 +517,14 @@ const STEPS = [
   },
   // Step 2: Session start
   {
-    narrative: '<strong>Step 2:</strong> A session begins. Every event gets a sequence number for <em>completeness tracking</em> — if any record is dropped, the verifier catches it.',
+    narrative: '<strong>Step 2:</strong> A session begins. Every event gets a sequence number for <em>completeness tracking</em> - if any record is dropped, the verifier catches it.',
     action() {
       addRecord('session_start', 'session', 'Session: research-to-write', HASHES[0], null, null);
     }
   },
   // Step 3: Handoff request
   {
-    narrative: '<strong>Step 3:</strong> Agent A writes a <em>handoff_request</em> — "Here\'s the task, here\'s the payload hash, and here\'s my Ed25519 signature proving I sent it."',
+    narrative: '<strong>Step 3:</strong> Agent A writes a <em>handoff_request</em> - "Here\'s the task, here\'s the payload hash, and here\'s my Ed25519 signature proving I sent it."',
     action() {
       showArrow('→ handoff_request', false);
       document.getElementById('agent-a').classList.add('active', 'active-a');
@@ -535,7 +535,7 @@ const STEPS = [
   },
   // Step 4: Handoff ack
   {
-    narrative: '<strong>Step 4:</strong> Agent B writes a <em>handoff_ack</em> — "I received the task, I accept it. Here\'s my signature and the same payload hash proving I got the right data."',
+    narrative: '<strong>Step 4:</strong> Agent B writes a <em>handoff_ack</em> - "I received the task, I accept it. Here\'s my signature and the same payload hash proving I got the right data."',
     action() {
       showArrow('← handoff_ack', true);
       document.getElementById('agent-a').classList.remove('active', 'active-a');
@@ -547,7 +547,7 @@ const STEPS = [
   },
   // Step 5: Agent B does work
   {
-    narrative: '<strong>Step 5:</strong> Agent B does its work — writing, editing, processing. Regular events are recorded in the chain with session sequence numbers.',
+    narrative: '<strong>Step 5:</strong> Agent B does its work - writing, editing, processing. Regular events are recorded in the chain with session sequence numbers.',
     action() {
       hideArrow();
       addRecord('llm_call', 'session', 'model: gpt-4o\ntokens: 2,847\nstatus: success', HASHES[3], null, null);
@@ -558,7 +558,7 @@ const STEPS = [
   },
   // Step 6: Handoff result
   {
-    narrative: '<strong>Step 6:</strong> Agent B writes a <em>handoff_result</em> — "Here\'s my output hash. My signature proves I produced this result, and it\'s linked to the original request."',
+    narrative: '<strong>Step 6:</strong> Agent B writes a <em>handoff_result</em> - "Here\'s my output hash. My signature proves I produced this result, and it\'s linked to the original request."',
     action() {
       showArrow('← handoff_result', true);
       addRecord('handoff_result', 'result',
@@ -568,7 +568,7 @@ const STEPS = [
   },
   // Step 7: Session end
   {
-    narrative: '<strong>Step 7:</strong> Session ends. The chain now has 7 records — each HMAC-linked to the previous one, handoffs Ed25519-signed by the acting agent.',
+    narrative: '<strong>Step 7:</strong> Session ends. The chain now has 7 records - each HMAC-linked to the previous one, handoffs Ed25519-signed by the acting agent.',
     action() {
       hideArrow();
       document.getElementById('agent-a').classList.remove('active', 'active-a');
@@ -677,7 +677,7 @@ function showVerification(isTampered) {
 
   const lines = [];
   lines.push({ cls: 'verify-header', text: '══════════════════════════════════════════' });
-  lines.push({ cls: 'verify-header', text: '  AIR Trust — Chain Verification (v1.2)' });
+  lines.push({ cls: 'verify-header', text: '  AIR Trust - Chain Verification (v1.2)' });
   lines.push({ cls: 'verify-header', text: '══════════════════════════════════════════' });
   lines.push({ cls: 'verify-info', text: '' });
   lines.push({ cls: 'verify-info', text: `Database: ~/.air-trust/events.db` });
@@ -685,22 +685,22 @@ function showVerification(isTampered) {
   lines.push({ cls: 'verify-info', text: '' });
 
   if (isTampered) {
-    lines.push({ cls: 'verify-fail', text: '✗ FAIL: Integrity — chain is broken' });
+    lines.push({ cls: 'verify-fail', text: '✗ FAIL: Integrity - chain is broken' });
     lines.push({ cls: 'verify-fail', text: '  Tampered at record index: 3' });
   } else {
-    lines.push({ cls: 'verify-pass', text: '✓ PASS: Integrity — chain is intact (HMAC-SHA256)' });
+    lines.push({ cls: 'verify-pass', text: '✓ PASS: Integrity - chain is intact (HMAC-SHA256)' });
     lines.push({ cls: 'verify-info', text: '' });
     lines.push({ cls: 'verify-info', text: '  Sessions checked:    1' });
     lines.push({ cls: 'verify-info', text: '  Sessions complete:   1' });
     lines.push({ cls: 'verify-info', text: '  Sessions incomplete: 0' });
     lines.push({ cls: 'verify-info', text: '' });
-    lines.push({ cls: 'verify-pass', text: '✓ PASS: Completeness — all sessions are complete' });
+    lines.push({ cls: 'verify-pass', text: '✓ PASS: Completeness - all sessions are complete' });
     lines.push({ cls: 'verify-info', text: '' });
     lines.push({ cls: 'verify-info', text: '  Handoffs checked:    1' });
     lines.push({ cls: 'verify-info', text: '  Handoffs complete:   1' });
     lines.push({ cls: 'verify-info', text: '  Handoffs incomplete: 0' });
     lines.push({ cls: 'verify-info', text: '' });
-    lines.push({ cls: 'verify-pass', text: '✓ PASS: Handoffs — all handoffs verified (Ed25519)' });
+    lines.push({ cls: 'verify-pass', text: '✓ PASS: Handoffs - all handoffs verified (Ed25519)' });
   }
 
   // Animate lines appearing
@@ -722,7 +722,7 @@ function tamperChain() {
   tampered = true;
 
   document.getElementById('btn-tamper').disabled = true;
-  document.getElementById('narrative').innerHTML = '<span class="bad">An attacker modifies the handoff_ack record</span> — changing the payload hash to cover up that they swapped the data Agent B received. The HMAC chain <span class="bad">instantly detects the tampering</span>.';
+  document.getElementById('narrative').innerHTML = '<span class="bad">An attacker modifies the handoff_ack record</span> - changing the payload hash to cover up that they swapped the data Agent B received. The HMAC chain <span class="bad">instantly detects the tampering</span>.';
 
   // Find the ack record (index 3) and visually tamper it
   const ackRecord = chainRecords[3];

@@ -36,4 +36,4 @@ evidencectl pdf --input evidence-package.json --output evidence-report.pdf --com
 5. Remind the user:
    - This is technical evidence, not a legal compliance certificate
    - Pair with legal counsel for regulatory submissions
-   - The evidence package is signed — any modification breaks the attestation
+   - The evidence package is signed - any modification breaks the attestation
