@@ -1,10 +1,11 @@
 """
 Compliance standards crosswalk for AIR Blackbox scanner.
 
-This module maps AIR Blackbox scan results to three complementary standards:
+This module maps AIR Blackbox scan results to four complementary standards:
 1. EU AI Act Articles (regulatory compliance)
 2. ISO/IEC 42001:2023 (AI Management System)
 3. NIST AI RMF (Artificial Intelligence Risk Management Framework)
+4. Colorado SB 24-205 (Colorado AI Act)
 
 The crosswalk enables organizations to understand their compliance posture
 across multiple frameworks from a single set of security and safety checks.
@@ -24,6 +25,10 @@ STANDARDS_CROSSWALK = {
             "A.6.2.1 (Risk management for AI systems)"
         ],
         "nist_ai_rmf": ["GOVERN 1", "MAP 1", "MAP 3"],
+        "colorado_sb24_205": [
+            "Section 6(2)(a) (Risk management policy)",
+            "Section 6(2)(b) (Impact assessment before deployment)"
+        ],
         "description": "Risk identification, assessment, and mitigation for AI systems; includes threat modeling and control implementation"
     },
     "data_governance": {
@@ -34,6 +39,10 @@ STANDARDS_CROSSWALK = {
             "A.6.2.2 (Data governance)"
         ],
         "nist_ai_rmf": ["MAP 2", "MEASURE 2"],
+        "colorado_sb24_205": [
+            "Section 6(2)(c) (Data governance for training and testing)",
+            "Section 6(3) (Data provenance and quality documentation)"
+        ],
         "description": "Data quality requirements, PII handling, bias detection in training data, data source validation"
     },
     "technical_documentation": {
@@ -44,6 +53,10 @@ STANDARDS_CROSSWALK = {
             "A.6.2.7 (Transparency and explainability)"
         ],
         "nist_ai_rmf": ["GOVERN 4", "MAP 5"],
+        "colorado_sb24_205": [
+            "Section 6(2)(d) (Documentation of system purpose and limitations)",
+            "Section 5(1) (Disclosure to consumers about AI use in consequential decisions)"
+        ],
         "description": "System documentation, model cards, architecture descriptions, decision logic documentation"
     },
     "record_keeping": {
@@ -53,6 +66,10 @@ STANDARDS_CROSSWALK = {
             "9.1 (Monitoring, measurement, analysis and evaluation)"
         ],
         "nist_ai_rmf": ["MEASURE 1", "MANAGE 4"],
+        "colorado_sb24_205": [
+            "Section 6(2)(e) (Record-keeping of deployment decisions)",
+            "Section 6(4) (Retain impact assessments for duration of deployment)"
+        ],
         "description": "Audit trails, event logging, tamper-evident records, activity tracking and retrieval"
     },
     "human_oversight": {
@@ -62,6 +79,10 @@ STANDARDS_CROSSWALK = {
             "A.6.2.8 (AI system robustness and incident management)"
         ],
         "nist_ai_rmf": ["GOVERN 2", "MANAGE 1"],
+        "colorado_sb24_205": [
+            "Section 5(2) (Right to human review of consequential decisions)",
+            "Section 5(3) (Opportunity to correct data and appeal)"
+        ],
         "description": "Approval gates, kill switches, human-in-the-loop controls, override mechanisms"
     },
     "robustness": {
@@ -71,6 +92,10 @@ STANDARDS_CROSSWALK = {
             "A.6.2.9 (AI system security)"
         ],
         "nist_ai_rmf": ["MEASURE 3", "MANAGE 2", "MANAGE 3"],
+        "colorado_sb24_205": [
+            "Section 6(2)(f) (Ongoing monitoring for adverse outcomes)",
+            "Section 6(5) (Duty to update risk controls after material changes)"
+        ],
         "description": "Injection defense, error resilience, adversarial robustness, recovery capabilities"
     },
     "consent_management": {
@@ -80,6 +105,10 @@ STANDARDS_CROSSWALK = {
             "A.6.2.11 (Use of data subject rights)",
         ],
         "nist_ai_rmf": ["GOVERN 3"],
+        "colorado_sb24_205": [
+            "Section 5(1)(a) (Notice that AI is used in consequential decisions)",
+            "Section 5(1)(b) (Description of purpose and contact information)"
+        ],
         "description": "Lawful basis tracking, consent gates, data subject rights management, withdrawal mechanisms"
     },
     "bias_fairness": {
@@ -89,6 +118,11 @@ STANDARDS_CROSSWALK = {
             "A.6.2.10 (AI system fairness and non-discrimination)"
         ],
         "nist_ai_rmf": ["MAP 2", "MEASURE 2", "MANAGE 3"],
+        "colorado_sb24_205": [
+            "Section 2(1) (Definition of algorithmic discrimination)",
+            "Section 4 (Duty to avoid algorithmic discrimination)",
+            "Section 6(2)(b) (Impact assessment for discrimination risk)"
+        ],
         "description": "Fairness metrics, bias detection, protected attribute handling, fairness monitoring"
     },
 }
@@ -118,6 +152,7 @@ def generate_crosswalk_report(scan_results: List[Dict]) -> Dict:
         "eu_ai_act_summary": {"passed": 0, "warned": 0, "failed": 0, "total": 0},
         "iso_42001_summary": {"passed": 0, "warned": 0, "failed": 0, "total": 0},
         "nist_ai_rmf_summary": {"passed": 0, "warned": 0, "failed": 0, "total": 0},
+        "colorado_sb24_205_summary": {"passed": 0, "warned": 0, "failed": 0, "total": 0},
         "by_category": {},
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "total_checks": len(scan_results),
@@ -144,6 +179,7 @@ def generate_crosswalk_report(scan_results: List[Dict]) -> Dict:
             "eu_ai_act": mapping["eu_ai_act"],
             "iso_42001": mapping["iso_42001"],
             "nist_ai_rmf": mapping["nist_ai_rmf"],
+            "colorado_sb24_205": mapping.get("colorado_sb24_205", []),
             "worst_status": worst_status,
             "check_count": len(results),
             "pass_count": sum(1 for r in results if r.get("status") == "pass"),
@@ -156,11 +192,13 @@ def generate_crosswalk_report(scan_results: List[Dict]) -> Dict:
         report["eu_ai_act_summary"]["total"] += entry["check_count"]
         report["iso_42001_summary"]["total"] += entry["check_count"]
         report["nist_ai_rmf_summary"]["total"] += entry["check_count"]
+        report["colorado_sb24_205_summary"]["total"] += entry["check_count"]
 
         status = entry["worst_status"]
         report["eu_ai_act_summary"][status] += entry["check_count"]
         report["iso_42001_summary"][status] += entry["check_count"]
         report["nist_ai_rmf_summary"][status] += entry["check_count"]
+        report["colorado_sb24_205_summary"][status] += entry["check_count"]
 
     return report
 
@@ -210,6 +248,7 @@ def render_crosswalk_markdown(report: Dict) -> str:
         ("eu_ai_act_summary", "EU AI Act"),
         ("iso_42001_summary", "ISO 42001:2023"),
         ("nist_ai_rmf_summary", "NIST AI RMF"),
+        ("colorado_sb24_205_summary", "Colorado SB 24-205"),
     ]:
         summary = report[std_key]
         lines.append(
@@ -219,18 +258,19 @@ def render_crosswalk_markdown(report: Dict) -> str:
         )
 
     lines.append("\n## Detailed Compliance Mapping\n\n")
-    lines.append("| Category | Status | EU AI Act | ISO 42001 | NIST AI RMF |\n")
-    lines.append("|----------|--------|-----------|-----------|-------------|\n")
+    lines.append("| Category | Status | EU AI Act | ISO 42001 | NIST AI RMF | CO SB 24-205 |\n")
+    lines.append("|----------|--------|-----------|-----------|-------------|---------------|\n")
 
     for category, entry in sorted(report["by_category"].items()):
         status_icon = _get_status_icon(entry["worst_status"])
         eu_ai = entry["eu_ai_act"]
         iso_clauses = "; ".join(entry["iso_42001"])
         nist_funcs = "; ".join(entry["nist_ai_rmf"])
+        co_sections = "; ".join(entry.get("colorado_sb24_205", []))
 
         lines.append(
             f"| {category} | {status_icon} | {eu_ai} | {iso_clauses} | "
-            f"{nist_funcs} |\n"
+            f"{nist_funcs} | {co_sections} |\n"
         )
 
     lines.append(f"\n## Category Descriptions\n\n")
@@ -384,9 +424,10 @@ def calculate_compliance_scores(report: Dict) -> Dict[str, float]:
             "eu_ai_act": 0,
             "iso_42001": 0,
             "nist_ai_rmf": 0,
+            "colorado_sb24_205": 0,
         }
 
-    for std_key in ["eu_ai_act_summary", "iso_42001_summary", "nist_ai_rmf_summary"]:
+    for std_key in ["eu_ai_act_summary", "iso_42001_summary", "nist_ai_rmf_summary", "colorado_sb24_205_summary"]:
         summary = report[std_key]
         penalty = (10 * summary["warned"]) + (25 * summary["failed"])
         score = max(0, 100 - (penalty / total))
@@ -416,9 +457,10 @@ def generate_compliance_narrative(report: Dict) -> str:
     lines.append("=" * 50 + "\n\n")
 
     lines.append("COMPLIANCE SCORES (0-100)\n")
-    lines.append(f"EU AI Act:      {scores['eu_ai_act']:5.1f}%\n")
-    lines.append(f"ISO 42001:2023: {scores['iso_42001']:5.1f}%\n")
-    lines.append(f"NIST AI RMF:    {scores['nist_ai_rmf']:5.1f}%\n\n")
+    lines.append(f"EU AI Act:        {scores['eu_ai_act']:5.1f}%\n")
+    lines.append(f"ISO 42001:2023:   {scores['iso_42001']:5.1f}%\n")
+    lines.append(f"NIST AI RMF:      {scores['nist_ai_rmf']:5.1f}%\n")
+    lines.append(f"CO SB 24-205:     {scores['colorado_sb24_205']:5.1f}%\n\n")
 
     failed_categories = [
         (cat, entry) for cat, entry in report["by_category"].items()
@@ -480,7 +522,7 @@ def generate_compliance_narrative(report: Dict) -> str:
 
 if __name__ == "__main__":
     print("AIR Blackbox Standards Crosswalk Module")
-    print("Supports: EU AI Act, ISO/IEC 42001:2023, NIST AI RMF")
+    print("Supports: EU AI Act, ISO/IEC 42001:2023, NIST AI RMF, Colorado SB 24-205")
     print("\nAvailable functions:")
     print("  - generate_crosswalk_report(scan_results)")
     print("  - render_crosswalk_markdown(report)")

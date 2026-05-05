@@ -28,8 +28,18 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Any
 
-# Ed25519 signing - use cryptography library if available, fall back to
-# HMAC-SHA256 if not (still tamper-evident, just not non-repudiable)
+# ML-DSA-65 (FIPS 204) post-quantum signing - preferred when available.
+# Falls back to Ed25519 if ML-DSA-65 is not available, then to HMAC-SHA256.
+HAS_MLDSA65 = False
+HAS_ED25519 = False
+
+try:
+    # ML-DSA-65 via oqs-python (Open Quantum Safe)
+    import oqs
+    HAS_MLDSA65 = True
+except ImportError:
+    pass
+
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PrivateKey,
@@ -38,7 +48,7 @@ try:
     from cryptography.hazmat.primitives import serialization
     HAS_ED25519 = True
 except ImportError:
-    HAS_ED25519 = False
+    pass
 
 import hmac as hmac_mod
 
@@ -197,12 +207,13 @@ def hash_result(result: Any) -> str:
 class ReceiptSigner:
     """Signs and verifies receipts using Ed25519 or HMAC-SHA256 fallback.
 
-    Ed25519 is preferred because any third party can verify the signature
-    using only the public key - no shared secret needed. This is what
-    regulators want: independent verifiability.
+    Signing algorithm priority:
+      1. ML-DSA-65 (FIPS 204) - post-quantum secure, preferred
+      2. Ed25519 - classical, non-repudiable
+      3. HMAC-SHA256 - fallback, requires shared key
 
-    If the cryptography library isn't installed, falls back to HMAC-SHA256
-    which still provides tamper evidence but requires the shared key to verify.
+    ML-DSA-65 and Ed25519 signatures can be verified by third parties
+    using only the public key. HMAC requires the shared secret.
     """
 
     def __init__(self, private_key: Optional[bytes] = None, hmac_key: Optional[str] = None):
@@ -211,12 +222,22 @@ class ReceiptSigner:
         Args:
             private_key: Ed25519 private key bytes (32 bytes). If provided,
                          Ed25519 signing is used. If None, generates a new key.
-            hmac_key: HMAC-SHA256 key string. Used as fallback if Ed25519
-                      is unavailable (cryptography package not installed).
+            hmac_key: HMAC-SHA256 key string. Used as fallback if neither
+                      ML-DSA-65 nor Ed25519 is available.
         """
         self._hmac_key = (hmac_key or "air-blackbox-default").encode("utf-8")
+        self._oqs_signer = None
+        self._oqs_pub = None
 
-        if HAS_ED25519:
+        if HAS_MLDSA65:
+            # ML-DSA-65 (FIPS 204) - post-quantum, preferred
+            sig = oqs.Signature("Dilithium3")
+            self._oqs_pub = sig.generate_keypair()
+            self._oqs_signer = sig
+            self._private_key = None
+            self._public_key = None
+            self.method = "ML-DSA-65"
+        elif HAS_ED25519:
             if private_key:
                 self._private_key = Ed25519PrivateKey.from_private_bytes(private_key)
             else:
@@ -231,6 +252,8 @@ class ReceiptSigner:
     @property
     def public_key_bytes(self) -> Optional[bytes]:
         """Export the public key for third-party verification."""
+        if HAS_MLDSA65 and self._oqs_pub:
+            return self._oqs_pub
         if self._public_key and HAS_ED25519:
             return self._public_key.public_bytes(
                 serialization.Encoding.Raw,
@@ -245,8 +268,17 @@ class ReceiptSigner:
         return pk.hex() if pk else None
 
     def sign(self, data: bytes) -> str:
-        """Sign data and return the signature as hex string."""
-        if HAS_ED25519 and self._private_key:
+        """Sign data and return the signature as hex string.
+
+        Uses the highest-priority algorithm available:
+          1. ML-DSA-65 (post-quantum)
+          2. Ed25519 (classical)
+          3. HMAC-SHA256 (shared-secret fallback)
+        """
+        if HAS_MLDSA65 and self._oqs_signer:
+            sig = self._oqs_signer.sign(data)
+            return sig.hex()
+        elif HAS_ED25519 and self._private_key:
             sig = self._private_key.sign(data)
             return sig.hex()
         else:
@@ -257,12 +289,16 @@ class ReceiptSigner:
     def verify(self, data: bytes, signature_hex: str) -> bool:
         """Verify a signature against data.
 
+        For ML-DSA-65: uses the public key (post-quantum secure).
         For Ed25519: uses the public key (no secret needed).
         For HMAC: recomputes and compares (requires the shared key).
         """
         try:
-            if HAS_ED25519 and self._public_key:
-                sig_bytes = bytes.fromhex(signature_hex)
+            sig_bytes = bytes.fromhex(signature_hex)
+            if HAS_MLDSA65 and self._oqs_pub:
+                verifier = oqs.Signature("Dilithium3")
+                return verifier.verify(data, sig_bytes, self._oqs_pub)
+            elif HAS_ED25519 and self._public_key:
                 self._public_key.verify(sig_bytes, data)
                 return True
             else:
