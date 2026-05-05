@@ -9,6 +9,8 @@ import subprocess
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
+import click
+
 logger = logging.getLogger(__name__)
 
 
@@ -132,3 +134,23 @@ def execute_precommit_hook(file_paths: Optional[List[str]] = None) -> int:
     except (ValueError, subprocess.TimeoutExpired) as e:
         logger.error(f"precommit_hook_error: {e}")
         return 1
+
+
+@click.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@click.option("--baseline", default=".air-blackbox-baseline.json", help="Saved compliance score JSON")
+@click.option("--strict", is_flag=True, help="Accepted for compatibility with existing hooks")
+@click.option("--gdpr", is_flag=True, help="Accepted for compatibility with existing hooks")
+@click.option("--bias", is_flag=True, help="Accepted for compatibility with existing hooks")
+def main(baseline: str, strict: bool, gdpr: bool, bias: bool) -> None:
+    """Run changed-only compliance gating for pre-commit."""
+    _ = (strict, gdpr, bias)
+    cmd = [
+        "air-blackbox",
+        "comply",
+        "--changed-only",
+        "--baseline",
+        baseline,
+        "--no-llm",
+        "--no-save",
+    ]
+    raise SystemExit(subprocess.run(cmd).returncode)

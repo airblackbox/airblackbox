@@ -6,6 +6,16 @@
   types: [python]
   additional_dependencies: ['air-blackbox']
 
+- id: air-blackbox-comply-changed
+  name: AIR Blackbox Changed-Only Compliance
+  description: Scan staged Python files and fail only if compliance score decreases
+  entry: air-blackbox comply
+  args: ['--changed-only', '--baseline', '.air-blackbox-baseline.json', '--no-llm', '--no-save']
+  language: python
+  types: [python]
+  pass_filenames: false
+  additional_dependencies: ['air-blackbox']
+
 - id: air-blackbox-comply-strict
   name: AIR Blackbox Strict Compliance
   description: Scan Python files for EU AI Act compliance (fails on warnings)
