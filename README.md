@@ -36,7 +36,7 @@ AIR Blackbox signs every record with **ML-DSA-65 (FIPS 204 / Dilithium3)**, NIST
 
 **Evidence bundle**, one command packages the audit chain, scan results, and ML-DSA-65 signatures into a self-verifying `.air-evidence` ZIP. An auditor runs `python verify.py` and gets PASS/FAIL in two seconds. No pip install needed on their end. No internet connection needed. No hosted service required.
 
-**EU AI Act gap analysis**, 51+ checks across Articles 9, 10, 11, 12, 13, 14, and 15. Maps to ISO 42001, NIST AI RMF, and Colorado SB 24-205. One scan, four frameworks, one report.
+**EU AI Act gap analysis**, 51+ checks across Articles 9, 10, 11, 12, 13, 14, and 15. Maps to ISO 42001, NIST AI RMF, and Colorado SB 24-205. See the [checks reference](docs/checks.md) for pass/fail examples. One scan, four frameworks, one report.
 
 **PII and injection scanning**, 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
