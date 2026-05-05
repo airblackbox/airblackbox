@@ -2,7 +2,6 @@
 
 Thank you for your interest in contributing to AIR Blackbox! We welcome contributions from developers of all experience levels.
 
-<<<<<<< Updated upstream
 ## Welcome
 
 AIR Blackbox is building the standard for EU AI Act compliance scanning. Whether you are fixing a bug, adding a feature, improving documentation, or proposing new ideas, your contribution matters. We are committed to fostering an inclusive, welcoming community.
@@ -55,20 +54,10 @@ Clone the repository and install in development mode with all dependencies:
 ```bash
 git clone https://github.com/jasonjshotwell/air-blackbox.git
 cd air-blackbox
-=======
-## Quick Setup
-
-```bash
-# Fork and clone
-git clone https://github.com/YOUR_USERNAME/gateway.git
-cd gateway
-
-# Install in dev mode with all framework extras
->>>>>>> Stashed changes
 pip install -e ".[all]"
 
 # Verify
-air-blackbox --version        # Should print 1.10.0
+air-blackbox --version        # Should print 1.12.0
 pytest tests/ -q              # Should pass 1,500+ tests
 ruff check sdk/air_blackbox/  # Should print "All checks passed!"
 ```
