@@ -37,17 +37,17 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-# ── PII patterns ──
+# ── PII patterns (canonical + IBAN extension for EU) ──
+from air_blackbox.gate.runtime import PII_PATTERN_STRINGS as _PII_PATTERNS_BASE
 
-_PII_PATTERNS = [
-    (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'email'),
-    (r'\b\d{3}-\d{2}-\d{4}\b', 'ssn'),
-    (r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b', 'phone'),
-    (r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', 'credit_card'),
+_PII_PATTERNS = _PII_PATTERNS_BASE + [
     (r'\b[A-Z]{2}\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b', 'iban'),
 ]
 
-# ── Injection patterns (15 weighted patterns from AIR trust) ──
+# ── Injection patterns (15 weighted patterns, extends canonical set) ──
+# NOTE: Uses (pattern, weight) tuples for confidence scoring.
+# Canonical patterns live in air_blackbox.gate.runtime; these add weights
+# and extra patterns specific to Claude Agent SDK interception.
 
 _INJECTION_PATTERNS = [
     (r'ignore (?:all )?previous instructions', 0.9),

@@ -85,14 +85,31 @@ def get_trust_layer_recommendation(scan_path: str) -> str:
     return "air-langchain-trust"
 
 
-def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
+def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = "all") -> list[dict]:
+    """Run compliance checks filtered by jurisdiction standard.
+
+    Args:
+        status: GatewayStatus from the gateway client
+        scan_path: Path to the codebase to scan
+        standard: Which jurisdiction(s) to check:
+            "eu"  - EU AI Act + GDPR only
+            "us"  - US state laws only (CO, IL, CA, TX)
+            "all" - Everything (default)
+
+    Returns:
+        (results, detected_frameworks, rec_pkg) tuple
+    """
+    standard = standard.lower().strip()
+    if standard not in ("eu", "us", "all"):
+        standard = "all"
+
     # Support single-file scanning: code scanner gets the file,
     # but doc checks use the parent directory
     doc_path = scan_path
     if os.path.isfile(scan_path):
         doc_path = os.path.dirname(os.path.abspath(scan_path)) or "."
 
-    # Run code-level scan
+    # Run code-level scan (always, both EU and US checks use it)
     code_findings = []
     try:
         from air_blackbox.compliance.code_scanner import scan_codebase
@@ -100,21 +117,22 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
     except Exception:
         pass  # Graceful fallback if code scanner has issues
 
-    # Run GDPR scan
+    # Run GDPR scan (EU only)
     gdpr_findings = []
-    try:
-        from air_blackbox.compliance.gdpr_scanner import scan_gdpr
-        gdpr_findings = scan_gdpr(scan_path)
-    except Exception:
-        pass  # Graceful fallback if GDPR scanner has issues
+    if standard in ("eu", "all"):
+        try:
+            from air_blackbox.compliance.gdpr_scanner import scan_gdpr
+            gdpr_findings = scan_gdpr(scan_path)
+        except Exception:
+            pass
 
-    # Run bias/fairness scan
+    # Run bias/fairness scan (universal)
     bias_findings = []
     try:
         from air_blackbox.compliance.bias_scanner import scan_bias
         bias_findings = scan_bias(scan_path)
     except Exception:
-        pass  # Graceful fallback if bias scanner has issues
+        pass
 
     # Detect frameworks for smart trust layer recommendations
     detected = detect_frameworks(scan_path)
@@ -125,26 +143,85 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
     for f in code_findings:
         code_by_article.setdefault(f.article, []).append(f)
 
-    # EU AI Act articles
-    results = [
-        _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg),
-        _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg),
-        _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg),
-        _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg),
-        _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg),
-        _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg),
-    ]
+    results = []
 
-    # GDPR checks (grouped into a single section)
-    if gdpr_findings:
+    # ── EU AI Act articles ──
+    eu_count = 0
+    if standard in ("eu", "all"):
+        eu_results = [
+            _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg),
+            _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg),
+            _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg),
+            _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg),
+            _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg),
+            _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg),
+        ]
+        results.extend(eu_results)
+        eu_count = sum(len(a.get("checks", [])) for a in eu_results)
+
+    # ── US State AI Laws (new dedicated scanner) ──
+    us_count = 0
+    if standard in ("us", "all"):
+        try:
+            from air_blackbox.compliance.us_scanner import scan_us_laws, findings_to_dicts
+            us_findings = scan_us_laws(scan_path)
+            us_checks = findings_to_dicts(us_findings)
+            us_count = len(us_checks)
+            if us_checks:
+                # Group by state for cleaner display
+                co_checks = [c for c in us_checks if c.get("law", "").startswith("Colorado")]
+                il_checks = [c for c in us_checks if c.get("law", "").startswith("Illinois")]
+                ca_checks = [c for c in us_checks if c.get("law", "").startswith("California")]
+                tx_checks = [c for c in us_checks if c.get("law", "").startswith("Texas")]
+
+                if co_checks:
+                    results.append({
+                        "number": "CO",
+                        "title": "Colorado SB 24-205 (AI Act)",
+                        "checks": co_checks,
+                    })
+                if il_checks:
+                    results.append({
+                        "number": "IL",
+                        "title": "Illinois HB 3773 (AI Employment)",
+                        "checks": il_checks,
+                    })
+                if ca_checks:
+                    results.append({
+                        "number": "CA",
+                        "title": "California AI Laws (SB 942 + ADMT)",
+                        "checks": ca_checks,
+                    })
+                if tx_checks:
+                    results.append({
+                        "number": "TX",
+                        "title": "Texas RAIGA (HB 1709)",
+                        "checks": tx_checks,
+                    })
+        except Exception:
+            pass
+
+        # Legacy hiring-context checks (article=16) from code_scanner
+        state_code_findings = code_by_article.get(16, [])
+        state_checks = [_finding_to_dict(f) for f in state_code_findings]
+        if state_checks:
+            results.append({
+                "number": 16,
+                "title": "US Hiring AI Laws (context-specific)",
+                "checks": state_checks,
+            })
+
+    # ── GDPR checks ──
+    if standard in ("eu", "all"):
         gdpr_checks = [_finding_to_dict(f) for f in gdpr_findings]
-        results.append({
-            "number": "GDPR",
-            "title": "GDPR Data Protection",
-            "checks": gdpr_checks,
-        })
+        if gdpr_checks:
+            results.append({
+                "number": "GDPR",
+                "title": "GDPR Data Protection",
+                "checks": gdpr_checks,
+            })
 
-    # Bias/fairness checks
+    # ── Bias/fairness checks (universal) ──
     if bias_findings:
         bias_checks = [_finding_to_dict(f) for f in bias_findings]
         results.append({
@@ -153,8 +230,37 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".") -> list[dict]:
             "checks": bias_checks,
         })
 
+    # ── Crosswalk teaser: show what's available in other jurisdictions ──
+    crosswalk_hint = None
+    if standard == "us" and eu_count == 0:
+        # Run a quick count of what EU checks would find
+        try:
+            eu_preview = [
+                _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg),
+                _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg),
+                _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg),
+                _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg),
+                _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg),
+                _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg),
+            ]
+            eu_finding_count = sum(len(a.get("checks", [])) for a in eu_preview)
+            if eu_finding_count > 0:
+                crosswalk_hint = f"Also found {eu_finding_count} EU AI Act findings. Run --standard all to see them."
+        except Exception:
+            pass
+    elif standard == "eu" and us_count == 0:
+        # Preview US checks
+        try:
+            from air_blackbox.compliance.us_scanner import scan_us_laws
+            us_preview = scan_us_laws(scan_path)
+            us_fail_count = sum(1 for f in us_preview if f.status == "fail")
+            if us_fail_count > 0:
+                crosswalk_hint = f"Also found {us_fail_count} US state law gaps. Run --standard all to see them."
+        except Exception:
+            pass
+
     # Attach detected frameworks for CLI recommendation display
-    return results, detected, rec_pkg
+    return results, detected, rec_pkg, crosswalk_hint
 
 
 def _check_article_9(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
@@ -250,6 +356,11 @@ def _check_article_11(status, scan_path, code_findings=None, rec_pkg="air-langch
         checks.append(ComplianceCheck(name="Documentation currency", article=11, detection="auto", status="pass",
             evidence=f"Traffic data current through {status.date_range_end}. {len(status.models_observed)} model(s) active.",
             tier="runtime"))
+    else:
+        checks.append(ComplianceCheck(name="Documentation currency", article=11, detection="auto", status="warn",
+            evidence="No runtime traffic data. Install a trust layer to track active models.",
+            fix_hint="Route traffic through gateway or install a trust layer package",
+            tier="runtime"))
     result = {"number": 11, "title": "Technical Documentation", "checks": [_c2d(c) for c in checks]}
     for f in (code_findings or []):
         result["checks"].append(_finding_to_dict(f))
@@ -306,6 +417,11 @@ def _check_article_12(status, scan_path, code_findings=None, rec_pkg="air-langch
     if status.total_runs > 0 and status.date_range_start:
         checks.append(ComplianceCheck(name="Log retention", article=12, detection="auto", status="pass",
             evidence=f"Records retained from {status.date_range_start}. Storage: {'vault' if status.vault_enabled else 'local'}.",
+            tier="runtime"))
+    else:
+        checks.append(ComplianceCheck(name="Log retention", article=12, detection="auto", status="warn",
+            evidence="No runtime records to assess retention policy.",
+            fix_hint="Route traffic through gateway or install a trust layer to start recording",
             tier="runtime"))
     result = {"number": 12, "title": "Record-Keeping", "checks": [_c2d(c) for c in checks]}
     for f in (code_findings or []):

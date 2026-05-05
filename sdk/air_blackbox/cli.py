@@ -148,11 +148,13 @@ def setup():
 @click.option("--no-llm", is_flag=True, help="Skip LLM analysis, regex-only scan")
 @click.option("--model", default="air-compliance", help="Ollama model for deep scan")
 @click.option("--no-save", is_flag=True, help="Don't save results to compliance history")
-def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
-    """Check EU AI Act compliance from live gateway traffic."""
+@click.option("--standard", default="all", type=click.Choice(["eu", "us", "all"]), help="Jurisdiction: eu, us, or all")
+def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, standard):
+    """Check AI compliance across EU and US jurisdictions."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
-    console.print("\n[bold blue]AIR Blackbox[/] - EU AI Act Compliance Check\n")
+    std_label = {"eu": "EU AI Act", "us": "US State Laws", "all": "EU + US Jurisdictions"}[standard]
+    console.print(f"\n[bold blue]AIR Blackbox[/] - {std_label} Compliance Check\n")
     with console.status("[bold green]Connecting to gateway..."):
         client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
         status = client.get_status()
@@ -166,7 +168,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     else:
         console.print(f"  [yellow]●[/] No traffic data found")
     console.print(f"  [dim]Scanning: {scan}[/]\n")
-    articles, detected_frameworks, rec_pkg = run_all_checks(status, scan)
+    articles, detected_frameworks, rec_pkg, crosswalk_hint = run_all_checks(status, scan, standard=standard)
 
     # Hybrid mode: auto-run LLM analysis unless --no-llm
     deep_findings = []
@@ -513,6 +515,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     else:
         console.print(f"\n[dim]Add a trust layer for runtime compliance: pip install {rec_pkg}[/]")
     console.print(f"[dim]All 10 trust layer packages: https://airblackbox.ai[/]\n")
+
+    # --- Crosswalk teaser ---
+    if crosswalk_hint:
+        console.print(f"[bold cyan]{crosswalk_hint}[/]\n")
 
     # --- Telemetry (anonymous, opt-out with AIR_BLACKBOX_TELEMETRY=off) ---
     try:
@@ -886,7 +892,7 @@ def demo(output):
     console.print(f"  [green]●[/] [bold]{status.total_runs}[/] events loaded")
     console.print()
 
-    articles, _, _ = run_all_checks(status, output)
+    articles, _, _, _ = run_all_checks(status, output)
 
     for article in articles:
         for check in article["checks"]:
@@ -1301,7 +1307,7 @@ def test(gateway, verbose):
             recent_runs=[{"run_id": "test-1", "model": "gpt-4o", "timestamp": "2026-03-13", "status": "success"}]
         )
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles, _, _ = run_all_checks(status, tmpdir)
+            articles, _, _, _ = run_all_checks(status, tmpdir)
             assert len(articles) == 6, f"Should have 6 articles, got {len(articles)}"
             total_checks = sum(len(a["checks"]) for a in articles)
             assert total_checks > 0, "Should have checks"
@@ -1514,7 +1520,7 @@ def test(gateway, verbose):
         from air_blackbox.gateway_client import GatewayStatus
         status = GatewayStatus(reachable=False, total_runs=0)
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles, _, _ = run_all_checks(status, tmpdir)
+            articles, _, _, _ = run_all_checks(status, tmpdir)
             all_checks = [c for a in articles for c in a["checks"]]
             # Every check must have a tier
             for c in all_checks:
@@ -1534,7 +1540,7 @@ def test(gateway, verbose):
         from air_blackbox.gateway_client import GatewayStatus
         status = GatewayStatus(reachable=False, total_runs=0)
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles, _, _ = run_all_checks(status, tmpdir)
+            articles, _, _, _ = run_all_checks(status, tmpdir)
             all_checks = {c["name"]: c for a in articles for c in a["checks"]}
             runtime_expected = [
                 "Risk mitigations active", "PII detection in prompts",

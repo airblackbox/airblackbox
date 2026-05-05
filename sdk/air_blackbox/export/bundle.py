@@ -33,7 +33,7 @@ def generate_evidence_bundle(gateway_url="http://localhost:8080",
     status = client.get_status()
 
     # 2. Compliance scan
-    compliance = run_all_checks(status, scan_path)
+    compliance, _, _, _ = run_all_checks(status, scan_path)
 
     # 3. AI-BOM
     aibom = generate_aibom(status)

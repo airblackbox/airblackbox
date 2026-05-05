@@ -24,6 +24,17 @@ Usage:
 from air_blackbox.gate.covenant import Covenant, Rule, RuleAction
 from air_blackbox.gate.receipt import ActionReceipt, ReceiptStatus
 from air_blackbox.gate.engine import Gate
+from air_blackbox.gate.runtime import (
+    RuntimeMonitor,
+    RuntimeConfig,
+    CheckResult,
+    Violation,
+    ViolationType,
+    Severity,
+    Action,
+    PII_PATTERNS,
+    INJECTION_PATTERNS,
+)
 
 __all__ = [
     "Gate",
@@ -32,4 +43,13 @@ __all__ = [
     "RuleAction",
     "ActionReceipt",
     "ReceiptStatus",
+    "RuntimeMonitor",
+    "RuntimeConfig",
+    "CheckResult",
+    "Violation",
+    "ViolationType",
+    "Severity",
+    "Action",
+    "PII_PATTERNS",
+    "INJECTION_PATTERNS",
 ]
