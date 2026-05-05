@@ -6,6 +6,10 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/airblackbox/airblackbox/blob/main/LICENSE)
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-ready-green)](https://airblackbox.ai)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/airblackbox/airblackbox/main/assets/demo.gif" alt="AIR Blackbox scanning a Python AI project" width="700">
+  </p>
+
 ## Install
 
 ```bash
