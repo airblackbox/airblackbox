@@ -121,6 +121,10 @@ func main() {
 		log.Println("Trust layer: disabled (enable in guardrails.yaml trust section)")
 	}
 
+	// --- Kill-switch setup (SB 942 compliance) ---
+	killSwitch := proxy.NewKillSwitch()
+	log.Println("Kill-switch: ready (SB 942 72-hour shutdown capability)")
+
 	// --- Proxy handler ---
 	handler := proxy.Handler(proxy.Config{
 		ProviderURL: *providerURL,
@@ -131,6 +135,7 @@ func main() {
 		Sessions:    grMgr,
 		Analytics:   analytics,
 		AuditChain:  auditChain,
+		KillSwitch:  killSwitch,
 	})
 
 	srv := &http.Server{

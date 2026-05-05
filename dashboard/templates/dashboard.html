@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIR Blackbox - Compliance Dashboard</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-dim: #8b949e;
+            --accent: #58a6ff;
+            --green: #3fb950;
+            --yellow: #d29922;
+            --red: #f85149;
+            --purple: #bc8cff;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+        .header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .header h1 span { color: var(--accent); }
+        .header .meta { color: var(--text-dim); font-size: 13px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .card .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .card .value { font-size: 28px; font-weight: 700; }
+        .card .value.green { color: var(--green); }
+        .card .value.yellow { color: var(--yellow); }
+        .card .value.red { color: var(--red); }
+        .card .value.accent { color: var(--accent); }
+        .card .sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+        .section { margin-bottom: 24px; }
+        .section h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge.success { background: rgba(63,185,80,0.15); color: var(--green); }
+        .badge.error { background: rgba(248,81,73,0.15); color: var(--red); }
+        .badge.warn { background: rgba(210,153,34,0.15); color: var(--yellow); }
+        .killswitch-banner {
+            background: rgba(248,81,73,0.1);
+            border: 1px solid var(--red);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: none;
+        }
+        .killswitch-banner.active { display: block; }
+        .killswitch-banner h3 { color: var(--red); margin-bottom: 4px; }
+        .bar-chart { display: flex; align-items: flex-end; gap: 2px; height: 60px; }
+        .bar-chart .bar {
+            flex: 1;
+            background: var(--accent);
+            border-radius: 2px 2px 0 0;
+            min-width: 4px;
+            transition: height 0.3s;
+        }
+        .refresh-btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .refresh-btn:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1><span>AIR Blackbox</span> Compliance Dashboard</h1>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;">
+            <span class="meta">{{ generated_at }}</span>
+            <button class="refresh-btn" onclick="location.reload()">Refresh</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Kill-switch banner -->
+        <div class="killswitch-banner" id="killswitch-banner">
+            <h3>Kill-Switch Active</h3>
+            <p id="killswitch-msg">AI system shutdown in progress (SB 942 compliance).</p>
+        </div>
+
+        <!-- Top-level KPIs -->
+        <div class="grid">
+            <div class="card">
+                <div class="label">Total Requests ({{ hours }}h)</div>
+                <div class="value accent">{{ stats.total_requests | default(0) }}</div>
+            </div>
+            <div class="card">
+                <div class="label">Success Rate</div>
+                <div class="value green">{{ stats.success_rate | default(0) }}%</div>
+            </div>
+            <div class="card">
+                <div class="label">Avg Latency</div>
+                <div class="value">{{ stats.avg_duration_ms | default(0) }}ms</div>
+            </div>
+            <div class="card">
+                <div class="label">Total Tokens</div>
+                <div class="value">{{ "{:,}".format(stats.total_tokens | default(0)) }}</div>
+            </div>
+        </div>
+
+        <!-- Security KPIs -->
+        <div class="grid">
+            <div class="card">
+                <div class="label">PII Detections</div>
+                <div class="value {% if stats.pii_detections > 0 %}red{% else %}green{% endif %}">{{ stats.pii_detections | default(0) }}</div>
+                <div class="sub">Personally identifiable information caught</div>
+            </div>
+            <div class="card">
+                <div class="label">Injection Blocks</div>
+                <div class="value {% if stats.injection_blocks > 0 %}red{% else %}green{% endif %}">{{ stats.injection_blocks | default(0) }}</div>
+                <div class="sub">Prompt injection attempts blocked</div>
+            </div>
+            <div class="card">
+                <div class="label">Guardrail Triggers</div>
+                <div class="value {% if stats.guardrail_triggers > 0 %}yellow{% else %}green{% endif %}">{{ stats.guardrail_triggers | default(0) }}</div>
+                <div class="sub">Budget, loop, or retry violations</div>
+            </div>
+            <div class="card">
+                <div class="label">Error Rate</div>
+                <div class="value {% if stats.error_rate > 5 %}red{% elif stats.error_rate > 1 %}yellow{% else %}green{% endif %}">{{ stats.error_rate | default(0) }}%</div>
+                <div class="sub">Upstream provider errors</div>
+            </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="two-col">
+            <div class="card section">
+                <h2>Requests / Hour</h2>
+                <div class="bar-chart" id="hourly-chart">
+                    {% for h in stats.requests_per_hour %}
+                    <div class="bar" style="height: {{ (h.count / (stats.requests_per_hour | map(attribute='count') | max | default(1)) * 100) | int }}%" title="{{ h.hour }}: {{ h.count }}"></div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="card section">
+                <h2>Model Distribution</h2>
+                <table>
+                    <thead><tr><th>Model</th><th>Requests</th><th>Share</th></tr></thead>
+                    <tbody>
+                    {% for model, count in stats.models.items() %}
+                    <tr>
+                        <td>{{ model }}</td>
+                        <td>{{ count }}</td>
+                        <td>{{ (count / stats.total_requests * 100) | round(1) }}%</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent records -->
+        <div class="card section">
+            <h2>Recent Requests</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Run ID</th>
+                        <th>Model</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Tokens</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in records %}
+                <tr>
+                    <td>{{ r.timestamp[:19] if r.timestamp else '-' }}</td>
+                    <td style="font-family:monospace;font-size:11px;">{{ r.run_id[:12] if r.run_id else '-' }}...</td>
+                    <td>{{ r.model or '-' }}</td>
+                    <td>{{ r.provider or '-' }}</td>
+                    <td>
+                        {% if r.status == 'success' %}
+                        <span class="badge success">OK</span>
+                        {% elif r.status == 'error' %}
+                        <span class="badge error">ERR</span>
+                        {% else %}
+                        <span class="badge warn">{{ r.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.tokens.total if r.tokens is mapping else '-' }}</td>
+                    <td>{{ r.duration_ms or '-' }}ms</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(() => location.reload(), 30000);
+
+        // Check kill-switch status
+        fetch('/api/killswitch')
+            .then(r => r.json())
+            .then(data => {
+                if (data.armed) {
+                    const banner = document.getElementById('killswitch-banner');
+                    banner.classList.add('active');
+                    const msg = document.getElementById('killswitch-msg');
+                    if (data.blocking) {
+                        msg.textContent = 'AI system is SHUT DOWN. All proxy requests are blocked.';
+                    } else {
+                        msg.textContent = 'Kill-switch armed. Shutdown in ' + (data.remaining_human || 'unknown') + '.';
+                    }
+                }
+            })
+            .catch(() => {});
+    </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type Config struct {
 	Sessions    *guardrails.Manager // session state for guardrails (nil = disabled)
 	Analytics   *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
 	AuditChain  *trust.AuditChain  // cryptographic audit chain (nil = disabled)
+	KillSwitch  *KillSwitch        // SB 942 kill-switch (nil = disabled)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -85,8 +87,18 @@ func Handler(cfg Config) http.Handler {
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+		status := map[string]interface{}{"status": "ok"}
+		if cfg.KillSwitch != nil && cfg.KillSwitch.ShouldBlock() {
+			status["status"] = "shutdown"
+			status["killswitch"] = cfg.KillSwitch.Status()
+		}
+		json.NewEncoder(w).Encode(status)
 	})
+
+	// Kill-switch management endpoints (SB 942 compliance).
+	if cfg.KillSwitch != nil {
+		RegisterKillSwitchRoutes(mux, cfg.KillSwitch, cfg.GatewayKey)
+	}
 
 	return mux
 }
@@ -126,11 +138,38 @@ type chatResponse struct {
 	} `json:"usage"`
 }
 
+// complianceHeaders holds computed compliance metadata to attach to every response.
+type complianceHeaders struct {
+	piiDetected    bool
+	piiRedacted    bool
+	injectionScore float64
+	injectionMatch []string
+	chainPosition  int
+}
+
 func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint string) {
 	start := time.Now()
 
 	// Generate run ID.
 	runID := uuid.New().String()
+
+	// Compliance headers -- populated as we go, written before response.
+	compliance := &complianceHeaders{}
+
+	// Kill-switch check: if armed and past deadline, block all proxy requests.
+	if cfg.KillSwitch != nil && cfg.KillSwitch.ShouldBlock() {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-AIR-KillSwitch", "blocking")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"type":     "killswitch_active",
+				"message":  "AI system shutdown in effect (SB 942 compliance)",
+				"deadline": cfg.KillSwitch.Deadline().UTC().Format(time.RFC3339),
+			},
+		})
+		return
+	}
 
 	ctx, span := tracer.Start(r.Context(), "llm.call",
 		trace.WithAttributes(
@@ -173,8 +212,53 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 		}
 
 		prevResult := guardrails.EvaluatePrevention(cfg.Guardrails, reqBody, promptText, toolNames, req.Model, sessionTokens)
+
+		// Track PII detection for compliance headers.
+		if prevResult.PIIRedacted {
+			compliance.piiRedacted = true
+			compliance.piiDetected = true
+		}
+		if prevResult.Blocked && strings.Contains(prevResult.BlockReason, "PII") {
+			compliance.piiDetected = true
+		}
+
+		// Run injection scoring (always, even if prevention doesn't block).
+		injResult := guardrails.CheckInjection(cfg.Guardrails.Prevention.Injection, promptText)
+		compliance.injectionScore = injResult.Score
+		compliance.injectionMatch = injResult.Matched
+		if injResult.Score >= cfg.Guardrails.Prevention.Injection.LogThreshold {
+			log.Printf("[injection] score=%.2f matched=%v session=%s", injResult.Score, injResult.Matched, sessionID)
+		}
+
+		// If injection score exceeds block threshold, block the request.
+		if injResult.Blocked {
+			log.Printf("[injection] blocked: score=%.2f session=%s", injResult.Score, sessionID)
+			setComplianceHeaders(w, compliance, cfg)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]interface{}{
+					"type":    "injection_detected",
+					"message": fmt.Sprintf("Prompt injection detected (score: %.2f)", injResult.Score),
+					"score":   injResult.Score,
+					"matched": injResult.Matched,
+				},
+			})
+			go guardrails.SendAlert(cfg.Guardrails, &guardrails.Violation{
+				Rule:      "injection",
+				Message:   fmt.Sprintf("Injection detected (score=%.2f, patterns=%v)", injResult.Score, injResult.Matched),
+				SessionID: sessionID,
+				Details: map[string]interface{}{
+					"score":   injResult.Score,
+					"matched": injResult.Matched,
+				},
+			})
+			return
+		}
+
 		if prevResult.Blocked {
 			log.Printf("[prevention] blocked: %s (session=%s)", prevResult.BlockReason, sessionID)
+			setComplianceHeaders(w, compliance, cfg)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -183,7 +267,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 					"message": prevResult.BlockReason,
 				},
 			})
-			go guardrails.SendWebhookAlert(cfg.Guardrails.Alerts.WebhookURL, &guardrails.Violation{
+			go guardrails.SendAlert(cfg.Guardrails, &guardrails.Violation{
 				Rule:      "prevention",
 				Message:   prevResult.BlockReason,
 				SessionID: sessionID,
@@ -253,7 +337,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 						"details":    v.Details,
 					},
 				})
-				go guardrails.SendWebhookAlert(cfg.Guardrails.Alerts.WebhookURL, v)
+				go guardrails.SendAlert(cfg.Guardrails, v)
 				cfg.Sessions.Remove(sessionID)
 				return
 			}
@@ -303,9 +387,9 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 
 	// --- Streaming vs non-streaming response handling ---
 	if req.Stream && resp.Header.Get("Content-Type") == "text/event-stream" {
-		handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+		handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start, compliance)
 	} else {
-		handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+		handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start, compliance)
 	}
 
 	// Update guardrails session state after response.
@@ -320,9 +404,11 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 // capturing the full response in the background for vault storage.
 func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) {
+	provider, endpoint string, reqBody []byte, start time.Time,
+	compliance *complianceHeaders) {
 
-	// Set streaming headers.
+	// Set streaming headers + compliance headers.
+	setComplianceHeaders(w, compliance, cfg)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -392,7 +478,8 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 // handleBufferedResponse handles traditional (non-streaming) responses.
 func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) {
+	provider, endpoint string, reqBody []byte, start time.Time,
+	compliance *complianceHeaders) {
 
 	// Read response body.
 	respBody, err := io.ReadAll(resp.Body)
@@ -425,7 +512,8 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 		status = "error"
 	}
 
-	// Return response to caller.
+	// Return response to caller with compliance headers.
+	setComplianceHeaders(w, compliance, cfg)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(respBody)
@@ -693,6 +781,44 @@ func inferProvider(model, providerURL string) string {
 	}
 }
 
+
+// setComplianceHeaders writes X-AIR-* compliance headers onto the response.
+// These headers give downstream consumers real-time compliance telemetry.
+func setComplianceHeaders(w http.ResponseWriter, ch *complianceHeaders, cfg Config) {
+	// PII detection status
+	if ch.piiDetected {
+		w.Header().Set("X-AIR-PII-Detected", "true")
+		if ch.piiRedacted {
+			w.Header().Set("X-AIR-PII-Action", "redacted")
+		} else {
+			w.Header().Set("X-AIR-PII-Action", "blocked")
+		}
+	} else {
+		w.Header().Set("X-AIR-PII-Detected", "false")
+	}
+
+	// Injection score (always set when guardrails are active)
+	w.Header().Set("X-AIR-Injection-Score", strconv.FormatFloat(ch.injectionScore, 'f', 2, 64))
+	if len(ch.injectionMatch) > 0 {
+		w.Header().Set("X-AIR-Injection-Matched", strings.Join(ch.injectionMatch, ","))
+	}
+
+	// Audit chain position (for Art. 12 traceability)
+	if cfg.AuditChain != nil {
+		w.Header().Set("X-AIR-Chain-Position", strconv.FormatInt(cfg.AuditChain.Len(), 10))
+		w.Header().Set("X-AIR-Chain-Enabled", "true")
+	}
+
+	// Kill-switch status
+	if cfg.KillSwitch != nil {
+		if cfg.KillSwitch.IsActive() {
+			w.Header().Set("X-AIR-KillSwitch", "armed")
+			w.Header().Set("X-AIR-KillSwitch-Deadline", cfg.KillSwitch.Deadline().UTC().Format(time.RFC3339))
+		} else {
+			w.Header().Set("X-AIR-KillSwitch", "disarmed")
+		}
+	}
+}
 
 // handleAnalytics returns per-model performance stats as JSON.
 // GET /v1/analytics - returns all models.

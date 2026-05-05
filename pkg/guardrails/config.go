@@ -54,6 +54,7 @@ type RouterConfig struct {
 type PreventionConfig struct {
 	Tools       ToolFilterConfig `yaml:"tools"`
 	PII         PIIConfig        `yaml:"pii"`
+	Injection   InjectionConfig  `yaml:"injection"`
 	ModelLimits ModelLimitConfig `yaml:"model_limits"`
 	Approval    ApprovalConfig   `yaml:"approval"`
 }
@@ -118,7 +119,8 @@ type RetryConfig struct {
 
 // AlertConfig controls where alerts are sent.
 type AlertConfig struct {
-	WebhookURL string `yaml:"webhook_url"`
+	WebhookURL string          `yaml:"webhook_url"` // Slack incoming webhook URL
+	PagerDuty  PagerDutyConfig `yaml:"pagerduty"`   // PagerDuty Events API v2
 }
 
 // ActionsConfig controls what happens when a guardrail triggers.
@@ -175,6 +177,12 @@ func applyDefaults(cfg *Config) {
 	// Prevention defaults
 	if cfg.Prevention.PII.RedactMode == "" {
 		cfg.Prevention.PII.RedactMode = "redact"
+	}
+	if cfg.Prevention.Injection.BlockThreshold == 0 {
+		cfg.Prevention.Injection.BlockThreshold = 0.5
+	}
+	if cfg.Prevention.Injection.LogThreshold == 0 {
+		cfg.Prevention.Injection.LogThreshold = 0.3
 	}
 	if cfg.Prevention.Approval.TimeoutSeconds == 0 {
 		cfg.Prevention.Approval.TimeoutSeconds = 30
