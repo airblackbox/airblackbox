@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/airblackbox/airblackbox/main/assets/demo.gif" alt="AIR Blackbox scanning a Python AI project" width="700">
-  </p>
+</p>
 
 ## Install
 

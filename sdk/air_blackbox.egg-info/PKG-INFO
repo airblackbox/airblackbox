@@ -1,14 +1,14 @@
 Metadata-Version: 2.4
 Name: air-blackbox
-Version: 1.2.5
-Summary: AI governance control plane — compliance, inventory, incident response, and audit for AI agents
+Version: 1.8.2
+Summary: AI governance control plane - compliance, inventory, incident response, and audit for AI agents
 Author-email: Jason Shotwell <jason.j.shotwell@gmail.com>
 License-Expression: Apache-2.0
 Project-URL: Homepage, https://airblackbox.ai
-Project-URL: Repository, https://github.com/airblackbox/gateway
-Project-URL: Documentation, https://github.com/airblackbox/gateway/tree/main/docs
-Project-URL: Issues, https://github.com/airblackbox/gateway/issues
-Keywords: ai,governance,compliance,eu-ai-act,audit,opentelemetry,llm,ai-agents,aibom,shadow-ai
+Project-URL: Repository, https://github.com/airblackbox/airblackbox
+Project-URL: Documentation, https://github.com/airblackbox/airblackbox/tree/main/docs
+Project-URL: Issues, https://github.com/airblackbox/airblackbox/issues
+Keywords: ai,governance,compliance,eu-ai-act,audit,opentelemetry,llm,ai-agents,aibom,shadow-ai,gdpr,prompt-injection,ai-safety
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Python :: 3
@@ -25,29 +25,42 @@ Requires-Dist: click>=8.0
 Requires-Dist: rich>=13.0
 Requires-Dist: httpx>=0.25.0
 Requires-Dist: pydantic>=2.0
+Requires-Dist: pyyaml>=6.0
 Provides-Extra: langchain
 Requires-Dist: langchain-core>=0.2.0; extra == "langchain"
 Provides-Extra: crewai
 Requires-Dist: crewai>=0.50.0; extra == "crewai"
+Provides-Extra: haystack
+Requires-Dist: haystack-ai>=2.0.0; extra == "haystack"
 Provides-Extra: openai
 Requires-Dist: openai>=1.0; extra == "openai"
 Provides-Extra: autogen
 Requires-Dist: autogen-agentchat>=0.4.0; extra == "autogen"
 Provides-Extra: adk
 Requires-Dist: google-adk>=0.1.0; extra == "adk"
+Provides-Extra: claude
+Requires-Dist: claude-agent-sdk>=0.1.0; extra == "claude"
+Provides-Extra: pdf
+Requires-Dist: reportlab>=4.0; extra == "pdf"
+Provides-Extra: gate
+Requires-Dist: cryptography>=42.0; extra == "gate"
 Provides-Extra: all
 Requires-Dist: air-blackbox[langchain]; extra == "all"
 Requires-Dist: air-blackbox[crewai]; extra == "all"
+Requires-Dist: air-blackbox[haystack]; extra == "all"
 Requires-Dist: air-blackbox[openai]; extra == "all"
 Requires-Dist: air-blackbox[autogen]; extra == "all"
+Requires-Dist: air-blackbox[claude]; extra == "all"
+Requires-Dist: air-blackbox[pdf]; extra == "all"
+Requires-Dist: air-blackbox[gate]; extra == "all"
 Dynamic: license-file
 
 # AIR Blackbox
 
-**AI governance control plane — compliance, inventory, incident response, and audit for AI agents.**
+**AI governance control plane - compliance, inventory, incident response, and audit for AI agents.**
 
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/airblackbox/gateway/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/airblackbox/airblackbox/blob/main/LICENSE)
 [![EU AI Act](https://img.shields.io/badge/EU_AI_Act-ready-green)](https://airblackbox.ai)
 
 ## Install
@@ -106,6 +119,6 @@ trust.attach(your_langchain_agent)
 ## Links
 
 - **Website**: [airblackbox.ai](https://airblackbox.ai)
-- **Gateway**: [github.com/airblackbox/gateway](https://github.com/airblackbox/gateway)
-- **Docs**: [gateway/docs](https://github.com/airblackbox/gateway/tree/main/docs)
+- **Gateway**: [github.com/airblackbox/airblackbox](https://github.com/airblackbox/airblackbox)
+- **Docs**: [gateway/docs](https://github.com/airblackbox/airblackbox/tree/main/docs)
 - **License**: Apache-2.0

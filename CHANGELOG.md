@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-04-28
+
+**Added**
+- Feedback-to-retrain pipeline: `air-blackbox feedback` and `air-blackbox retrain` commands
+- ML-DSA-65 (FIPS 204) quantum-safe signing with Ed25519 and HMAC-SHA256 fallback
+- Self-verifying `.air-evidence` bundles with embedded `verify.py`
+- AES-GCM encrypted vault storage (data encrypted at rest)
+- Replay-and-diff for incident reconstruction with structured diff output
+- Colorado SB 24-205 added to standards crosswalk
+
+**Changed**
+- Check count increased from 48 to 51 (3 new Colorado SB 24-205 checks)
+- Version standardized to 1.12.0 across all files, CLI, site, and PyPI
+
+**Fixed**
+- CLI version reporting (was stuck at 1.8.0)
+- CONTRIBUTING.md version reference
+- Site check count consistency (48 to 51 everywhere)
+
+## [1.10.0] - 2026-04-14
+
+**Added**
+- A2A Transaction Layer for signed agent-to-agent compliance auditing
+- Gate policy enforcement engine (air-gate Go reverse proxy)
+- Trust layers for LangChain, CrewAI, OpenAI Agents SDK, Google ADK, AutoGen, Haystack
+- Unified `air-trust` package consolidating all 7 framework trust layers
+- HMAC-SHA256 tamper-evident audit chains with cryptographic verification
+- Compliance action for GitHub CI/CD (`airblackbox/compliance-action@v1`)
+
+**Changed**
+- Check count increased from 39 to 48
+- Consolidated individual framework trust repos into single `air-trust` package
+
+## [1.8.0] - 2026-04-01
+
+**Added**
+- Initial public release on PyPI (`pip install air-blackbox`)
+- EU AI Act compliance scanner covering Articles 9, 10, 11, 12, 14, 15
+- CLI commands: `comply`, `discover`, `replay`, `export`
+- GDPR scanning (8 automated checks)
+- Bias detection (6 checks)
+- Prompt injection detection (20 weighted patterns)
+- PDF gap analysis reports
+- Pre-commit hook configurations
+- MCP server for Claude Desktop and Cursor integration
+
+**Fixed**
+- Standards crosswalk dict serialization
+- Evidence bundle hash consistency
+
 ## [1.6.1] - 2026-03-28
 
 **Fixed**

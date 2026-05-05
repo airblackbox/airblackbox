@@ -1638,3 +1638,413 @@ def test(gateway, verbose):
                 border_style="green",
             ))
     console.print()
+
+
+# ── Feedback command ─────────────────────────────────────────────────
+@main.command()
+@click.option("--scan-id", default=None, help="Scan ID from a previous comply run")
+@click.option("--article", type=int, default=0, help="Article number (9, 10, 11, 12, 14, 15)")
+@click.option("--false-positive", is_flag=True, help="Flag: the finding was a false positive")
+@click.option("--correction", default=None, help="What the scanner should have said")
+@click.option("--code-file", default=None, type=click.Path(exists=True), help="The scanned file")
+@click.option("--interactive", is_flag=True, help="Interactive mode with prompts")
+def feedback(scan_id, article, false_positive, correction, code_file, interactive):
+    """Report a false positive or correction to improve the scanner.
+
+    Your feedback gets written to training data so the next model retrain
+    permanently fixes the issue. Every correction makes the scanner smarter.
+
+    Examples:
+
+        air-blackbox feedback --article 12 --false-positive \\
+            --correction "structlog counts as audit logging" \\
+            --code-file agent.py
+
+        air-blackbox feedback --interactive
+    """
+    import os as _os
+    from air_blackbox.feedback import accept_and_write
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Scanner Feedback\n")
+
+    if interactive:
+        scan_id = scan_id or click.prompt("Scan ID (or press Enter to skip)", default="manual")
+        article = article or click.prompt("Article number", type=int)
+        false_positive = false_positive or click.confirm("Was this a false positive?")
+        correction = correction or click.prompt("What should the scanner have said?")
+        if not code_file:
+            code_file_input = click.prompt("Path to the scanned file (or Enter to skip)", default="")
+            code_file = code_file_input if code_file_input else None
+
+    if article not in (9, 10, 11, 12, 14, 15):
+        console.print(f"[red]Invalid article: {article}. Must be 9, 10, 11, 12, 14, or 15.[/]")
+        return
+
+    code_snippet = ""
+    if code_file:
+        try:
+            with open(code_file, "r", encoding="utf-8", errors="ignore") as f:
+                code_snippet = f.read()
+            if len(code_snippet) > 10000:
+                code_snippet = code_snippet[:10000] + "\n# ... (truncated)"
+        except Exception as e:
+            console.print(f"[yellow]Could not read {code_file}: {e}[/]")
+
+    feedback_text = correction or "False positive reported"
+    severity = "high" if false_positive else "medium"
+
+    try:
+        result = accept_and_write(
+            scan_id=scan_id or "manual",
+            article=article,
+            severity=severity,
+            feedback_text=feedback_text,
+            original_finding="",
+            corrected_finding=correction or "",
+            code_snippet=code_snippet,
+            is_false_positive=false_positive,
+        )
+
+        console.print(f"  [green]Feedback recorded.[/] ID: [bold]{result['feedback_id']}[/]")
+        console.print(f"  Training data: {result['output_path']}")
+        console.print(f"  Total corrections: {result['total_in_file']}")
+        console.print()
+        console.print("  [dim]Run 'air-blackbox retrain status' to see pending corrections.[/]")
+        console.print("  [dim]Run 'air-blackbox retrain all' to retrain the model.[/]")
+        console.print()
+
+    except ValueError as e:
+        console.print(f"[red]Validation error: {e}[/]")
+
+
+# ── Retrain command group ────────────────────────────────────────────
+@main.group()
+def retrain():
+    """Retrain the compliance model from accumulated feedback.
+
+    The retrain pipeline merges user corrections into the training corpus,
+    fine-tunes Llama 3.2 1B via Unsloth + QLoRA, evaluates accuracy, and
+    registers the updated model with Ollama.
+
+    Subcommands:
+
+        air-blackbox retrain status    Show pending feedback and model info
+
+        air-blackbox retrain merge     Merge feedback into training data
+
+        air-blackbox retrain run       Fine-tune and evaluate
+
+        air-blackbox retrain publish   Register model with Ollama
+
+        air-blackbox retrain all       Run full pipeline
+    """
+    pass
+
+
+@retrain.command()
+def status():
+    """Show current model version, training data stats, and pending feedback."""
+    import os as _os
+    import shutil
+    import subprocess
+    import json as jsonlib
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Retrain Status\n")
+
+    home_dir = _os.path.expanduser("~/.air-blackbox")
+    feedback_path = _os.path.join(home_dir, "training_feedback.jsonl")
+
+    # Count pending feedback.
+    pending = 0
+    fp_count = 0
+    if _os.path.exists(feedback_path):
+        with open(feedback_path) as f:
+            for line in f:
+                if line.strip():
+                    pending += 1
+                    try:
+                        ex = jsonlib.loads(line)
+                        output = ex.get("output", "")
+                        if "NO ISSUE" in output or "false positive" in output.lower():
+                            fp_count += 1
+                    except jsonlib.JSONDecodeError:
+                        pass
+
+    console.print(f"  Pending feedback corrections: [bold]{pending}[/]")
+    if fp_count:
+        console.print(f"    False positive corrections: {fp_count}")
+    console.print(f"  Feedback file: {feedback_path}")
+
+    # Check Ollama model.
+    if shutil.which("ollama"):
+        try:
+            proc = subprocess.run(
+                ["ollama", "list"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            models = [line for line in proc.stdout.split("\n") if "air-compliance" in line]
+            if models:
+                console.print(f"\n  [green]Installed models:[/]")
+                for m in models:
+                    console.print(f"    {m.strip()}")
+            else:
+                console.print(f"\n  [yellow]No air-compliance model installed.[/]")
+                console.print(f"  [dim]Run 'air-blackbox setup' to install.[/]")
+        except Exception:
+            console.print(f"\n  [yellow]Could not query Ollama.[/]")
+    else:
+        console.print(f"\n  [yellow]Ollama not installed.[/]")
+
+    console.print()
+
+
+@retrain.command("merge")
+@click.option("--canonical", default=None, help="Path to canonical training_data_v{N}.jsonl")
+@click.option("--feedback", "feedback_path", default=None, help="Path to feedback JSONL")
+@click.option("--output-dir", default=None, help="Directory for merged output")
+@click.option("--min-count", default=5, help="Minimum feedback count before merging")
+def retrain_merge(canonical, feedback_path, output_dir, min_count):
+    """Merge accumulated feedback into the training corpus."""
+    import os as _os
+    from air_blackbox.retrain.merge import merge_training_data
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Merge Training Data\n")
+
+    home_dir = _os.path.expanduser("~/.air-blackbox")
+    feedback_path = feedback_path or _os.path.join(home_dir, "training_feedback.jsonl")
+    output_dir = output_dir or _os.path.join(home_dir, "training")
+
+    if not canonical:
+        import glob as globmod
+        candidates = sorted(globmod.glob(_os.path.join(output_dir, "training_data_v*.jsonl")))
+        if not candidates:
+            repo_dir = _os.path.join(_os.getcwd(), "training")
+            candidates = sorted(globmod.glob(_os.path.join(repo_dir, "training_data_v*.jsonl")))
+        if candidates:
+            canonical = candidates[-1]
+            console.print(f"  [dim]Using canonical: {canonical}[/]")
+        else:
+            console.print("[red]No canonical training data found. Specify with --canonical[/]")
+            return
+
+    report = merge_training_data(
+        canonical_path=canonical,
+        feedback_path=feedback_path,
+        output_dir=output_dir,
+        min_feedback_count=min_count,
+    )
+
+    if report.blocked:
+        console.print(f"  [red]Merge blocked:[/] {report.block_reason}")
+        return
+
+    console.print(f"  Version: [bold]{report.version}[/]")
+    console.print(f"  Canonical examples: {report.canonical_examples:,}")
+    console.print(f"  New from feedback: [bold green]{report.new_from_feedback}[/]")
+    console.print(f"  Duplicates skipped: {report.duplicates_skipped}")
+    console.print(f"  Invalid skipped: {report.invalid_skipped}")
+    console.print(f"  Total examples: [bold]{report.total_examples:,}[/]")
+    console.print(f"  False positive fixes: {report.false_positive_corrections}")
+    console.print(f"  Output: {report.output_path}")
+
+    if report.warnings:
+        for w in report.warnings:
+            console.print(f"  [yellow]Warning: {w}[/]")
+
+    console.print()
+
+
+@retrain.command("run")
+@click.option("--training-data", default=None, help="Path to merged training JSONL")
+@click.option("--output-dir", default=None, help="Directory for model output")
+@click.option("--epochs", default=3, help="Training epochs")
+@click.option("--batch-size", default=4, help="Batch size")
+def retrain_run(training_data, output_dir, epochs, batch_size):
+    """Fine-tune the compliance model on merged training data."""
+    import os as _os
+    from air_blackbox.retrain.run import retrain as do_retrain, RetrainConfig
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Model Retraining\n")
+
+    home_dir = _os.path.expanduser("~/.air-blackbox")
+    output_dir = output_dir or _os.path.join(home_dir, "models")
+
+    if not training_data:
+        import glob as globmod
+        training_dir = _os.path.join(home_dir, "training")
+        candidates = sorted(globmod.glob(_os.path.join(training_dir, "training_data_v*.jsonl")))
+        if candidates:
+            training_data = candidates[-1]
+            console.print(f"  [dim]Using: {training_data}[/]")
+        else:
+            console.print("[red]No training data found. Run 'air-blackbox retrain merge' first.[/]")
+            return
+
+    config = RetrainConfig(
+        training_data=training_data,
+        output_dir=output_dir,
+        epochs=epochs,
+        batch_size=batch_size,
+    )
+
+    console.print(f"  Base model: {config.base_model}")
+    console.print(f"  Epochs: {config.epochs}")
+    console.print(f"  Eval threshold: {config.eval_threshold:.0%}")
+    console.print()
+
+    with console.status("[bold green]Training model (this may take 1-2 hours)..."):
+        result = do_retrain(config)
+
+    if result.success:
+        console.print(f"  [green]Training complete![/]")
+        console.print(f"  Version: [bold]{result.version}[/]")
+        console.print(f"  Loss: {result.training_loss:.4f}")
+        console.print(f"  Accuracy: {result.eval_accuracy:.1%}")
+        console.print(f"  False positive rate: {result.eval_false_positive_rate:.1%}")
+        console.print(f"  GGUF: {result.gguf_path}")
+        console.print(f"  Duration: {result.duration_seconds // 60}m {result.duration_seconds % 60}s")
+    else:
+        console.print(f"  [red]Training failed:[/] {result.error}")
+        if result.model_path:
+            console.print(f"  [dim]Failed model saved at: {result.model_path}[/]")
+
+    console.print()
+
+
+@retrain.command("publish")
+@click.option("--gguf", default=None, help="Path to .gguf model file")
+@click.option("--version", "version_str", default=None, help="Version string (e.g., v12)")
+def retrain_publish(gguf, version_str):
+    """Register the retrained model with Ollama."""
+    import os as _os
+    import re as re_mod
+    from air_blackbox.retrain.publish import publish_model
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Publish Model\n")
+
+    if not gguf:
+        import glob as globmod
+        home_dir = _os.path.expanduser("~/.air-blackbox/models")
+        candidates = sorted(globmod.glob(_os.path.join(home_dir, "v*/gguf/*.gguf")))
+        if candidates:
+            gguf = candidates[-1]
+            console.print(f"  [dim]Using: {gguf}[/]")
+        else:
+            console.print("[red]No GGUF model found. Run 'air-blackbox retrain run' first.[/]")
+            return
+
+    if not version_str:
+        m = re_mod.search(r"v(\d+)", gguf)
+        version_str = f"v{m.group(1)}" if m else "v0"
+
+    result = publish_model(
+        gguf_path=gguf,
+        version=version_str,
+        changelog_path=_os.path.join(_os.getcwd(), "CHANGELOG.md"),
+        pyproject_path=_os.path.join(_os.getcwd(), "pyproject.toml"),
+    )
+
+    if result.success:
+        console.print(f"  [green]Published![/] Model: [bold]{result.ollama_model}[/]")
+        console.print(f"  Model card: {result.model_card_path}")
+        console.print()
+        console.print("  [dim]Users can now run 'air-blackbox setup' to get the updated model.[/]")
+    else:
+        console.print(f"  [red]Publish failed:[/] {result.error}")
+
+    console.print()
+
+
+@retrain.command("all")
+@click.option("--canonical", default=None, help="Path to canonical training data")
+@click.option("--min-count", default=5, help="Minimum feedback corrections before retraining")
+def retrain_all(canonical, min_count):
+    """Run the full retrain pipeline: merge, train, evaluate, publish.
+
+    This is the one-command version. It stops and reports if any step fails.
+    """
+    import os as _os
+    from air_blackbox.retrain.merge import merge_training_data
+    from air_blackbox.retrain.run import retrain as do_retrain, RetrainConfig
+    from air_blackbox.retrain.publish import publish_model
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Full Retrain Pipeline\n")
+
+    home_dir = _os.path.expanduser("~/.air-blackbox")
+    feedback_path = _os.path.join(home_dir, "training_feedback.jsonl")
+    training_dir = _os.path.join(home_dir, "training")
+    models_dir = _os.path.join(home_dir, "models")
+
+    # Step 1: Merge.
+    console.print("[bold]Step 1/3:[/] Merging feedback into training data...")
+
+    if not canonical:
+        import glob as globmod
+        candidates = sorted(globmod.glob(_os.path.join(training_dir, "training_data_v*.jsonl")))
+        if not candidates:
+            repo_dir = _os.path.join(_os.getcwd(), "training")
+            candidates = sorted(globmod.glob(_os.path.join(repo_dir, "training_data_v*.jsonl")))
+        if candidates:
+            canonical = candidates[-1]
+        else:
+            console.print("  [red]No canonical training data found.[/]")
+            return
+
+    merge_report = merge_training_data(
+        canonical_path=canonical,
+        feedback_path=feedback_path,
+        output_dir=training_dir,
+        min_feedback_count=min_count,
+    )
+
+    if merge_report.blocked:
+        console.print(f"  [red]Blocked:[/] {merge_report.block_reason}")
+        return
+
+    console.print(f"  [green]Merged {merge_report.new_from_feedback} new corrections[/] ({merge_report.total_examples:,} total)")
+
+    # Step 2: Retrain.
+    console.print(f"\n[bold]Step 2/3:[/] Fine-tuning model ({merge_report.version})...")
+
+    config = RetrainConfig(training_data=merge_report.output_path, output_dir=models_dir)
+
+    with console.status("[bold green]Training (this may take 1-2 hours)..."):
+        retrain_result = do_retrain(config)
+
+    if not retrain_result.success:
+        console.print(f"  [red]Training failed:[/] {retrain_result.error}")
+        return
+
+    console.print(f"  [green]Accuracy: {retrain_result.eval_accuracy:.1%}[/], FP rate: {retrain_result.eval_false_positive_rate:.1%}")
+
+    # Step 3: Publish.
+    console.print(f"\n[bold]Step 3/3:[/] Publishing to Ollama...")
+
+    pub_result = publish_model(
+        gguf_path=retrain_result.gguf_path,
+        version=merge_report.version,
+        merge_report=merge_report,
+        retrain_result=retrain_result,
+        changelog_path=_os.path.join(_os.getcwd(), "CHANGELOG.md"),
+        pyproject_path=_os.path.join(_os.getcwd(), "pyproject.toml"),
+    )
+
+    if pub_result.success:
+        console.print(f"  [green]Published![/] Model: [bold]{pub_result.ollama_model}[/]")
+        console.print()
+        console.print(Panel(
+            f"[bold green]Retrain Complete[/]\n\n"
+            f"  Version: {merge_report.version}\n"
+            f"  New corrections: {merge_report.new_from_feedback}\n"
+            f"  False positives fixed: {merge_report.false_positive_corrections}\n"
+            f"  Accuracy: {retrain_result.eval_accuracy:.1%}\n"
+            f"  Model: {pub_result.ollama_model}\n"
+            f"  Duration: {retrain_result.duration_seconds // 60}m\n",
+            border_style="green",
+        ))
+    else:
+        console.print(f"  [red]Publish failed:[/] {pub_result.error}")
+
+    console.print()

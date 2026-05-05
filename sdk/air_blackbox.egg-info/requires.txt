@@ -2,6 +2,7 @@ click>=8.0
 rich>=13.0
 httpx>=0.25.0
 pydantic>=2.0
+pyyaml>=6.0
 
 [adk]
 google-adk>=0.1.0
@@ -9,17 +10,33 @@ google-adk>=0.1.0
 [all]
 air-blackbox[langchain]
 air-blackbox[crewai]
+air-blackbox[haystack]
 air-blackbox[openai]
 air-blackbox[autogen]
+air-blackbox[claude]
+air-blackbox[pdf]
+air-blackbox[gate]
 
 [autogen]
 autogen-agentchat>=0.4.0
 
+[claude]
+claude-agent-sdk>=0.1.0
+
 [crewai]
 crewai>=0.50.0
+
+[gate]
+cryptography>=42.0
+
+[haystack]
+haystack-ai>=2.0.0
 
 [langchain]
 langchain-core>=0.2.0
 
 [openai]
 openai>=1.0
+
+[pdf]
+reportlab>=4.0
