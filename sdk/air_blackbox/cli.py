@@ -13,13 +13,67 @@ AIR Blackbox CLI - AI governance control plane.
 """
 
 import click
+import json
+import subprocess
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from air_blackbox import __version__ as _ab_version
 
 console = Console()
+
+
+def _compliance_score(articles: list[dict]) -> int:
+    checks = [check for article in articles for check in article.get("checks", [])]
+    if not checks:
+        return 100
+    passing = sum(1 for check in checks if check.get("status") == "pass")
+    return round(passing / len(checks) * 100)
+
+
+def _load_baseline_score(path: str) -> int:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, (int, float)):
+        return round(float(data))
+    if isinstance(data, dict):
+        for key in ("score", "compliance_score", "complianceScore"):
+            if key in data:
+                return round(float(data[key]))
+        if "articles" in data:
+            return _compliance_score(data["articles"])
+    if isinstance(data, list):
+        return _compliance_score(data)
+    raise click.ClickException(f"could not load baseline score from {path}")
+
+
+def _git_staged_python_files() -> list[str]:
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "--", "*.py"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+@contextmanager
+def _staged_scan_tree(paths: list[str]):
+    with tempfile.TemporaryDirectory(prefix="air-blackbox-staged-") as tmp:
+        root = Path(tmp)
+        for rel in paths:
+            target = root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            staged = subprocess.run(
+                ["git", "show", f":{rel}"],
+                check=True,
+                capture_output=True,
+            )
+            target.write_bytes(staged.stdout)
+        yield str(root)
 
 
 AIR_BANNER = r"""[bold #00d4aa]
@@ -148,11 +202,26 @@ def setup():
 @click.option("--no-llm", is_flag=True, help="Skip LLM analysis, regex-only scan")
 @click.option("--model", default="air-compliance", help="Ollama model for deep scan")
 @click.option("--no-save", is_flag=True, help="Don't save results to compliance history")
-def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
+@click.option("--changed-only", is_flag=True, help="Scan only Python files staged in git")
+@click.option("--baseline", default=None, help="Path to saved baseline score JSON")
+def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, changed_only, baseline):
     """Check EU AI Act compliance from live gateway traffic."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
     console.print("\n[bold blue]AIR Blackbox[/] - EU AI Act Compliance Check\n")
+    staged_files = []
+    staged_context = None
+    if changed_only:
+        try:
+            staged_files = _git_staged_python_files()
+        except subprocess.CalledProcessError as exc:
+            raise click.ClickException("could not list staged Python files") from exc
+        if not staged_files:
+            console.print("  [green]●[/] No staged Python files found; compliance score unchanged.")
+            return
+        staged_context = _staged_scan_tree(staged_files)
+        scan = staged_context.__enter__()
+
     with console.status("[bold green]Connecting to gateway..."):
         client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
         status = client.get_status()
@@ -165,7 +234,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         console.print(f"  [green]●[/] [bold]{status.total_runs:,}[/] logged events from {src} ({', '.join(status.models_observed[:3])})")
     else:
         console.print(f"  [yellow]●[/] No traffic data found")
-    console.print(f"  [dim]Scanning: {scan}[/]\n")
+    if changed_only:
+        console.print(f"  [dim]Scanning staged files: {len(staged_files)} Python file(s)[/]\n")
+    else:
+        console.print(f"  [dim]Scanning: {scan}[/]\n")
     articles, detected_frameworks, rec_pkg = run_all_checks(status, scan)
 
     # Hybrid mode: auto-run LLM analysis unless --no-llm
@@ -399,6 +471,9 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
             if verbose:
                 console.print("  [dim]Could not save to compliance history[/]")
 
+    compliance_score = _compliance_score(articles)
+    baseline_score = _load_baseline_score(baseline) if baseline else None
+
     if fmt == "json":
         import json
         output_data = articles
@@ -418,6 +493,14 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
                 } for f in deep_findings],
             })
         click.echo(json.dumps(output_data, indent=2))
+        if baseline_score is not None and compliance_score < baseline_score:
+            if staged_context is not None:
+                staged_context.__exit__(None, None, None)
+            raise click.ClickException(
+                f"compliance score decreased: {compliance_score} < baseline {baseline_score}"
+            )
+        if staged_context is not None:
+            staged_context.__exit__(None, None, None)
         return
     for article in articles:
         table = Table(title=f"Article {article['number']} - {article['title']}",
@@ -479,6 +562,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
     r_pass = sum(1 for c in runtime_checks if c["status"] == "pass")
     r_total = len(runtime_checks)
     parts = f"[bold green]{passing}[/] passing  [bold yellow]{warning}[/] warnings  [bold red]{failing}[/] failing  out of [bold]{total}[/] checks"
+    parts += f"\n  [bold]Compliance score[/]: [bold]{compliance_score}[/]/100"
+    if baseline_score is not None:
+        verdict = "unchanged or improved" if compliance_score >= baseline_score else "decreased"
+        parts += f"  (baseline {baseline_score}/100, {verdict})"
     parts += f"\n\n  [green]Static analysis[/]:  [bold]{s_pass}/{s_total}[/] passing  (code patterns, docs, config)"
     parts += f"\n  [blue]Runtime checks[/]:   [bold]{r_pass}/{r_total}[/] passing  (requires gateway or trust layer)"
     if deep_findings:
@@ -536,6 +623,15 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
         )
     except Exception:
         pass  # Telemetry should never break the tool
+
+    if baseline_score is not None and compliance_score < baseline_score:
+        if staged_context is not None:
+            staged_context.__exit__(None, None, None)
+        raise click.ClickException(
+            f"compliance score decreased: {compliance_score} < baseline {baseline_score}"
+        )
+    if staged_context is not None:
+        staged_context.__exit__(None, None, None)
 
 
 @main.command()
