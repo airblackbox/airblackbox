@@ -45,7 +45,7 @@ def print_banner():
 
 
 @click.group()
-@click.version_option(version="1.8.0", prog_name="air-blackbox")
+@click.version_option(version="1.12.0", prog_name="air-blackbox")
 @click.pass_context
 def main(ctx):
     """AIR Blackbox - AI governance control plane.
@@ -1553,7 +1553,7 @@ def test(gateway, verbose):
     def test_version_consistency():
         """Verify version is consistent across pyproject.toml, __init__.py, and cli."""
         import air_blackbox
-        cli_version = "1.8.0"  # from @click.version_option
+        cli_version = "1.12.0"  # from @click.version_option
         init_version = air_blackbox.__version__
         assert init_version == cli_version, f"__init__ ({init_version}) != cli ({cli_version})"
         return True, f"Version {init_version} consistent across modules"
