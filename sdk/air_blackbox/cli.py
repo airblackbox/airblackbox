@@ -13,7 +13,9 @@ AIR Blackbox CLI - AI governance control plane.
 """
 
 import click
-from datetime import datetime
+import json
+from contextlib import nullcontext
+from datetime import UTC, datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -53,8 +55,64 @@ def main(ctx):
     Route your AI traffic through the gateway and get compliance,
     security, inventory, and incident response out of the box.
     """
-    if ctx.invoked_subcommand not in ("--version", None):
+    if ctx.invoked_subcommand not in ("--version", "comply", None):
         print_banner()
+
+
+def _build_compliance_json(articles, deep_findings=None):
+    """Build machine-readable compliance output for CI/CD consumers."""
+    deep_findings = deep_findings or []
+    all_checks = [check for article in articles for check in article.get("checks", [])]
+
+    article_counts = {}
+    for article in articles:
+        key = f"article_{str(article.get('number')).lower()}"
+        checks = article.get("checks", [])
+        article_counts[key] = {
+            "passed": sum(1 for check in checks if check.get("status") == "pass"),
+            "warned": sum(1 for check in checks if check.get("status") == "warn"),
+            "failed": sum(1 for check in checks if check.get("status") == "fail"),
+        }
+
+    findings = []
+    for article in articles:
+        article_number = article.get("number")
+        for check in article.get("checks", []):
+            findings.append({
+                "article": article_number,
+                "article_title": article.get("title", ""),
+                "name": check.get("name", ""),
+                "status": check.get("status", ""),
+                "tier": check.get("tier", "static"),
+                "detection": check.get("detection", ""),
+                "evidence": check.get("evidence", ""),
+                "fix_hint": check.get("fix_hint", ""),
+                "source": check.get("source", "rules"),
+            })
+
+    for finding in deep_findings:
+        findings.append({
+            "article": finding.get("article", 0),
+            "article_title": "LLM Deep Analysis",
+            "name": finding.get("name", ""),
+            "status": finding.get("status", "warn"),
+            "tier": "static",
+            "detection": "auto",
+            "evidence": finding.get("evidence", ""),
+            "fix_hint": finding.get("fix_hint", ""),
+            "source": "llm",
+        })
+
+    return {
+        "version": _ab_version,
+        "timestamp": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "checks_total": len(all_checks),
+        "checks_passed": sum(1 for check in all_checks if check.get("status") == "pass"),
+        "checks_warned": sum(1 for check in all_checks if check.get("status") == "warn"),
+        "checks_failed": sum(1 for check in all_checks if check.get("status") == "fail"),
+        "articles": article_counts,
+        "findings": findings,
+    }
 
 
 @main.command()
@@ -143,29 +201,37 @@ def setup():
 @click.option("--scan", default=".", help="Path to scan for code-level checks")
 @click.option("--runs-dir", default=None, help="Path to .air.json records directory")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
+@click.option("--json", "json_output", is_flag=True, help="Output structured JSON for CI/CD pipelines")
 @click.option("--verbose", "-v", is_flag=True, help="Show detection type and fix hints")
 @click.option("--deep", is_flag=True, default=False, hidden=True, help="(deprecated, now default) Run LLM deep analysis")
 @click.option("--no-llm", is_flag=True, help="Skip LLM analysis, regex-only scan")
 @click.option("--model", default="air-compliance", help="Ollama model for deep scan")
 @click.option("--no-save", is_flag=True, help="Don't save results to compliance history")
-def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
+def comply(gateway, scan, runs_dir, fmt, json_output, verbose, deep, no_llm, model, no_save):
     """Check EU AI Act compliance from live gateway traffic."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
-    console.print("\n[bold blue]AIR Blackbox[/] - EU AI Act Compliance Check\n")
-    with console.status("[bold green]Connecting to gateway..."):
+    json_mode = json_output or fmt == "json"
+    if json_mode:
+        no_save = True
+        no_llm = True
+    if not json_mode:
+        console.print("\n[bold blue]AIR Blackbox[/] - EU AI Act Compliance Check\n")
+    status_context = console.status("[bold green]Connecting to gateway...") if not json_mode else nullcontext()
+    with status_context:
         client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
         status = client.get_status()
-    if status.reachable:
-        console.print(f"  [green]●[/] Gateway connected at [bold]{gateway}[/]")
-    else:
-        console.print(f"  [red]●[/] Gateway not reachable at [bold]{gateway}[/]")
-    if status.total_runs > 0:
-        src = "gateway" if status.reachable else "trust layer records"
-        console.print(f"  [green]●[/] [bold]{status.total_runs:,}[/] logged events from {src} ({', '.join(status.models_observed[:3])})")
-    else:
-        console.print(f"  [yellow]●[/] No traffic data found")
-    console.print(f"  [dim]Scanning: {scan}[/]\n")
+    if not json_mode:
+        if status.reachable:
+            console.print(f"  [green]●[/] Gateway connected at [bold]{gateway}[/]")
+        else:
+            console.print(f"  [red]●[/] Gateway not reachable at [bold]{gateway}[/]")
+        if status.total_runs > 0:
+            src = "gateway" if status.reachable else "trust layer records"
+            console.print(f"  [green]●[/] [bold]{status.total_runs:,}[/] logged events from {src} ({', '.join(status.models_observed[:3])})")
+        else:
+            console.print(f"  [yellow]●[/] No traffic data found")
+        console.print(f"  [dim]Scanning: {scan}[/]\n")
     articles, detected_frameworks, rec_pkg = run_all_checks(status, scan)
 
     # Hybrid mode: auto-run LLM analysis unless --no-llm
@@ -399,25 +465,8 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save):
             if verbose:
                 console.print("  [dim]Could not save to compliance history[/]")
 
-    if fmt == "json":
-        import json
-        output_data = articles
-        if deep_findings:
-            output_data = list(articles)  # shallow copy
-            output_data.append({
-                "number": 0,
-                "title": "LLM Deep Analysis",
-                "checks": [{
-                    "name": f.get("name", ""),
-                    "status": f.get("status", "warn"),
-                    "evidence": f.get("evidence", ""),
-                    "fix_hint": f.get("fix_hint", ""),
-                    "tier": "static",
-                    "detection": "auto",
-                    "source": "llm",
-                } for f in deep_findings],
-            })
-        click.echo(json.dumps(output_data, indent=2))
+    if json_mode:
+        click.echo(json.dumps(_build_compliance_json(articles, deep_findings), indent=2))
         return
     for article in articles:
         table = Table(title=f"Article {article['number']} - {article['title']}",
