@@ -44,6 +44,7 @@ type Config struct {
 	Analytics   *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
 	AuditChain  *trust.AuditChain  // cryptographic audit chain (nil = disabled)
 	KillSwitch  *KillSwitch        // SB 942 kill-switch (nil = disabled)
+	Signer      *trust.Signer      // ML-DSA-65/Ed25519 signer (nil = disabled)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -818,6 +819,11 @@ func setComplianceHeaders(w http.ResponseWriter, ch *complianceHeaders, cfg Conf
 			w.Header().Set("X-AIR-KillSwitch", "disarmed")
 		}
 	}
+
+	// Signature algorithm (tells callers what signs evidence packages)
+	if cfg.Signer != nil {
+		w.Header().Set("X-AIR-Signature-Algorithm", string(cfg.Signer.Algorithm()))
+	}
 }
 
 // handleAnalytics returns per-model performance stats as JSON.
@@ -937,7 +943,12 @@ func handleAuditExport(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 
 	gatewayID := "air-blackbox-gateway"
-	pkg := trust.GenerateEvidencePackage(cfg.AuditChain, compliance, gatewayID, signingKey)
+	pkg := trust.GenerateEvidencePackage(cfg.AuditChain, compliance, gatewayID, signingKey, cfg.Signer)
+
+	// Add signature algorithm header so callers know what signed the package.
+	if pkg.Signature != nil {
+		w.Header().Set("X-AIR-Signature-Algorithm", string(pkg.Signature.Algorithm))
+	}
 
 	json.NewEncoder(w).Encode(pkg)
 }

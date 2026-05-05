@@ -337,6 +337,207 @@ func TestEvidencePackageEmptyChain(t *testing.T) {
 	}
 }
 
+// --- ML-DSA-65 Signer tests ---
+
+func TestSignerMLDSA65(t *testing.T) {
+	keyDir := t.TempDir()
+	signer, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	if signer.Algorithm() != AlgoMLDSA65 {
+		t.Errorf("algorithm = %s, want %s", signer.Algorithm(), AlgoMLDSA65)
+	}
+}
+
+func TestSignerSignVerifyRoundTrip(t *testing.T) {
+	keyDir := t.TempDir()
+	signer, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	data := []byte("audit chain entry #42")
+	sd, err := signer.Sign(data)
+	if err != nil {
+		t.Fatalf("Sign failed: %v", err)
+	}
+
+	if sd.Algorithm != signer.Algorithm() {
+		t.Errorf("signed algorithm = %s, want %s", sd.Algorithm, signer.Algorithm())
+	}
+	if sd.Signature == "" {
+		t.Error("signature is empty")
+	}
+	if sd.PublicKey == "" {
+		t.Error("public key is empty")
+	}
+
+	valid, err := Verify(sd, data)
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	if !valid {
+		t.Error("valid signature reported as invalid")
+	}
+}
+
+func TestSignerVerifyTamperedData(t *testing.T) {
+	keyDir := t.TempDir()
+	signer, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	data := []byte("original data")
+	sd, err := signer.Sign(data)
+	if err != nil {
+		t.Fatalf("Sign failed: %v", err)
+	}
+
+	// Verify with tampered data should fail.
+	valid, err := Verify(sd, []byte("tampered data"))
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if valid {
+		t.Error("tampered data verified as valid")
+	}
+}
+
+func TestSignerKeyPersistence(t *testing.T) {
+	keyDir := t.TempDir()
+
+	// Create first signer, sign some data.
+	signer1, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner (first) failed: %v", err)
+	}
+	data := []byte("persistence test")
+	sd1, err := signer1.Sign(data)
+	if err != nil {
+		t.Fatalf("Sign (first) failed: %v", err)
+	}
+
+	// Create second signer from same key dir -- should load the same keys.
+	signer2, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner (second) failed: %v", err)
+	}
+
+	sd2, err := signer2.Sign(data)
+	if err != nil {
+		t.Fatalf("Sign (second) failed: %v", err)
+	}
+
+	// Same key, same data = same signature.
+	if sd1.Signature != sd2.Signature {
+		t.Error("same key dir produced different signatures for same data")
+	}
+	if sd1.PublicKey != sd2.PublicKey {
+		t.Error("same key dir produced different public keys")
+	}
+}
+
+func TestSignerSignChain(t *testing.T) {
+	keyDir := t.TempDir()
+	signer, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	chain := NewAuditChain(testSecret)
+	chain.Append("run-1", []byte(`{"model":"gpt-4"}`))
+	chain.Append("run-2", []byte(`{"model":"gpt-4o"}`))
+
+	sd, err := signer.SignChain(chain)
+	if err != nil {
+		t.Fatalf("SignChain failed: %v", err)
+	}
+
+	if sd.Signature == "" {
+		t.Error("chain signature is empty")
+	}
+
+	// Verify the chain signature.
+	entries := chain.Entries()
+	chainData, _ := json.Marshal(entries)
+	valid, err := Verify(sd, chainData)
+	if err != nil {
+		t.Fatalf("Verify chain signature failed: %v", err)
+	}
+	if !valid {
+		t.Error("chain signature is invalid")
+	}
+}
+
+func TestSignerSignEvidencePackage(t *testing.T) {
+	keyDir := t.TempDir()
+	signer, err := NewSigner(keyDir)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	chain := NewAuditChain(testSecret)
+	chain.Append("run-1", []byte(`{"data":"test"}`))
+
+	cfg := ComplianceConfig{Frameworks: []string{"SOC2"}}
+	compliance := EvaluateCompliance(cfg, chain.Len(), true, true, true)
+	pkg := GenerateEvidencePackage(chain, compliance, "gw-sign-test", testSecret)
+
+	sd, err := signer.SignEvidencePackage(pkg)
+	if err != nil {
+		t.Fatalf("SignEvidencePackage failed: %v", err)
+	}
+
+	if sd.Algorithm == "" {
+		t.Error("evidence signature algorithm is empty")
+	}
+	if sd.Signature == "" {
+		t.Error("evidence signature is empty")
+	}
+}
+
+func TestVerifyBadSignature(t *testing.T) {
+	sd := SignedData{
+		Algorithm: AlgoMLDSA65,
+		Signature: "deadbeef",
+		PublicKey: "deadbeef",
+	}
+
+	_, err := Verify(sd, []byte("test"))
+	if err == nil {
+		t.Error("expected error for malformed ML-DSA-65 key, got nil")
+	}
+}
+
+func TestVerifyBadEd25519Key(t *testing.T) {
+	sd := SignedData{
+		Algorithm: AlgoEd25519,
+		Signature: "deadbeef",
+		PublicKey: "deadbeef", // wrong size
+	}
+
+	_, err := Verify(sd, []byte("test"))
+	if err == nil {
+		t.Error("expected error for invalid Ed25519 key size, got nil")
+	}
+}
+
+func TestVerifyUnknownAlgorithm(t *testing.T) {
+	sd := SignedData{
+		Algorithm: "RSA-4096",
+		Signature: "aabb",
+		PublicKey: "ccdd",
+	}
+
+	_, err := Verify(sd, []byte("test"))
+	if err == nil {
+		t.Error("expected error for unknown algorithm, got nil")
+	}
+}
+
 func TestEvidencePackageJSON(t *testing.T) {
 	chain := NewAuditChain(testSecret)
 	chain.Append("run-1", []byte(`{"data":"json-test"}`))

@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	// ML-DSA-65 from Cloudflare's circl library.
 	// Dilithium mode III = ML-DSA-65 per FIPS 204.
@@ -103,6 +104,7 @@ func (s *Signer) Sign(data []byte) (SignedData, error) {
 			Algorithm: AlgoMLDSA65,
 			Signature: hex.EncodeToString(sig),
 			PublicKey: hex.EncodeToString(pubBytes),
+			SignedAt:  time.Now().UTC().Format(time.RFC3339),
 		}, nil
 
 	case AlgoEd25519:
@@ -111,6 +113,7 @@ func (s *Signer) Sign(data []byte) (SignedData, error) {
 			Algorithm: AlgoEd25519,
 			Signature: hex.EncodeToString(sig),
 			PublicKey: hex.EncodeToString(s.ed25519Pub),
+			SignedAt:  time.Now().UTC().Format(time.RFC3339),
 		}, nil
 
 	default:

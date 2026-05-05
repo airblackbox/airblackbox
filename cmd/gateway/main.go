@@ -109,6 +109,7 @@ func main() {
 
 	// --- Trust layer setup (opt-in) ---
 	var auditChain *trust.AuditChain
+	var signer *trust.Signer
 	if grCfg != nil && grCfg.Trust.Enabled {
 		signingKey := envOr("TRUST_SIGNING_KEY", grCfg.Trust.SigningKey)
 		if signingKey == "" {
@@ -116,6 +117,17 @@ func main() {
 		}
 		grCfg.Trust.SigningKey = signingKey // store resolved key for export endpoint
 		auditChain = trust.NewAuditChain(signingKey)
+
+		// Initialize ML-DSA-65 signer for quantum-safe evidence signing.
+		keyDir := envOr("SIGNING_KEY_DIR", ".air-keys")
+		signer, err = trust.NewSigner(keyDir)
+		if err != nil {
+			log.Printf("WARN: ML-DSA-65 signer disabled: %v (evidence will use HMAC-only attestation)", err)
+			signer = nil
+		} else {
+			log.Printf("Signer: %s (keys in %s)", signer.Algorithm(), keyDir)
+		}
+
 		log.Printf("Trust layer: enabled (frameworks: %v)", grCfg.Trust.Compliance.Frameworks)
 	} else {
 		log.Println("Trust layer: disabled (enable in guardrails.yaml trust section)")
@@ -136,6 +148,7 @@ func main() {
 		Analytics:   analytics,
 		AuditChain:  auditChain,
 		KillSwitch:  killSwitch,
+		Signer:      signer,
 	})
 
 	srv := &http.Server{

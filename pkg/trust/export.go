@@ -20,7 +20,8 @@ type EvidencePackage struct {
 	ComplianceReport *ComplianceReport `json:"compliance_report"`
 	RecordCount      int64             `json:"record_count"`
 	TimeRange        TimeRange         `json:"time_range"`
-	Attestation      string            `json:"attestation"` // HMAC of package contents
+	Attestation      string            `json:"attestation"`                    // HMAC of package contents
+	Signature        *SignedData        `json:"signature,omitempty"`            // ML-DSA-65 or Ed25519 signature
 }
 
 // TimeRange captures the earliest and latest timestamps in the audit chain.
@@ -32,7 +33,9 @@ type TimeRange struct {
 // GenerateEvidencePackage creates a signed evidence package from the current
 // audit chain and compliance report. The package itself is signed with
 // HMAC-SHA256 so regulators can verify the export hasn't been tampered with.
-func GenerateEvidencePackage(chain *AuditChain, compliance *ComplianceReport, gatewayID string, secret string) *EvidencePackage {
+// If a Signer is provided, the package also gets an ML-DSA-65 (or Ed25519
+// fallback) digital signature for quantum-safe verification.
+func GenerateEvidencePackage(chain *AuditChain, compliance *ComplianceReport, gatewayID string, secret string, signers ...*Signer) *EvidencePackage {
 	entries := chain.Entries()
 	chainLen := chain.Len()
 
@@ -59,8 +62,16 @@ func GenerateEvidencePackage(chain *AuditChain, compliance *ComplianceReport, ga
 		Attestation:      "", // computed below
 	}
 
-	// Sign the package (attestation field is empty during signing).
+	// Sign the package with HMAC-SHA256 (attestation field is empty during signing).
 	pkg.Attestation = signPackage(pkg, secret)
+
+	// If a Signer is provided, also add an ML-DSA-65 / Ed25519 digital signature.
+	if len(signers) > 0 && signers[0] != nil {
+		sd, err := signers[0].SignEvidencePackage(pkg)
+		if err == nil {
+			pkg.Signature = &sd
+		}
+	}
 
 	return pkg
 }
