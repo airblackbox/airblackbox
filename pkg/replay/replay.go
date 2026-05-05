@@ -17,14 +17,24 @@ import (
 
 // Result holds the outcome of a replay.
 type Result struct {
-	RunID          string  `json:"run_id"`
-	OriginalModel  string  `json:"original_model"`
-	ReplayModel    string  `json:"replay_model"`
-	Drift          bool    `json:"drift"`
-	DriftSummary   string  `json:"drift_summary,omitempty"`
-	OriginalTokens int     `json:"original_tokens"`
-	ReplayTokens   int     `json:"replay_tokens"`
-	Similarity     float64 `json:"similarity"` // 0.0-1.0 basic token overlap
+	RunID          string   `json:"run_id"`
+	OriginalModel  string   `json:"original_model"`
+	ReplayModel    string   `json:"replay_model"`
+	Drift          bool     `json:"drift"`
+	DriftSummary   string   `json:"drift_summary,omitempty"`
+	OriginalTokens int      `json:"original_tokens"`
+	ReplayTokens   int      `json:"replay_tokens"`
+	Similarity     float64  `json:"similarity"` // 0.0-1.0 basic token overlap
+	Diff           *DiffResult `json:"diff,omitempty"`
+}
+
+// DiffResult shows the specific content differences between original and replay.
+type DiffResult struct {
+	OriginalLength int      `json:"original_length"`
+	ReplayLength   int      `json:"replay_length"`
+	AddedTokens    []string `json:"added_tokens"`   // tokens in replay but not original
+	RemovedTokens  []string `json:"removed_tokens"`  // tokens in original but not replay
+	ModelChanged   bool     `json:"model_changed"`   // true if provider returned a different model
 }
 
 // Options configures a replay.
@@ -120,13 +130,52 @@ func Run(ctx context.Context, rec recorder.Record, opts Options) (Result, error)
 	result.Similarity = tokenSimilarity(originalContent, replayContent)
 	result.Drift = result.Similarity < 0.8
 
+	// Always compute a structured diff for programmatic consumers.
+	result.Diff = computeDiff(originalContent, replayContent, rec.Model, result.ReplayModel)
+
 	if result.Drift {
 		result.DriftSummary = fmt.Sprintf(
-			"similarity=%.2f (threshold=0.80); original=%d chars, replay=%d chars",
-			result.Similarity, len(originalContent), len(replayContent))
+			"similarity=%.2f (threshold=0.80); original=%d chars, replay=%d chars; "+
+			"+%d tokens, -%d tokens",
+			result.Similarity, len(originalContent), len(replayContent),
+			len(result.Diff.AddedTokens), len(result.Diff.RemovedTokens))
 	}
 
 	return result, nil
+}
+
+// computeDiff produces a structured diff between original and replay content.
+func computeDiff(original, replay, origModel, replayModel string) *DiffResult {
+	origSet := tokenSet(original)
+	replaySet := tokenSet(replay)
+
+	var added, removed []string
+	for w := range replaySet {
+		if !origSet[w] {
+			added = append(added, w)
+		}
+	}
+	for w := range origSet {
+		if !replaySet[w] {
+			removed = append(removed, w)
+		}
+	}
+
+	// Cap at 50 tokens per side to keep the diff readable.
+	if len(added) > 50 {
+		added = added[:50]
+	}
+	if len(removed) > 50 {
+		removed = removed[:50]
+	}
+
+	return &DiffResult{
+		OriginalLength: len(original),
+		ReplayLength:   len(replay),
+		AddedTokens:    added,
+		RemovedTokens:  removed,
+		ModelChanged:   origModel != replayModel && replayModel != "",
+	}
 }
 
 // extractKey converts "vault://bucket/key" → "key"

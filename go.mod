@@ -3,6 +3,7 @@ module github.com/airblackbox/gateway
 go 1.25.0
 
 require (
+	github.com/cloudflare/circl v1.6.1
 	github.com/google/uuid v1.6.0
 	github.com/jung-kurt/gofpdf/v2 v2.17.3
 	github.com/minio/minio-go/v7 v7.0.100
