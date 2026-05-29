@@ -33,7 +33,8 @@ def generate_evidence_bundle(gateway_url="http://localhost:8080",
     status = client.get_status()
 
     # 2. Compliance scan
-    compliance = run_all_checks(status, scan_path)
+    _ra = run_all_checks(status, scan_path)
+    compliance = _ra[0] if isinstance(_ra, tuple) else _ra
 
     # 3. AI-BOM
     aibom = generate_aibom(status)
@@ -63,10 +64,10 @@ def generate_evidence_bundle(gateway_url="http://localhost:8080",
             "articles_checked": [9, 10, 11, 12, 14, 15],
             "results": compliance,
             "summary": {
-                "total_checks": len(compliance),
-                "passing": sum(1 for c in compliance if c.get("status") == "pass"),
-                "warnings": sum(1 for c in compliance if c.get("status") == "warn"),
-                "failing": sum(1 for c in compliance if c.get("status") == "fail"),
+                "total_checks": sum(len(a["checks"]) for a in compliance),
+                "passing": sum(1 for a in compliance for c in a["checks"] if c.get("status") == "pass"),
+                "warnings": sum(1 for a in compliance for c in a["checks"] if c.get("status") == "warn"),
+                "failing": sum(1 for a in compliance for c in a["checks"] if c.get("status") == "fail"),
             }
         },
         "aibom": aibom,
