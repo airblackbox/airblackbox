@@ -122,6 +122,11 @@ class ActionReceipt:
     created_at: str = ""
     sealed_at: str = ""
 
+    # Self-describing signing info (filled at signing time so the receipt can
+    # be verified by a third party from the JSON alone, no signer object needed).
+    signing_method: str = ""        # "ed25519", "ML-DSA-65", or "hmac-sha256"
+    signing_public_key: str = ""    # hex public key for ed25519 / ML-DSA-65; empty for hmac
+
     # Context
     metadata: dict = field(default_factory=dict)
 
@@ -185,6 +190,8 @@ class ActionReceipt:
             "status": self.status.value,
             "created_at": self.created_at,
             "sealed_at": self.sealed_at,
+            "signing_method": self.signing_method,
+            "signing_public_key": self.signing_public_key,
             "metadata": self.metadata,
         }
 
@@ -308,7 +315,13 @@ class ReceiptSigner:
             return False
 
     def sign_authorization(self, receipt: ActionReceipt) -> str:
-        """Sign the authorization phase of a receipt."""
+        """Sign the authorization phase of a receipt.
+
+        Also stamps the receipt with the signing method and public key so a
+        third party can verify it later from the receipt JSON alone.
+        """
+        receipt.signing_method = self.method
+        receipt.signing_public_key = self.public_key_hex or ""
         sig = self.sign(receipt.authorization_payload)
         receipt.authorization_sig = sig
         return sig
@@ -332,3 +345,87 @@ class ReceiptSigner:
         auth = self.verify_authorization(receipt)
         seal = self.verify_seal(receipt) if receipt.seal_sig else False
         return auth, seal
+
+
+# ---------------------------------------------------------------------------
+# Standalone third-party verification.
+#
+# verify_receipt(receipt_dict) verifies a receipt using ONLY the information
+# embedded in the receipt itself (signing_method, signing_public_key, and the
+# signature). It needs no ReceiptSigner instance and no shared secret. This is
+# what makes an AIR Blackbox receipt independently verifiable.
+#
+# Returns (verified: bool, detail: str).
+# ---------------------------------------------------------------------------
+
+
+def _authorization_payload_from_dict(d: dict) -> bytes:
+    """Rebuild the exact authorization payload bytes from a receipt dict.
+
+    Must match ActionReceipt.authorization_payload byte-for-byte.
+    """
+    data = {
+        "receipt_id": d.get("receipt_id", ""),
+        "agent_id": d.get("agent_id", ""),
+        "action_name": d.get("action_name", ""),
+        "action_category": d.get("action_category", ""),
+        "payload_hash": d.get("payload_hash", ""),
+        "covenant_hash": d.get("covenant_hash", ""),
+        "decision": d.get("decision", ""),
+        "authorized": d.get("authorized", False),
+        "parent_receipt_id": d.get("parent_receipt_id", None),
+        "created_at": d.get("created_at", ""),
+    }
+    return json.dumps(data, sort_keys=True).encode("utf-8")
+
+
+def verify_receipt(receipt_dict: dict) -> tuple[bool, str]:
+    """Verify a receipt's authorization signature from the receipt JSON alone.
+
+    Uses only the embedded signing_method, signing_public_key, and
+    authorization_sig. No signer object, no shared secret.
+
+    Returns:
+        (verified, detail) - verified is True only if the signature is valid
+        AND the method is asymmetric (independently verifiable).
+    """
+    method = receipt_dict.get("signing_method", "")
+    pub_hex = receipt_dict.get("signing_public_key", "")
+    sig_hex = receipt_dict.get("authorization_sig", "")
+
+    if not sig_hex:
+        return False, "no authorization signature present"
+
+    payload = _authorization_payload_from_dict(receipt_dict)
+
+    if method == "ed25519":
+        if not HAS_ED25519:
+            return False, "ed25519 receipt but cryptography not installed to verify"
+        if not pub_hex:
+            return False, "ed25519 receipt missing public key"
+        try:
+            pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub_hex))
+            pub.verify(bytes.fromhex(sig_hex), payload)
+            return True, "verified (ed25519, third-party verifiable)"
+        except Exception:
+            return False, "ed25519 signature INVALID (tampered or wrong key)"
+
+    if method == "ML-DSA-65":
+        if not HAS_MLDSA65:
+            return False, "ML-DSA-65 receipt but oqs not installed to verify"
+        if not pub_hex:
+            return False, "ML-DSA-65 receipt missing public key"
+        try:
+            verifier = oqs.Signature("Dilithium3")
+            ok = verifier.verify(payload, bytes.fromhex(sig_hex), bytes.fromhex(pub_hex))
+            return (True, "verified (ML-DSA-65, post-quantum, third-party verifiable)") if ok \
+                else (False, "ML-DSA-65 signature INVALID (tampered or wrong key)")
+        except Exception as e:
+            return False, f"ML-DSA-65 verification error: {e}"
+
+    if method == "hmac-sha256":
+        return False, ("hmac-sha256 is not third-party verifiable; it needs the "
+                       "shared secret. Re-sign with ed25519 or ML-DSA-65 for "
+                       "independent verification.")
+
+    return False, f"unknown or missing signing_method: {method!r}"

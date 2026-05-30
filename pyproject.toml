@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "air-blackbox"
-version = "1.12.2"
+version = "1.12.3"
 description = "AI governance control plane - compliance, inventory, incident response, and audit for AI agents"
 readme = "sdk/README.md"
 license = "Apache-2.0"
@@ -35,6 +35,7 @@ dependencies = [
     "httpx>=0.25.0",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +47,7 @@ autogen = ["autogen-agentchat>=0.4.0"]
 adk = ["google-adk>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.0"]
 pdf = ["reportlab>=4.0"]
-gate = ["cryptography>=42.0"]
+pqc = ["oqs>=0.10.0"]  # post-quantum ML-DSA-65 signing (opt-in)
 all = [
     "air-blackbox[langchain]",
     "air-blackbox[crewai]",
@@ -55,7 +56,7 @@ all = [
     "air-blackbox[autogen]",
     "air-blackbox[claude]",
     "air-blackbox[pdf]",
-    "air-blackbox[gate]",
+    "air-blackbox[pqc]",
 ]
 
 [project.scripts]
