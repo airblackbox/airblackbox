@@ -37,7 +37,6 @@ model/*.gguf
 *.pdf
 
 # Scratch files
-code_scanner.py
 github_replies.md
 
 # Training data (too large for GitHub)
