@@ -39,8 +39,8 @@ jobs:
 
   python-package:
     # Builds the wheel the world installs, installs it clean, imports every
-    # module, runs every CLI command. The gate that stops a broken package
-    # reaching PyPI.
+    # module, runs every CLI command, then runs the test suite. This is the
+    # gate that stops a broken package reaching PyPI.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -54,6 +54,10 @@ jobs:
       - name: Install build tooling
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build
+          python -m pip install build pytest
       - name: Run release check (build, install, import, run)
         run: bash scripts/release_check.sh
+      - name: Run tests
+        run: |
+          python -m pip install -e .
+          python -m pytest tests/ -v
