@@ -16,8 +16,9 @@ WHEEL="$(ls -t dist/*.whl 2>/dev/null | head -1)"
 [ -n "$WHEEL" ] && ok "wheel: $(basename "$WHEEL")" || { bad "no wheel"; exit 1; }
 
 say "3. Verify expected modules are inside the wheel"
-for d in $(cd sdk && find air_blackbox -name "__init__.py" -exec dirname {} \; | sort -u); do
-  if unzip -l "$WHEEL" | grep -q "$d/"; then ok "$d"; else bad "$d missing from wheel"; fi
+WHEEL_LIST="$(unzip -l "$WHEEL")"
+for f in $(cd sdk && find air_blackbox -name "*.py" | sort); do
+  if echo "$WHEEL_LIST" | grep -q " $f$"; then ok "$f"; else bad "$f missing from wheel"; fi
 done
 
 say "4. Install the built wheel into a clean venv"
