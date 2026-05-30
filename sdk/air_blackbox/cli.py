@@ -756,27 +756,74 @@ def replay(gateway, runs_dir, episode, last, verify):
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
 @click.option("--scan",     default=".", help="Path to scan for code-level checks")
 @click.option("--range",    "time_range", default="30d", help="Time range")
-@click.option("--format",   "fmt", type=click.Choice(["json", "pdf"]), default="json")
+@click.option("--format",   "fmt", type=click.Choice(["json", "pdf", "evidence"]), default="json")
+@click.option("--signing-key", default=None, help="HMAC signing key for the audit chain (or set TRUST_SIGNING_KEY)")
 @click.option("--output",   "-o", default=None, help="Output file path")
-def export(gateway, runs_dir, scan, time_range, fmt, output):
+def export(gateway, runs_dir, scan, time_range, fmt, signing_key, output):
     """Generate signed evidence bundles for auditors and insurers.
 
     \b
     Formats:
-        json  - machine-readable signed evidence bundle (default)
-        pdf   - formatted PDF compliance report for humans / auditors
+        json      - machine-readable signed evidence bundle (default)
+        pdf       - formatted PDF compliance report for humans / auditors
+        evidence  - self-verifying .air-evidence.zip with a standalone verify.py
+                    an auditor runs offline (stdlib only) to get PASS/FAIL
 
     \b
     Examples:
         air-blackbox export
         air-blackbox export --format pdf
+        air-blackbox export --format evidence --signing-key "$TRUST_SIGNING_KEY"
         air-blackbox export --scan ~/myproject --format pdf
-        air-blackbox export --scan . --format pdf --output report.pdf
     """
     from air_blackbox.export.bundle import generate_evidence_bundle
     import json as jsonlib
 
     console.print("\n[bold cyan]AIR Blackbox[/] - Evidence Export\n")
+
+    if fmt == "evidence":
+        import os as _os
+        from air_blackbox.export.evidence_bundle import generate_evidence_zip
+        from air_blackbox.replay.engine import ReplayEngine
+        from air_blackbox.compliance.engine import run_all_checks
+        from air_blackbox.gateway_client import GatewayClient
+
+        key = signing_key or _os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")
+        rdir = runs_dir or "./runs"
+
+        engine = ReplayEngine(runs_dir=rdir)
+        engine.load()
+        records = list(getattr(engine, "_raw_records", []))
+
+        client = GatewayClient(gateway_url=gateway, runs_dir=rdir, scan_path=scan)
+        _ra = run_all_checks(client.get_status(), scan)
+        scan_results = _ra[0] if isinstance(_ra, tuple) else _ra
+
+        zip_path = generate_evidence_zip(
+            chain_entries=records,
+            scan_results=scan_results,
+            signing_key=key,
+            output_dir=output or ".",
+        )
+
+        console.print(f"  [bold]Audit records:[/]  {len(records)}")
+        console.print(f"  [bold]Signing key:[/]    {'(default)' if key == 'air-blackbox-default' else '(custom)'}")
+        console.print()
+        console.print(Panel(
+            f"Self-verifying bundle written to [bold]{zip_path}[/]\n\n"
+            f"Contains: audit_chain.json + scan_results.json + bundle_meta.json + verify.py\n"
+            f"An auditor extracts it and runs (no install needed):\n"
+            f"  [bold]python verify.py --key <your-signing-key>[/]\n"
+            f"and gets PASS or FAIL. Verification uses only the Python standard library.",
+            title="[bold green]Evidence Bundle Complete[/]",
+            border_style="green",
+        ))
+        try:
+            from air_blackbox.telemetry import send_event
+            send_event(command="export", version=_ab_version)
+        except Exception:
+            pass
+        return
 
     with console.status("[bold green]Generating evidence bundle..."):
         bundle = generate_evidence_bundle(gateway_url=gateway, runs_dir=runs_dir, scan_path=scan)
