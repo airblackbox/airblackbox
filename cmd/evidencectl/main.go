@@ -30,6 +30,12 @@ func main() {
 		runPDFExport()
 	case "export":
 		runJSONExport()
+	case "checkpoint":
+		runCheckpoint(os.Args[2:])
+	case "anchor":
+		runAnchor(os.Args[2:])
+	case "verify-checkpoint":
+		runVerifyCheckpoint(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(1)
@@ -40,6 +46,9 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `Usage:
   evidencectl pdf    [--input FILE] [--output FILE] [--company NAME]
   evidencectl export [--output FILE] [--secret KEY]
+  evidencectl checkpoint        [--gateway URL] [--keys DIR] [--out FILE]
+  evidencectl anchor            [--checkpoint FILE] [--server URL]
+  evidencectl verify-checkpoint [--checkpoint FILE] [--rekor]
 
 Commands:
   pdf     Generate a PDF compliance report from an evidence package JSON
