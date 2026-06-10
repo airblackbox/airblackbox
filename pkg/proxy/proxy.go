@@ -153,12 +153,19 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	if err := json.Unmarshal(reqBody, &req); err == nil {
 		span.SetAttributes(
 			attribute.String("gen_ai.request.model", req.Model),
+			attribute.String("gen_ai.operation.name", "chat"),
 		)
+		if req.Model != "" {
+			span.SetName("chat " + req.Model)
+		}
 	}
 
 	// Determine provider from model name.
 	provider := inferProvider(req.Model, cfg.ProviderURL)
-	span.SetAttributes(attribute.String("gen_ai.system", provider))
+	span.SetAttributes(
+		attribute.String("gen_ai.system", provider),
+		attribute.String("gen_ai.provider.name", provider),
+	)
 
 	// --- Prevention layer (opt-in) ---
 	// Runs BEFORE detection. May modify the request body (PII redaction, tool filtering,
@@ -363,6 +370,8 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 		span.SetAttributes(
 			attribute.Int("gen_ai.usage.prompt_tokens", tokens.Prompt),
 			attribute.Int("gen_ai.usage.completion_tokens", tokens.Completion),
+			attribute.Int("gen_ai.usage.input_tokens", tokens.Prompt),
+			attribute.Int("gen_ai.usage.output_tokens", tokens.Completion),
 		)
 	}
 
@@ -413,6 +422,8 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 		span.SetAttributes(
 			attribute.Int("gen_ai.usage.prompt_tokens", tokens.Prompt),
 			attribute.Int("gen_ai.usage.completion_tokens", tokens.Completion),
+			attribute.Int("gen_ai.usage.input_tokens", tokens.Prompt),
+			attribute.Int("gen_ai.usage.output_tokens", tokens.Completion),
 			attribute.String("gen_ai.response.model", respParsed.Model),
 		)
 	}
