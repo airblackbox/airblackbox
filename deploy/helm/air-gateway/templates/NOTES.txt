@@ -1,0 +1,16 @@
+AIR Blackbox Gateway is deploying with {{ .Values.replicaCount }} replicas.
+
+Point your agents at the gateway instead of your provider:
+
+  export OPENAI_BASE_URL=http://{{ include "air-gateway.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/v1
+
+Check health:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "air-gateway.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/health
+
+Export compliance evidence (per replica, see deploy/HA.md):
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/name={{ include "air-gateway.name" . }}
+  kubectl -n {{ .Release.Namespace }} port-forward pod/<pod-name> 8080:8080
+  curl http://localhost:8080/v1/audit/export > evidence-bundle.json

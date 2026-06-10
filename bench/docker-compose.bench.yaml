@@ -1,0 +1,75 @@
+# Benchmark stack for AIR Blackbox Gateway.
+#
+# Runs the gateway in its production configuration (vault + collector + jaeger)
+# but pointed at a mock LLM provider, so measurements capture gateway overhead
+# rather than provider latency. The loadgen runs inside the same Docker network
+# to avoid Docker Desktop host-networking noise on macOS.
+#
+# Usage: bash bench/run-bench.sh   (from the repo root)
+
+services:
+  gateway:
+    build:
+      context: ..
+    environment:
+      - LISTEN_ADDR=:8080
+      - PROVIDER_URL=http://mockllm:9100
+      - VAULT_ENDPOINT=minio:9000
+      - VAULT_ACCESS_KEY=minioadmin
+      - VAULT_SECRET_KEY=minioadmin
+      - VAULT_BUCKET=air-runs
+      - VAULT_USE_SSL=false
+      - OTEL_EXPORTER_OTLP_ENDPOINT=collector:4317
+      - RUNS_DIR=/data/runs
+    volumes:
+      - bench-runs:/data/runs
+
+  mockllm:
+    build:
+      context: ..
+      dockerfile: bench/mockllm/Dockerfile
+    environment:
+      # Simulated provider latency. 0 isolates pure gateway overhead.
+      # Set to 800 for a realistic "LLM call" profile.
+      - MOCK_LATENCY_MS=${MOCK_LATENCY_MS:-0}
+
+  loadgen:
+    build:
+      context: ..
+      dockerfile: bench/loadgen/Dockerfile
+    profiles: ["bench"]
+    environment:
+      - REQUESTS=${REQUESTS:-2000}
+      - CONCURRENCY=${CONCURRENCY:-1,8,32}
+      - WARMUP=${WARMUP:-200}
+    volumes:
+      - ./results:/results
+    depends_on:
+      - gateway
+      - mockllm
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - bench-minio:/data
+
+  collector:
+    build:
+      context: ../collector
+      dockerfile: Dockerfile
+    volumes:
+      - bench-vault:/data/vault
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+
+volumes:
+  bench-runs:
+  bench-minio:
+  bench-vault:

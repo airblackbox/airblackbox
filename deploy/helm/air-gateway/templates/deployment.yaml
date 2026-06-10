@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "air-gateway.fullname" . }}
+  labels:
+    {{- include "air-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "air-gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "air-gateway.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "air-gateway.selectorLabels" . | nindent 20 }}
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: dashboard
+              containerPort: 8081
+          env:
+            - name: LISTEN_ADDR
+              value: ":8080"
+            - name: PROVIDER_URL
+              value: {{ .Values.providerURL | quote }}
+            - name: RUNS_DIR
+              value: {{ .Values.runs.dir | quote }}
+            {{- if .Values.vault.enabled }}
+            - name: VAULT_ENDPOINT
+              value: {{ .Values.vault.endpoint | quote }}
+            - name: VAULT_BUCKET
+              value: {{ .Values.vault.bucket | quote }}
+            - name: VAULT_USE_SSL
+              value: {{ .Values.vault.useSSL | quote }}
+            - name: VAULT_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.existingSecret | default (printf "%s-vault" (include "air-gateway.fullname" .)) }}
+                  key: VAULT_ACCESS_KEY
+            - name: VAULT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.existingSecret | default (printf "%s-vault" (include "air-gateway.fullname" .)) }}
+                  key: VAULT_SECRET_KEY
+            {{- end }}
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.endpoint | quote }}
+            {{- end }}
+            {{- if or .Values.gatewayKey.existingSecret .Values.gatewayKey.value }}
+            - name: GATEWAY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gatewayKey.existingSecret | default (printf "%s-key" (include "air-gateway.fullname" .)) }}
+                  key: GATEWAY_KEY
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: runs
+              mountPath: {{ .Values.runs.dir }}
+      volumes:
+        - name: runs
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

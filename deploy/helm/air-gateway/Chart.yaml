@@ -1,0 +1,11 @@
+apiVersion: v2
+name: air-gateway
+description: AIR Blackbox Gateway - tamper-evident audit layer for AI agents. OpenAI-compatible reverse proxy with HMAC-SHA256 audit chains, content vaulting, and compliance evidence export.
+type: application
+version: 0.1.0
+appVersion: "latest"
+home: https://airblackbox.ai
+sources:
+  - https://github.com/airblackbox/gateway
+maintainers:
+  - name: Jason Shotwell

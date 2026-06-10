@@ -1,0 +1,60 @@
+# Default values for air-gateway.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/airblackbox/gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# The LLM provider the gateway proxies to.
+providerURL: "https://api.openai.com"
+
+# Optional bearer token required to use the gateway.
+# Provide via an existing secret to avoid putting keys in values files.
+gatewayKey:
+  existingSecret: ""   # name of a Secret with key GATEWAY_KEY
+  value: ""            # or set directly (not recommended for production)
+
+# Content vault (S3-compatible). Point all replicas at the same bucket.
+vault:
+  enabled: true
+  endpoint: "minio:9000"
+  bucket: "air-runs"
+  useSSL: false
+  existingSecret: ""   # Secret with keys VAULT_ACCESS_KEY and VAULT_SECRET_KEY
+  accessKey: "minioadmin"   # used only if existingSecret is empty
+  secretKey: "minioadmin"   # used only if existingSecret is empty
+
+# OpenTelemetry export.
+otel:
+  enabled: true
+  endpoint: "collector:4317"
+
+# Local AIR record directory. emptyDir by default: records are best-effort
+# local artifacts; durable content lives in the vault. See deploy/HA.md.
+runs:
+  dir: /data/runs
+
+service:
+  type: ClusterIP
+  port: 8080
+  dashboardPort: 8081
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []

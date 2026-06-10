@@ -37,11 +37,23 @@ model/*.gguf
 *.pdf
 
 # Scratch files
-code_scanner.py
-engine.py
 github_replies.md
 
 # Training data (too large for GitHub)
 training/training_data_*.jsonl
 compliance-action/.mcpregistry_github_token
 compliance-action/.mcpregistry_registry_token
+.private/
+air-blackbox-plugin/
+PRD_SHADOW_AI_DETECTION.md
+IDEAS_HIRING_AI_VERTICAL.md
+
+# Build artifacts (should never be tracked)
+*.egg-info/
+__pycache__/
+*.pyc
+
+# Generated evidence bundles (output of air-blackbox export, never tracked)
+air-blackbox-evidence-*.json
+content/
+sdk/air_blackbox.egg-info/

@@ -1,0 +1,24 @@
+[
+  {
+    "label": "direct",
+    "concurrency": 32,
+    "requests": 1000,
+    "errors": 0,
+    "rps": 38.83192097851269,
+    "p50_ms": 804.604,
+    "p90_ms": 807.163,
+    "p99_ms": 812.683,
+    "max_ms": 813.629
+  },
+  {
+    "label": "gateway",
+    "concurrency": 32,
+    "requests": 1000,
+    "errors": 0,
+    "rps": 38.66715544338199,
+    "p50_ms": 807.403,
+    "p90_ms": 814.93,
+    "p99_ms": 818.76,
+    "max_ms": 820.71
+  }
+]
