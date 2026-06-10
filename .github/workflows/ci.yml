@@ -30,6 +30,21 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Fuzz the request parser
+        run: |
+          for target in FuzzInferProvider FuzzExtractPromptText FuzzExtractToolNames FuzzExtractStreamTokens; do
+            echo "::group::$target"
+            go test ./pkg/proxy/ -run='^$' -fuzz="^${target}\$" -fuzztime=30s
+            echo "::endgroup::"
+          done
+
   docker:
     runs-on: ubuntu-latest
     steps:
