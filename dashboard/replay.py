@@ -62,6 +62,13 @@ async def _chain_status() -> dict:
     return {"available": False}
 
 
+@router.get("/", include_in_schema=False)
+async def root_redirect():
+    """Friendly root: send visitors to the replay UI."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/replay")
+
+
 @router.get("/replay", response_class=HTMLResponse)
 async def replay_page(request: Request):
     """Render the episode replay UI."""
