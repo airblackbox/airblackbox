@@ -16,7 +16,6 @@ package trust
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -76,19 +75,20 @@ func AnchorToRekor(server string, sc SignedCheckpoint) (RekorAnchor, error) {
 	pemKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pkix})
 
 	payload := sc.Checkpoint.PayloadBytes()
-	digest := sha256.Sum256(payload)
 
+	// Use the "rekord" type rather than "hashedrekord". Ed25519 is not a
+	// pre-hash signature scheme, so Rekor cannot verify an Ed25519 signature
+	// from a digest alone. The rekord type carries the full payload inline
+	// (base64), so Rekor verifies Ed25519(pub, payload, sig) directly.
 	entry := map[string]any{
 		"apiVersion": "0.0.1",
-		"kind":       "hashedrekord",
+		"kind":       "rekord",
 		"spec": map[string]any{
 			"data": map[string]any{
-				"hash": map[string]any{
-					"algorithm": "sha256",
-					"value":     hex.EncodeToString(digest[:]),
-				},
+				"content": base64.StdEncoding.EncodeToString(payload),
 			},
 			"signature": map[string]any{
+				"format":  "x509",
 				"content": base64.StdEncoding.EncodeToString(sigBytes),
 				"publicKey": map[string]any{
 					"content": base64.StdEncoding.EncodeToString(pemKey),

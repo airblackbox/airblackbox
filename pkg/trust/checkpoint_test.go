@@ -101,8 +101,8 @@ func TestAnchorToRekorRequestFormat(t *testing.T) {
 		t.Fatalf("bad anchor receipt: %+v", anchor)
 	}
 
-	// Validate hashedrekord shape.
-	if captured["kind"] != "hashedrekord" {
+	// Validate rekord shape.
+	if captured["kind"] != "rekord" {
 		t.Fatalf("kind = %v", captured["kind"])
 	}
 	spec := captured["spec"].(map[string]any)
