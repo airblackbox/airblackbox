@@ -96,7 +96,8 @@ func (s *Signer) Sign(data []byte) (SignedData, error) {
 
 	switch s.algo {
 	case AlgoMLDSA65:
-		sig := mode3.SignTo(nil, s.mldsaPriv, data, false)
+		sig := make([]byte, mode3.SignatureSize)
+		mode3.SignTo(s.mldsaPriv, data, sig)
 		pubBytes, _ := s.mldsaPub.MarshalBinary()
 		return SignedData{
 			Algorithm: AlgoMLDSA65,
@@ -134,7 +135,7 @@ func Verify(sd SignedData, data []byte) (bool, error) {
 		if err := pub.UnmarshalBinary(pubBytes); err != nil {
 			return false, fmt.Errorf("verify: unmarshal ML-DSA-65 key: %w", err)
 		}
-		return mode3.Verify(pub, data, nil, sigBytes), nil
+		return mode3.Verify(pub, data, sigBytes), nil
 
 	case AlgoEd25519:
 		if len(pubBytes) != ed25519.PublicKeySize {
