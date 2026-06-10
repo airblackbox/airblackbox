@@ -47,7 +47,7 @@
 <header>
   <h1>AIR BLACKBOX</h1>
   <span class="sub">Episode Replay</span>
-  <span class="sub"><a href="/" style="color:var(--dim)">← dashboard</a></span>
+  
   <span id="chainBadge" class="chain-na">CHAIN: checking…</span>
 </header>
 <main>
@@ -62,6 +62,9 @@ let activeId = null;
 
 function fmtTime(ts) {
   try { return new Date(ts).toLocaleTimeString(); } catch { return ts; }
+}
+function fmtMs(ms) {
+  return (ms === null || ms === undefined) ? '\u2014' : ms + ' ms';
 }
 
 function setChainBadge(chain) {
@@ -92,10 +95,10 @@ async function loadRuns() {
       div.className = 'run' + (run.run_id === activeId ? ' active' : '');
       div.innerHTML = `
         <div class="top">
-          <span class="model">${run.model || 'unknown'}</span>
+          <span class="model">${run.model || '\u2014'}</span>
           <span class="status-${run.status}">${run.status}</span>
         </div>
-        <div class="meta">${fmtTime(run.timestamp)} · ${run.tokens?.total ?? 0} tok · ${run.duration_ms} ms · ${run.provider || ''}</div>`;
+        <div class="meta">${fmtTime(run.timestamp)} · ${run.tokens?.total ?? 0} tok · ${fmtMs(run.duration_ms)} · ${run.provider || ''}</div>`;
       div.onclick = () => showRun(run.run_id);
       listEl.appendChild(div);
     }
@@ -116,7 +119,7 @@ async function showRun(id) {
     { label: `request received → ${run.endpoint}`, ok: true },
     { label: `routed to provider: ${run.provider} (model ${run.model})`, ok: true },
     { label: `request vaulted: ${run.request_vault_ref || 'vault disabled'}`, ok: !!run.request_vault_ref },
-    { label: `response received: ${run.tokens?.total ?? 0} tokens in ${run.duration_ms} ms`, ok: run.status === 'success' },
+    { label: `response received: ${run.tokens?.total ?? 0} tokens in ${fmtMs(run.duration_ms)}`, ok: run.status === 'success' },
     { label: `response vaulted: ${run.response_vault_ref || 'vault disabled'}`, ok: !!run.response_vault_ref },
     { label: `AIR record written + audit chain appended`, ok: true },
   ];
@@ -131,7 +134,7 @@ async function showRun(id) {
         <span class="k">model</span><span class="v">${run.model}</span>
         <span class="k">provider</span><span class="v">${run.provider}</span>
         <span class="k">tokens (in/out/total)</span><span class="v">${run.tokens?.prompt ?? 0} / ${run.tokens?.completion ?? 0} / ${run.tokens?.total ?? 0}</span>
-        <span class="k">duration</span><span class="v">${run.duration_ms} ms</span>
+        <span class="k">duration</span><span class="v">${fmtMs(run.duration_ms)}</span>
       </div>
     </div>
     <div class="card">

@@ -82,6 +82,19 @@ Measured, reproducible, and published in [BENCHMARKS.md](BENCHMARKS.md):
 
 Reproduce it yourself: `bash bench/run-bench.sh && bash bench/failure-injection.sh`
 
+## Episode Replay
+
+Every request through the gateway produces a tamper-evident AIR record. The replay UI turns those records into a browsable timeline: model, provider, token usage, latency, checksums, and live audit chain verification.
+
+![Episode replay UI](docs/replay-ui.png)
+
+```bash
+pip3 install -r dashboard/requirements.txt
+python3 dashboard/replay.py   # open http://localhost:8090
+```
+
+To re-execute a recorded run against the provider and diff the behavior, use `replayctl replay <run.air.json>`.
+
 ## Deploy on Kubernetes
 
 ```bash
