@@ -1,0 +1,12 @@
+# Soak-test override. Layered on top of docker-compose.bench.yaml so the
+# published benchmark stays pristine (no trust-layer overhead in those numbers)
+# while the soak run exercises the full trust path and audit chain.
+#
+#   docker compose -f docker-compose.bench.yaml -f docker-compose.soak.yaml ...
+services:
+  gateway:
+    environment:
+      - GUARDRAILS_CONFIG=/app/guardrails.yaml
+      - TRUST_SIGNING_KEY=soak-test-key-not-for-production
+    volumes:
+      - ../guardrails.yaml:/app/guardrails.yaml:ro

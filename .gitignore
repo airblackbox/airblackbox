@@ -57,3 +57,7 @@ __pycache__/
 air-blackbox-evidence-*.json
 content/
 sdk/air_blackbox.egg-info/
+
+# Soak test run artifacts
+bench/results/soak-round.json
+bench/results/soak-samples.csv

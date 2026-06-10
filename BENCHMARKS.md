@@ -76,6 +76,23 @@ guaranteed. A dropped record is acceptable. A dropped request is not.
 The witness contract held under every failure scenario: 100/100 requests
 succeeded while recording infrastructure was degraded or down.
 
+## Soak / stability
+
+Sustained load with the trust layer enabled, sampling gateway resident
+memory between rounds to catch leaks, and verifying the HMAC audit chain
+is still intact at the end.
+
+```bash
+bash bench/soak.sh                    # 5-minute proof run
+SOAK_MINUTES=1440 bash bench/soak.sh  # full 24-hour soak
+```
+
+A passing run requires the error rate to stay under 1%, resident memory to
+stay under 2x its first sample, and the audit chain to verify after the run.
+On a representative short run, memory stayed flat (it drifted slightly down
+as the garbage collector reclaimed per-request allocations), the error rate
+was 0%, and the chain verified across roughly a thousand appended records.
+
 ## What is and is not measured
 
 Measured: proxy handling, request/response hashing, vault writes, AIR record
