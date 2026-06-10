@@ -1,5 +1,5 @@
 """
-Bilateral Action Receipt — cryptographic proof of authorization AND execution.
+Bilateral Action Receipt - cryptographic proof of authorization AND execution.
 
 A receipt has two phases:
   1. Authorization: the gate evaluates the covenant and signs the decision
@@ -10,7 +10,7 @@ This gives you both sides of Art. 12:
   - What the agent was ALLOWED to do (authorization)
   - What the agent ACTUALLY did (execution result)
 
-Both signatures use Ed25519 for non-repudiation — any third party can
+Both signatures use Ed25519 for non-repudiation - any third party can
 verify without needing the signing key (unlike HMAC which requires
 the shared secret).
 
@@ -28,8 +28,18 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Any
 
-# Ed25519 signing — use cryptography library if available, fall back to
-# HMAC-SHA256 if not (still tamper-evident, just not non-repudiable)
+# ML-DSA-65 (FIPS 204) post-quantum signing - preferred when available.
+# Falls back to Ed25519 if ML-DSA-65 is not available, then to HMAC-SHA256.
+HAS_MLDSA65 = False
+HAS_ED25519 = False
+
+try:
+    # ML-DSA-65 via oqs-python (Open Quantum Safe)
+    import oqs
+    HAS_MLDSA65 = True
+except ImportError:
+    pass
+
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PrivateKey,
@@ -38,7 +48,7 @@ try:
     from cryptography.hazmat.primitives import serialization
     HAS_ED25519 = True
 except ImportError:
-    HAS_ED25519 = False
+    pass
 
 import hmac as hmac_mod
 
@@ -112,6 +122,11 @@ class ActionReceipt:
     created_at: str = ""
     sealed_at: str = ""
 
+    # Self-describing signing info (filled at signing time so the receipt can
+    # be verified by a third party from the JSON alone, no signer object needed).
+    signing_method: str = ""        # "ed25519", "ML-DSA-65", or "hmac-sha256"
+    signing_public_key: str = ""    # hex public key for ed25519 / ML-DSA-65; empty for hmac
+
     # Context
     metadata: dict = field(default_factory=dict)
 
@@ -143,7 +158,7 @@ class ActionReceipt:
         """The canonical bytes that the seal signature covers.
 
         Includes the authorization signature, so the seal covers
-        the entire lifecycle — you can't forge a seal without
+        the entire lifecycle - you can't forge a seal without
         having the valid authorization.
         """
         data = {
@@ -175,6 +190,8 @@ class ActionReceipt:
             "status": self.status.value,
             "created_at": self.created_at,
             "sealed_at": self.sealed_at,
+            "signing_method": self.signing_method,
+            "signing_public_key": self.signing_public_key,
             "metadata": self.metadata,
         }
 
@@ -197,12 +214,13 @@ def hash_result(result: Any) -> str:
 class ReceiptSigner:
     """Signs and verifies receipts using Ed25519 or HMAC-SHA256 fallback.
 
-    Ed25519 is preferred because any third party can verify the signature
-    using only the public key — no shared secret needed. This is what
-    regulators want: independent verifiability.
+    Signing algorithm priority:
+      1. ML-DSA-65 (FIPS 204) - post-quantum secure, preferred
+      2. Ed25519 - classical, non-repudiable
+      3. HMAC-SHA256 - fallback, requires shared key
 
-    If the cryptography library isn't installed, falls back to HMAC-SHA256
-    which still provides tamper evidence but requires the shared key to verify.
+    ML-DSA-65 and Ed25519 signatures can be verified by third parties
+    using only the public key. HMAC requires the shared secret.
     """
 
     def __init__(self, private_key: Optional[bytes] = None, hmac_key: Optional[str] = None):
@@ -211,12 +229,22 @@ class ReceiptSigner:
         Args:
             private_key: Ed25519 private key bytes (32 bytes). If provided,
                          Ed25519 signing is used. If None, generates a new key.
-            hmac_key: HMAC-SHA256 key string. Used as fallback if Ed25519
-                      is unavailable (cryptography package not installed).
+            hmac_key: HMAC-SHA256 key string. Used as fallback if neither
+                      ML-DSA-65 nor Ed25519 is available.
         """
         self._hmac_key = (hmac_key or "air-blackbox-default").encode("utf-8")
+        self._oqs_signer = None
+        self._oqs_pub = None
 
-        if HAS_ED25519:
+        if HAS_MLDSA65:
+            # ML-DSA-65 (FIPS 204) - post-quantum, preferred
+            sig = oqs.Signature("Dilithium3")
+            self._oqs_pub = sig.generate_keypair()
+            self._oqs_signer = sig
+            self._private_key = None
+            self._public_key = None
+            self.method = "ML-DSA-65"
+        elif HAS_ED25519:
             if private_key:
                 self._private_key = Ed25519PrivateKey.from_private_bytes(private_key)
             else:
@@ -231,6 +259,8 @@ class ReceiptSigner:
     @property
     def public_key_bytes(self) -> Optional[bytes]:
         """Export the public key for third-party verification."""
+        if HAS_MLDSA65 and self._oqs_pub:
+            return self._oqs_pub
         if self._public_key and HAS_ED25519:
             return self._public_key.public_bytes(
                 serialization.Encoding.Raw,
@@ -245,8 +275,17 @@ class ReceiptSigner:
         return pk.hex() if pk else None
 
     def sign(self, data: bytes) -> str:
-        """Sign data and return the signature as hex string."""
-        if HAS_ED25519 and self._private_key:
+        """Sign data and return the signature as hex string.
+
+        Uses the highest-priority algorithm available:
+          1. ML-DSA-65 (post-quantum)
+          2. Ed25519 (classical)
+          3. HMAC-SHA256 (shared-secret fallback)
+        """
+        if HAS_MLDSA65 and self._oqs_signer:
+            sig = self._oqs_signer.sign(data)
+            return sig.hex()
+        elif HAS_ED25519 and self._private_key:
             sig = self._private_key.sign(data)
             return sig.hex()
         else:
@@ -257,12 +296,16 @@ class ReceiptSigner:
     def verify(self, data: bytes, signature_hex: str) -> bool:
         """Verify a signature against data.
 
+        For ML-DSA-65: uses the public key (post-quantum secure).
         For Ed25519: uses the public key (no secret needed).
         For HMAC: recomputes and compares (requires the shared key).
         """
         try:
-            if HAS_ED25519 and self._public_key:
-                sig_bytes = bytes.fromhex(signature_hex)
+            sig_bytes = bytes.fromhex(signature_hex)
+            if HAS_MLDSA65 and self._oqs_pub:
+                verifier = oqs.Signature("Dilithium3")
+                return verifier.verify(data, sig_bytes, self._oqs_pub)
+            elif HAS_ED25519 and self._public_key:
                 self._public_key.verify(sig_bytes, data)
                 return True
             else:
@@ -272,7 +315,13 @@ class ReceiptSigner:
             return False
 
     def sign_authorization(self, receipt: ActionReceipt) -> str:
-        """Sign the authorization phase of a receipt."""
+        """Sign the authorization phase of a receipt.
+
+        Also stamps the receipt with the signing method and public key so a
+        third party can verify it later from the receipt JSON alone.
+        """
+        receipt.signing_method = self.method
+        receipt.signing_public_key = self.public_key_hex or ""
         sig = self.sign(receipt.authorization_payload)
         receipt.authorization_sig = sig
         return sig
@@ -296,3 +345,87 @@ class ReceiptSigner:
         auth = self.verify_authorization(receipt)
         seal = self.verify_seal(receipt) if receipt.seal_sig else False
         return auth, seal
+
+
+# ---------------------------------------------------------------------------
+# Standalone third-party verification.
+#
+# verify_receipt(receipt_dict) verifies a receipt using ONLY the information
+# embedded in the receipt itself (signing_method, signing_public_key, and the
+# signature). It needs no ReceiptSigner instance and no shared secret. This is
+# what makes an AIR Blackbox receipt independently verifiable.
+#
+# Returns (verified: bool, detail: str).
+# ---------------------------------------------------------------------------
+
+
+def _authorization_payload_from_dict(d: dict) -> bytes:
+    """Rebuild the exact authorization payload bytes from a receipt dict.
+
+    Must match ActionReceipt.authorization_payload byte-for-byte.
+    """
+    data = {
+        "receipt_id": d.get("receipt_id", ""),
+        "agent_id": d.get("agent_id", ""),
+        "action_name": d.get("action_name", ""),
+        "action_category": d.get("action_category", ""),
+        "payload_hash": d.get("payload_hash", ""),
+        "covenant_hash": d.get("covenant_hash", ""),
+        "decision": d.get("decision", ""),
+        "authorized": d.get("authorized", False),
+        "parent_receipt_id": d.get("parent_receipt_id", None),
+        "created_at": d.get("created_at", ""),
+    }
+    return json.dumps(data, sort_keys=True).encode("utf-8")
+
+
+def verify_receipt(receipt_dict: dict) -> tuple[bool, str]:
+    """Verify a receipt's authorization signature from the receipt JSON alone.
+
+    Uses only the embedded signing_method, signing_public_key, and
+    authorization_sig. No signer object, no shared secret.
+
+    Returns:
+        (verified, detail) - verified is True only if the signature is valid
+        AND the method is asymmetric (independently verifiable).
+    """
+    method = receipt_dict.get("signing_method", "")
+    pub_hex = receipt_dict.get("signing_public_key", "")
+    sig_hex = receipt_dict.get("authorization_sig", "")
+
+    if not sig_hex:
+        return False, "no authorization signature present"
+
+    payload = _authorization_payload_from_dict(receipt_dict)
+
+    if method == "ed25519":
+        if not HAS_ED25519:
+            return False, "ed25519 receipt but cryptography not installed to verify"
+        if not pub_hex:
+            return False, "ed25519 receipt missing public key"
+        try:
+            pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub_hex))
+            pub.verify(bytes.fromhex(sig_hex), payload)
+            return True, "verified (ed25519, third-party verifiable)"
+        except Exception:
+            return False, "ed25519 signature INVALID (tampered or wrong key)"
+
+    if method == "ML-DSA-65":
+        if not HAS_MLDSA65:
+            return False, "ML-DSA-65 receipt but oqs not installed to verify"
+        if not pub_hex:
+            return False, "ML-DSA-65 receipt missing public key"
+        try:
+            verifier = oqs.Signature("Dilithium3")
+            ok = verifier.verify(payload, bytes.fromhex(sig_hex), bytes.fromhex(pub_hex))
+            return (True, "verified (ML-DSA-65, post-quantum, third-party verifiable)") if ok \
+                else (False, "ML-DSA-65 signature INVALID (tampered or wrong key)")
+        except Exception as e:
+            return False, f"ML-DSA-65 verification error: {e}"
+
+    if method == "hmac-sha256":
+        return False, ("hmac-sha256 is not third-party verifiable; it needs the "
+                       "shared secret. Re-sign with ed25519 or ML-DSA-65 for "
+                       "independent verification.")
+
+    return False, f"unknown or missing signing_method: {method!r}"

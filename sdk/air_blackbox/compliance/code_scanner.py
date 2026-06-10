@@ -1,5 +1,5 @@
 """
-Code-level scanner — reads Python files and detects compliance-relevant patterns.
+Code-level scanner - reads Python files and detects compliance-relevant patterns.
 
 This module makes every project get a DIFFERENT score by actually reading
 the Python source code and checking for real patterns.
@@ -60,6 +60,13 @@ def scan_codebase(scan_path: str) -> List[CodeFinding]:
     findings.extend(_check_token_expiry_revocation(file_contents, scan_path))
     findings.extend(_check_action_audit_trail(file_contents, scan_path))
     findings.extend(_check_action_boundaries(file_contents, scan_path))
+
+    # === Hiring AI Compliance (US) ===
+    # Only fires when the codebase looks like a hiring/employment AI system
+    if _has_hiring_context(file_contents):
+        findings.extend(_check_zip_proxy(file_contents, scan_path))
+        findings.extend(_check_bias_audit(file_contents, scan_path))
+        findings.extend(_check_hiring_retention(file_contents, scan_path))
 
     return findings
 
@@ -166,9 +173,32 @@ def _check_fallback_patterns(file_contents: dict, scan_path: str) -> List[CodeFi
 
 
 def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'pydantic', r'BaseModel', r'validator', r'field_validator', r'validate_input', r'input_schema', r'json_schema', r'TypedDict', r'dataclass', r'InputGuard', r'sanitize']
-    combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
+    # Strong patterns: always indicate input validation
+    strong_patterns = [
+        r'field_validator', r'validate_input', r'input_schema',
+        r'json_schema', r'InputGuard', r'jsonschema\.validate',
+    ]
+    # Weak patterns: only count if LLM calls are also present in same file
+    # (a BaseModel for a DB schema is NOT AI input validation)
+    weak_patterns = [
+        r'pydantic', r'BaseModel', r'validator', r'TypedDict',
+        r'dataclass', r'Field\(',
+    ]
+    llm_patterns = [
+        r'\.chat\.completions\.create\(', r'\.invoke\(', r'\.generate\(',
+        r'ChatOpenAI\(', r'OpenAI\(', r'Anthropic\(', r'\.kickoff\(',
+    ]
+    llm_combined = "|".join(llm_patterns)
+    strong_combined = "|".join(strong_patterns)
+    weak_combined = "|".join(weak_patterns)
+
+    hits = []
+    for fp, content in file_contents.items():
+        if re.search(strong_combined, content):
+            hits.append(fp)
+        elif re.search(weak_combined, content) and re.search(llm_combined, content):
+            hits.append(fp)
+
     total = len(file_contents)
     if hits:
         return [CodeFinding(article=10, name="Input validation / schema enforcement", status="pass",
@@ -215,7 +245,7 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     """Check docstring coverage, handling multi-line function signatures.
     Fixed in v1.3.1: joins multi-line signatures before searching for docstrings.
     """
-    # Exclude test files — they tank docstring coverage with bare test_* functions
+    # Exclude test files - they tank docstring coverage with bare test_* functions
     source_files = _source_files_only(file_contents)
     total_defs = 0
     documented_defs = 0
@@ -284,7 +314,7 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         r'|[A-Z][a-zA-Z0-9_]*'
         r')'
     )
-    # Exclude test files — test functions rarely have type hints
+    # Exclude test files - test functions rarely have type hints
     source_files = _source_files_only(file_contents)
     total_defs = 0
     typed_defs = 0
@@ -323,7 +353,10 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    patterns = [r'import logging', r'from logging', r'getLogger', r'structlog', r'loguru', r'logger\.', r'logging\.']
+    # Require actual logger usage, not just `import logging`
+    patterns = [r'logging\.getLogger', r'logging\.basicConfig',
+        r'logging\.(?:debug|info|warning|error|critical)\(',
+        r'structlog', r'loguru', r'logger\.(?:debug|info|warning|error)\(']
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
     total = len(file_contents)
@@ -337,7 +370,7 @@ def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    # Core tracing patterns — instrumentation is the modern standard
+    # Core tracing patterns - instrumentation is the modern standard
     # (learned from LlamaIndex: callback_manager is deprecated in favor of instrumentation module)
     # Learned from Haystack (Julian Risch): HAYSTACK_CONTENT_TRACING_ENABLED + logging_tracer.py
     # is real production audit capability, stronger than basic debug logging
@@ -371,21 +404,35 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
 
 
 def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFinding]:
-    # Learned from Haystack: confirmation_strategy and confirmation_policy are real HITL patterns
-    # Learned from CrewAI: allow_delegation is a crew-level oversight mechanism
+    # Core HITL patterns that always indicate human oversight
     patterns = [
         r'human_in_the_loop', r'human_approval', r'require_approval',
         r'approval_gate', r'require_confirmation', r'confirmation_gate',
-        r'confirm.*action', r'ask_human', r'human_input',
+        r'ask_human', r'human_input',
         r'HumanApprovalCallbackHandler', r'human_feedback',
         r'manual_review', r'approval_required', r'allow_human',
         r'human_oversight',
         r'confirmation_strategy', r'confirmation_polic',  # Haystack HITL
-        r'allow_delegation',  # CrewAI delegation oversight
         r'interrupt_before', r'interrupt_after',  # LangGraph HITL
+        r'air_gate', r'GateClient',  # AIR Blackbox gate
     ]
+    # Removed: r'allow_delegation' -- in CrewAI this is agent-to-agent
+    # delegation, NOT human oversight. False positive reported by
+    # community (github.com/deepset-ai/haystack/issues/10810).
+    # Removed: r'confirm.*action' -- too generic, matches JS confirm()
     combined = "|".join(patterns)
     hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+
+    # Context-aware check: allow_delegation only counts if NOT in a
+    # CrewAI Agent/Task constructor (where it means agent-to-agent)
+    if not hits:
+        crewai_patterns = r'(?:Agent|Task|Crew)\s*\('
+        for fp, content in file_contents.items():
+            if re.search(r'allow_delegation', content, re.IGNORECASE):
+                if not re.search(crewai_patterns, content):
+                    # allow_delegation in non-CrewAI context = real HITL
+                    hits.append(fp)
+
     if hits:
         return [CodeFinding(article=14, name="Human-in-the-loop patterns", status="pass", evidence=f"Human oversight patterns found in {len(hits)} file(s)")]
     return [CodeFinding(article=14, name="Human-in-the-loop patterns", status="warn",
@@ -504,7 +551,108 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
 
 
 # ─────────────────────────────────────────────
-# Article 12 + 14 — OAuth & Delegation Tracking
+# Hiring AI Compliance (US Jurisdictions)
+# These checks only fire when hiring/employment
+# AI context is detected in the codebase.
+# ─────────────────────────────────────────────
+
+HIRING_CONTEXT_PATTERNS = [
+    r"candidate", r"applicant", r"hiring", r"screening",
+    r"resume", r"interview", r"recruitment", r"job_posting",
+    r"job_application", r"talent_acquisition", r"ats\b",
+    r"applicant_tracking", r"shortlist", r"reject.*candidate",
+    r"rank.*candidate", r"score.*candidate", r"evaluate.*candidate",
+]
+
+
+def _has_hiring_context(file_contents: dict) -> bool:
+    """Check if the codebase is related to hiring/employment AI."""
+    all_code = "\n".join(file_contents.values())
+    matches = 0
+    for p in HIRING_CONTEXT_PATTERNS:
+        if re.search(p, all_code, re.IGNORECASE):
+            matches += 1
+            if matches >= 2:
+                return True
+    return False
+
+
+def _check_zip_proxy(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """Illinois HB 3773: Detect ZIP code used as proxy for protected characteristics."""
+    zip_patterns = [
+        r"zip_code", r"zipcode", r"zip_prefix", r"postal_code",
+        r"zip\s*[\[=]",
+    ]
+    scoring_patterns = [
+        r"score", r"rank", r"weight", r"predict", r"feature",
+        r"model\.", r"classifier", r"decision", r"filter",
+    ]
+    zip_combined = "|".join(zip_patterns)
+    scoring_combined = "|".join(scoring_patterns)
+
+    files_with_zip = [fp for fp, content in file_contents.items()
+                      if re.search(zip_combined, content, re.IGNORECASE)]
+    if not files_with_zip:
+        return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+            status="pass", evidence="No ZIP/postal code usage detected in hiring scoring context")]
+
+    files_with_zip_scoring = [fp for fp in files_with_zip
+                              if re.search(scoring_combined, file_contents[fp], re.IGNORECASE)]
+    if files_with_zip_scoring:
+        return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+            status="fail",
+            evidence=f"ZIP/postal code used alongside scoring/ranking in {len(files_with_zip_scoring)} file(s): {', '.join(_rel(f, scan_path) for f in files_with_zip_scoring[:3])}. Illinois HB 3773 prohibits ZIP as proxy for protected characteristics.",
+            fix_hint="Remove ZIP code from scoring features or document a disparity analysis")]
+    return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+        status="warn",
+        evidence=f"ZIP/postal code referenced in {len(files_with_zip)} file(s) but not in obvious scoring context. Verify it does not influence ranking.",
+        fix_hint="Audit whether ZIP code flows into candidate ranking or filtering logic")]
+
+
+def _check_bias_audit(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """NYC Local Law 144: Check for bias audit framework in hiring AI."""
+    bias_patterns = [
+        r"bias_audit", r"disparate_impact", r"adverse_impact",
+        r"four_fifths_rule", r"selection_rate", r"demographic_parity",
+        r"impact_ratio", r"fairness_metric", r"protected_class",
+        r"equal_opportunity", r"statistical_parity",
+        r"aequitas", r"fairlearn", r"ai_fairness_360",
+    ]
+    combined = "|".join(bias_patterns)
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)]
+    if hits:
+        return [CodeFinding(article=16, name="NYC LL144: Bias audit framework",
+            status="pass", evidence=f"Bias audit or fairness metrics detected in {len(hits)} file(s)")]
+    return [CodeFinding(article=16, name="NYC LL144: Bias audit framework",
+        status="fail",
+        evidence="No bias audit framework detected. NYC LL144 requires annual independent bias audits for automated employment decision tools.",
+        fix_hint="Add fairness metrics (fairlearn, aequitas, AI Fairness 360) with disparate impact analysis across race/ethnicity and sex")]
+
+
+def _check_hiring_retention(file_contents: dict, scan_path: str) -> List[CodeFinding]:
+    """California FEHA: Check for 4-year data retention in hiring AI."""
+    retention_patterns = [
+        r"retention_period", r"retention_policy", r"data_retention",
+        r"record_retention", r"archive.*(?:year|day|month)",
+        r"retention.*(?:year|day|month)", r"keep.*record.*(?:year|day)",
+        r"(?:1460|1461)\s*day", r"4\s*year.*retain", r"retain.*4\s*year",
+        r"purge_after", r"ttl.*(?:year|day)",
+    ]
+    combined = "|".join(retention_patterns)
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)]
+    if hits:
+        return [CodeFinding(article=16, name="California FEHA: Data retention",
+            status="pass", evidence=f"Data retention policy detected in {len(hits)} file(s)")]
+    return [CodeFinding(article=16, name="California FEHA: Data retention",
+        status="fail",
+        evidence="No data retention policy detected. California FEHA requires 4-year retention of hiring AI decisions and candidate data.",
+        fix_hint="Add retention_policy config with minimum 4-year (1460-day) retention for candidate evaluation data")]
+
+
+# ─────────────────────────────────────────────
+# Article 12 + 14 - OAuth & Delegation Tracking
 # ─────────────────────────────────────────────
 
 def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -573,7 +721,7 @@ def _check_token_expiry_revocation(file_contents: dict, scan_path: str) -> List[
     """Check if tokens have expiry/revocation handling or execution time-bounding.
 
     Tightened in v1.4.1: separated token security (strong) from basic config params (weak).
-    max_iterations alone is not a security boundary — it's a config param.
+    max_iterations alone is not a security boundary - it's a config param.
     """
     # Strong: actual token lifecycle management
     strong_patterns = [
@@ -644,7 +792,7 @@ def _check_action_boundaries(file_contents: dict, scan_path: str) -> List[CodeFi
         r'action_polic', r'execution_polic',  # Haystack policy patterns
     ]
     combined = "|".join(boundary_patterns)
-    # Exclude serialization files — is_allowed in serialization is deserialization safety, not action boundaries
+    # Exclude serialization files - is_allowed in serialization is deserialization safety, not action boundaries
     hits = [fp for fp, content in file_contents.items()
             if re.search(combined, content, re.IGNORECASE)
             and 'serializ' not in os.path.basename(fp).lower()]

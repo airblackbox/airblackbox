@@ -1,5 +1,5 @@
 """
-Gateway client — talks to the running AIR Blackbox Gateway.
+Gateway client - talks to the running AIR Blackbox Gateway.
 Pulls live data from gateway API and .air.json records.
 """
 
@@ -42,8 +42,8 @@ class GatewayClient:
 
     def __init__(self, gateway_url="http://localhost:8080", runs_dir=None, scan_path=None):
         self.gateway_url = gateway_url.rstrip("/")
-        self.runs_dir = runs_dir or self._find_runs_dir()
         self.scan_path = scan_path
+        self.runs_dir = runs_dir or self._find_runs_dir()
         self.client = httpx.Client(timeout=5.0)
 
     def get_status(self) -> GatewayStatus:
@@ -257,7 +257,13 @@ class GatewayClient:
         runs_dir = os.environ.get("RUNS_DIR")
         if runs_dir and os.path.isdir(runs_dir):
             return runs_dir
+        # If scanning a specific project, look for runs/ inside that project first
+        if self.scan_path and os.path.isdir(self.scan_path):
+            project_runs = os.path.join(os.path.abspath(self.scan_path), "runs")
+            if os.path.isdir(project_runs):
+                return project_runs
+        # Fallback: check common locations relative to current working directory
         for c in ["./runs", "../runs", os.path.expanduser("~/.air-blackbox/runs")]:
             if os.path.isdir(c):
                 return c
-        return "./runs"
+        return None

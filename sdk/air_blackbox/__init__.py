@@ -1,5 +1,5 @@
 """
-AIR Blackbox — AI governance control plane.
+AIR Blackbox - AI governance control plane.
 
 One install. Four commands. 79% automated compliance.
 
@@ -11,7 +11,7 @@ One install. Four commands. 79% automated compliance.
     air-blackbox export      # Signed evidence bundle for auditors
 """
 
-__version__ = "1.8.1"
+__version__ = "1.13.2"
 __all__ = ["AirBlackbox", "AirTrust"]
 
 

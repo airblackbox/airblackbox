@@ -36,24 +36,9 @@ except ImportError:
     Span = object
     Pipeline = object
 
-# Simple PII patterns
-_PII_PATTERNS = [
-    (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'email'),
-    (r'\b\d{3}-\d{2}-\d{4}\b', 'ssn'),
-    (r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b', 'phone'),
-    (r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', 'credit_card'),
-]
-
-# Simple injection patterns
-_INJECTION_PATTERNS = [
-    r'ignore (?:all )?previous instructions',
-    r'ignore (?:all )?above instructions',
-    r'disregard (?:all )?previous',
-    r'you are now',
-    r'system prompt:',
-    r'new instructions:',
-    r'override:',
-]
+# Canonical patterns from RuntimeMonitor (single source of truth)
+from air_blackbox.gate.runtime import PII_PATTERN_STRINGS as _PII_PATTERNS
+from air_blackbox.gate.runtime import INJECTION_PATTERN_STRINGS as _INJECTION_PATTERNS
 
 
 class AirSpan:
@@ -262,7 +247,7 @@ class AirHaystackTracer(Tracer):
                 with open(fpath, "w") as f:
                     json.dump(record, f, indent=2)
             except Exception:
-                pass  # Non-blocking — never crash the user's pipeline
+                pass  # Non-blocking - never crash the user's pipeline
 
     @property
     def event_count(self) -> int:

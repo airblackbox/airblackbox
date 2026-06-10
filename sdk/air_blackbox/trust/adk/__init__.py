@@ -39,24 +39,9 @@ except ImportError:
         HAS_ADK = False
         Agent = object
 
-# Simple PII patterns
-_PII_PATTERNS = [
-    (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'email'),
-    (r'\b\d{3}-\d{2}-\d{4}\b', 'ssn'),
-    (r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b', 'phone'),
-    (r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', 'credit_card'),
-]
-
-# Simple injection patterns
-_INJECTION_PATTERNS = [
-    r'ignore (?:all )?previous instructions',
-    r'ignore (?:all )?above instructions',
-    r'disregard (?:all )?previous',
-    r'you are now',
-    r'system prompt:',
-    r'new instructions:',
-    r'override:',
-]
+# Canonical patterns from RuntimeMonitor (single source of truth)
+from air_blackbox.gate.runtime import PII_PATTERN_STRINGS as _PII_PATTERNS
+from air_blackbox.gate.runtime import INJECTION_PATTERN_STRINGS as _INJECTION_PATTERNS
 
 
 class AirADKTrust:
@@ -78,7 +63,7 @@ class AirADKTrust:
         trust = AirADKTrust()
         agent = trust.wrap(your_agent)
 
-        # Use agent normally — all calls are logged
+        # Use agent normally - all calls are logged
         print(f"Logged {trust.event_count} compliance events")
     """
 
@@ -130,7 +115,7 @@ class AirADKTrust:
         if error:
             record["error"] = error[:500]
 
-        # Scan for PII and injection — sanitize before processing
+        # Scan for PII and injection - sanitize before processing
         sanitized_prompt = str(input_text or "")
         sanitized_output = str(output_text or "")
         all_text = " ".join([sanitized_prompt, sanitized_output])

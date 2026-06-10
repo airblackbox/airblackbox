@@ -1,174 +1,202 @@
-"""Evidence bundle generation for compliance submission.
+"""Self-verifying evidence bundle generator.
 
-Creates comprehensive evidence packages documenting compliance
-controls, audit trails, and remediation actions.
+Generates a .air-evidence.zip containing:
+  - audit_chain.json   (the real .air.json records, in write order)
+  - scan_results.json  (compliance scan output)
+  - bundle_meta.json   (manifest with SHA-256 of each file)
+  - verify.py          (standalone verifier - stdlib only, no pip install)
+
+An auditor extracts the ZIP and runs:  python verify.py --key <signing-key>
+and gets PASS/FAIL. The verifier recomputes the production HMAC-SHA256 audit
+chain exactly as air_blackbox.trust.chain.AuditChain writes it.
 """
 
+import hashlib
+import hmac
+import json
 import logging
-from typing import Dict, List, Any, Optional
+import os
+import zipfile
 from datetime import datetime
-from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class EvidenceItem:
-    """Single piece of compliance evidence.
-    
-    Attributes:
-        evidence_id: Unique identifier
-        evidence_type: Type of evidence (scan, audit, documentation)
-        description: What this evidence demonstrates
-        timestamp: When evidence was collected
-        content: Evidence content or reference
-    """
-    evidence_id: str
-    evidence_type: str
-    description: str
-    timestamp: datetime
-    content: str
+def generate_evidence_zip(
+    chain_entries: List[Dict[str, Any]],
+    scan_results: Any,
+    signing_key: str = "air-blackbox-default",
+    output_dir: str = ".",
+    aibom: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Generate a self-verifying .air-evidence.zip.
 
+    Args:
+        chain_entries: the real audit records (each a dict with a chain_hash),
+                       in the order they were written.
+        scan_results: compliance scan results (any JSON-serializable structure).
+        signing_key: the HMAC key the chain was signed with.
+        output_dir: directory to write the ZIP to.
+        aibom: optional AI Bill of Materials dict.
 
-class EvidenceBundle:
-    """Generates compliance evidence bundles.
-    
-    Collects and organizes evidence of compliance measures,
-    controls, and remediation for regulatory submission.
+    Returns:
+        Absolute path to the generated ZIP.
     """
-    
-    def __init__(self, bundle_id: str) -> None:
-        """Initialize evidence bundle.
-        
-        Args:
-            bundle_id: Unique identifier for this bundle
-        """
-        self.bundle_id = bundle_id
-        self.items: List[EvidenceItem] = []
-        self.metadata: Dict[str, Any] = {
-            "bundle_id": bundle_id,
-            "created_at": datetime.utcnow().isoformat()
+    now = datetime.utcnow()
+    ts = now.strftime("%Y%m%dT%H%M%S")
+    zip_path = os.path.join(output_dir, f"air-evidence-{ts}.zip")
+
+    chain_json = json.dumps(chain_entries, indent=2, default=str)
+    scan_json = json.dumps(scan_results, indent=2, default=str)
+
+    meta = {
+        "air_evidence_bundle": {
+            "version": "1.1.0",
+            "generated_at": now.isoformat() + "Z",
+            "generator": "air-blackbox",
+            "chain_algorithm": "HMAC-SHA256 (prev_hash || json.dumps(record, sort_keys=True))",
+        },
+        "contents": {
+            "audit_chain": {
+                "file": "audit_chain.json",
+                "sha256": hashlib.sha256(chain_json.encode()).hexdigest(),
+                "entries": len(chain_entries),
+            },
+            "scan_results": {
+                "file": "scan_results.json",
+                "sha256": hashlib.sha256(scan_json.encode()).hexdigest(),
+            },
+        },
+    }
+    if aibom:
+        aibom_json = json.dumps(aibom, indent=2, default=str)
+        meta["contents"]["aibom"] = {
+            "file": "aibom.json",
+            "sha256": hashlib.sha256(aibom_json.encode()).hexdigest(),
         }
-        logger.info("evidence_bundle_created", extra={"bundle_id": bundle_id})
-    
-    def validate_evidence_item(self, evidence_type: str, 
-                              description: str, content: str) -> bool:
-        """Validate evidence item before adding.
-        
-        Args:
-            evidence_type: Type of evidence
-            description: Evidence description
-            content: Evidence content
-            
-        Returns:
-            True if valid
-            
-        Raises:
-            ValueError: If validation fails
-        """
-        valid_types = ["scan", "audit", "documentation", "approval", "remediation"]
-        
-        if evidence_type not in valid_types:
-            raise ValueError(f"Invalid evidence type: {evidence_type}")
-        
-        if not description or len(description) < 10:
-            raise ValueError("Description must be at least 10 characters")
-        
-        if not content:
-            raise ValueError("Content cannot be empty")
-        
-        return True
-    
-    def add_evidence(self, evidence_type: str, description: str, 
-                    content: str) -> EvidenceItem:
-        """Add evidence item to bundle.
-        
-        Args:
-            evidence_type: Type of evidence
-            description: Description of evidence
-            content: Evidence content or reference
-            
-        Returns:
-            The created EvidenceItem
-        """
-        try:
-            self.validate_evidence_item(evidence_type, description, content)
-            
-            evidence = EvidenceItem(
-                evidence_id=f"ev_{len(self.items) + 1}",
-                evidence_type=evidence_type,
-                description=description,
-                timestamp=datetime.utcnow(),
-                content=content
-            )
-            
-            self.items.append(evidence)
-            
-            logger.info(
-                "evidence_added_to_bundle",
-                extra={
-                    "bundle_id": self.bundle_id,
-                    "evidence_type": evidence_type,
-                    "evidence_id": evidence.evidence_id
-                }
-            )
-            
-            return evidence
-            
-        except ValueError as e:
-            logger.error("evidence_validation_error", extra={"error": str(e)})
-            raise
-    
-    def generate_bundle_report(self) -> Dict[str, Any]:
-        """Generate comprehensive evidence bundle report.
-        
-        Returns:
-            Dictionary containing the bundle report
-        """
-        try:
-            type_counts: Dict[str, int] = {}
-            for item in self.items:
-                type_counts[item.evidence_type] = type_counts.get(item.evidence_type, 0) + 1
-            
-            report = {
-                "bundle_id": self.bundle_id,
-                "created_at": self.metadata["created_at"],
-                "total_items": len(self.items),
-                "evidence_types": type_counts,
-                "evidence": [
-                    {
-                        "id": item.evidence_id,
-                        "type": item.evidence_type,
-                        "description": item.description,
-                        "timestamp": item.timestamp.isoformat(),
-                        "content_length": len(item.content)
-                    }
-                    for item in self.items
-                ],
-                "generated_at": datetime.utcnow().isoformat()
-            }
-            
-            logger.info(
-                "evidence_bundle_report_generated",
-                extra={
-                    "bundle_id": self.bundle_id,
-                    "total_items": len(self.items),
-                    "evidence_types": list(type_counts.keys())
-                }
-            )
-            
-            return report
-            
-        except Exception as e:
-            logger.error("bundle_report_generation_error", extra={"error": str(e)})
-            raise
-    
-    def export_to_json(self) -> Dict[str, Any]:
-        """Export bundle as JSON-serializable dictionary.
-        
-        Returns:
-            JSON-safe dictionary representation
-        """
-        report = self.generate_bundle_report()
-        logger.info("bundle_exported_to_json", extra={"bundle_id": self.bundle_id})
-        return report
+
+    meta_json = json.dumps(meta, indent=2)
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("audit_chain.json", chain_json)
+        zf.writestr("scan_results.json", scan_json)
+        zf.writestr("bundle_meta.json", meta_json)
+        if aibom:
+            zf.writestr("aibom.json", aibom_json)
+        zf.writestr("verify.py", _VERIFY_SCRIPT)
+
+    logger.info("evidence_bundle_generated path=%s entries=%d", zip_path, len(chain_entries))
+    return os.path.abspath(zip_path)
+
+
+# ---------------------------------------------------------------------------
+# Standalone verify.py - stdlib only, no pip install required.
+# Mirrors air_blackbox.trust.chain.AuditChain byte-for-byte:
+#   chain_hash = HMAC-SHA256(key, prev_hash || json.dumps(record, sort_keys=True))
+#   prev_hash starts at b"genesis" and advances to the raw digest each step.
+# ---------------------------------------------------------------------------
+
+_VERIFY_SCRIPT = '''#!/usr/bin/env python3
+"""AIR Blackbox Evidence Bundle Verifier.
+
+Verifies an AIR Blackbox evidence bundle using ONLY the Python standard library.
+No pip install required. Run from inside the extracted bundle directory:
+
+    python verify.py --key YOUR_SIGNING_KEY
+
+Exit code 0 = PASS (untampered). Exit code 1 = FAIL.
+"""
+
+import argparse
+import hashlib
+import hmac
+import json
+import os
+import sys
+
+
+def sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def verify_chain(records, signing_key):
+    """Recompute the production HMAC-SHA256 audit chain.
+
+    Matches air_blackbox.trust.chain.AuditChain exactly:
+      record_bytes = json.dumps(record_without_chain_hash, sort_keys=True)
+      chain_hash   = HMAC-SHA256(key, prev_hash || record_bytes).hexdigest()
+      prev_hash advances to the raw .digest() after each record.
+    """
+    if not records:
+        return True, 0, "empty chain"
+    key = signing_key.encode("utf-8")
+    prev = b"genesis"
+    for i, rec in enumerate(records):
+        stored = rec.get("chain_hash", "")
+        rest = {k: v for k, v in rec.items() if k != "chain_hash"}
+        record_bytes = json.dumps(rest, sort_keys=True).encode("utf-8")
+        h = hmac.new(key, prev + record_bytes, hashlib.sha256)
+        if h.hexdigest() != stored:
+            return False, i, "chain hash mismatch at record %d (run_id=%s)" % (
+                i, rec.get("run_id", "?"))
+        prev = h.digest()
+    return True, len(records), "all %d records verified" % len(records)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="AIR Blackbox Evidence Verifier")
+    ap.add_argument("--key", default="air-blackbox-default",
+                    help="signing key the chain was created with")
+    args = ap.parse_args()
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    all_pass = True
+
+    print("=" * 60)
+    print("AIR Blackbox Evidence Bundle Verification")
+    print("=" * 60)
+
+    meta_path = os.path.join(here, "bundle_meta.json")
+    if not os.path.exists(meta_path):
+        print("FAIL: bundle_meta.json not found")
+        sys.exit(1)
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    print("Generated: %s" % meta["air_evidence_bundle"]["generated_at"])
+    print()
+
+    for name, info in meta.get("contents", {}).items():
+        fp = os.path.join(here, info["file"])
+        if not os.path.exists(fp):
+            print("[FAIL] %s - missing" % info["file"]); all_pass = False; continue
+        actual = sha256_file(fp)
+        ok = (actual == info["sha256"])
+        if not ok: all_pass = False
+        print("[%s] %s (SHA-256)" % ("PASS" if ok else "FAIL", info["file"]))
+
+    chain_path = os.path.join(here, "audit_chain.json")
+    if os.path.exists(chain_path):
+        with open(chain_path) as f:
+            chain = json.load(f)
+        ok, count, msg = verify_chain(chain, args.key)
+        if not ok: all_pass = False
+        print("[%s] Audit chain - %s" % ("PASS" if ok else "FAIL", msg))
+    else:
+        print("[SKIP] no audit_chain.json")
+
+    print("=" * 60)
+    if all_pass:
+        print("RESULT: PASS - evidence has not been tampered with.")
+        sys.exit(0)
+    else:
+        print("RESULT: FAIL - evidence integrity could not be verified.")
+        print("(If the chain fails, confirm you passed the correct --key.)")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+'''

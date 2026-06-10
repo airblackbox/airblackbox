@@ -1,5 +1,5 @@
 """
-Runtime Validation Engine — pre-execution checks for AI agent outputs.
+Runtime Validation Engine - pre-execution checks for AI agent outputs.
 
 This closes the gap between "prove what happened" (audit) and
 "prove what was allowed to happen" (validation).
