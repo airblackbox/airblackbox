@@ -13,6 +13,8 @@ env:
 permissions:
   contents: read
   packages: write
+  id-token: write       # for keyless Sigstore signing of the provenance
+  attestations: write   # to attach the SLSA provenance attestation
 
 jobs:
   build-and-push:
@@ -39,9 +41,17 @@ jobs:
             type=sha
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate SLSA build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
