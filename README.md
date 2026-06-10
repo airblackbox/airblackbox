@@ -48,7 +48,7 @@ pip install air-blackbox
 # Run your first gap analysis - works on any Python AI project
 air-blackbox comply --scan . -v
 
-# Find undeclared model calls hiding in helpers and utilities
+# Inventory every model and provider observed in live gateway traffic
 air-blackbox discover
 
 # Replay any recorded episode
