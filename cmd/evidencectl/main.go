@@ -34,6 +34,10 @@ func main() {
 		runCheckpoint(os.Args[2:])
 	case "anchor":
 		runAnchor(os.Args[2:])
+	case "anchor-trajectory":
+		runAnchorTrajectory(os.Args[2:])
+	case "verify-trajectory":
+		runVerifyTrajectory(os.Args[2:])
 	case "verify-checkpoint":
 		runVerifyCheckpoint(os.Args[2:])
 	default:

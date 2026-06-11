@@ -10,8 +10,15 @@ Implementation status:
   so a lone call is a one-step trajectory and old records still verify.
 - DONE: integration test proving a trajectory summary rides the existing
   AuditChain unchanged and the chain still verifies (one entry per run).
-- TODO: capture action steps via ActionGuard (Phase 2), live wiring into the
-  proxy/gate, and trajectory-level replay (deferred).
+- DONE (Phase 2): Tombstone's ActionGuard captures action steps with their
+  gate verdict and commits a trajectory root (airblackbox/tombstone,
+  tombstone/integrations/air_trajectory.py); the Go evidencectl
+  anchor-trajectory subcommand commits that root to an audit chain, cuts a
+  dual-signed (ML-DSA-65 + Ed25519) checkpoint, and publishes to Rekor;
+  verify-trajectory checks the full chain of custody with no secret needed.
+  Proven end to end against live Rekor (log index 1791674607).
+- TODO: live wiring into the proxy/gate request path, and trajectory-level
+  replay (deferred).
 Author: AIR Blackbox
 Supersedes nothing. Extends the existing call-level audit chain.
 
