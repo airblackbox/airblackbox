@@ -27,6 +27,11 @@ type Record struct {
 	DurationMS       int64     `json:"duration_ms"`
 	Status           string    `json:"status"`
 	Error            string    `json:"error,omitempty"`
+	// Trajectory linkage (additive, backward compatible). A lone call is a
+	// trajectory of one step. See docs/SPEC-trajectory-chain.md.
+	TrajectoryID     string    `json:"trajectory_id,omitempty"`
+	StepID           string    `json:"step_id,omitempty"`
+	ParentIDs        []string  `json:"parent_ids,omitempty"`
 }
 
 // Tokens holds token usage from the provider response.

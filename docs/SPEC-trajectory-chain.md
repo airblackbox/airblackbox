@@ -1,6 +1,17 @@
 # SPEC: Trajectory-Level Audit Chain
 
-Status: Draft / design captured, not yet implemented
+Status: Phase 1 implemented (commitment primitive + additive fields)
+
+Implementation status:
+- DONE: pkg/trajectory commitment primitive (Merkle root over a canonically
+  ordered step DAG, domain-separated leaves, cycle/unknown-parent rejection,
+  third-party Verify). 13 unit tests.
+- DONE: additive recorder fields (trajectory_id, step_id, parent_ids), omitempty,
+  so a lone call is a one-step trajectory and old records still verify.
+- DONE: integration test proving a trajectory summary rides the existing
+  AuditChain unchanged and the chain still verifies (one entry per run).
+- TODO: capture action steps via ActionGuard (Phase 2), live wiring into the
+  proxy/gate, and trajectory-level replay (deferred).
 Author: AIR Blackbox
 Supersedes nothing. Extends the existing call-level audit chain.
 
