@@ -1,0 +1,506 @@
+[
+  {
+    "check": "LLM call error handling",
+    "label": true,
+    "files": {
+      "a.py": "import openai\nclient = openai.OpenAI()\ndef run(p):\n    try:\n        return client.chat.completions.create(model='gpt-4o', messages=p)\n    except Exception as e:\n        return None\n"
+    }
+  },
+  {
+    "check": "LLM call error handling",
+    "label": true,
+    "files": {
+      "b.py": "from anthropic import Anthropic\nc = Anthropic()\ndef ask(q):\n    try:\n        return c.messages.create(model='claude-3-5-sonnet', messages=q)\n    except Exception:\n        raise\n"
+    }
+  },
+  {
+    "check": "LLM call error handling",
+    "label": true,
+    "files": {
+      "c.py": "from langchain_openai import ChatOpenAI\nllm = ChatOpenAI()\ndef go(x):\n    try:\n        return llm.invoke(x)\n    except ValueError:\n        return 'err'\n"
+    }
+  },
+  {
+    "check": "LLM call error handling",
+    "label": false,
+    "files": {
+      "d.py": "import openai\nclient = openai.OpenAI()\ndef run(p):\n    return client.chat.completions.create(model='gpt-4o', messages=p)\n"
+    }
+  },
+  {
+    "check": "LLM call error handling",
+    "label": false,
+    "files": {
+      "e.py": "from anthropic import Anthropic\nc = Anthropic()\ndef ask(q):\n    resp = c.messages.create(model='claude-3-5-sonnet', messages=q)\n    return resp.content\n"
+    }
+  },
+  {
+    "check": "LLM call error handling",
+    "label": false,
+    "files": {
+      "f.py": "from langchain_openai import ChatOpenAI\nllm = ChatOpenAI()\ndef go(x):\n    return llm.invoke(x)\n"
+    }
+  },
+  {
+    "check": "Fallback/recovery patterns",
+    "label": true,
+    "files": {
+      "a.py": "from langchain_core.runnables import RunnableWithFallbacks\nchain = primary.with_fallbacks([backup])\n"
+    }
+  },
+  {
+    "check": "Fallback/recovery patterns",
+    "label": true,
+    "files": {
+      "b.py": "import tenacity\n@tenacity.retry\ndef call():\n    return llm.invoke('x')\n"
+    }
+  },
+  {
+    "check": "Fallback/recovery patterns",
+    "label": true,
+    "files": {
+      "c.py": "MAX_RETRIES = 3\ndef call(p, attempt=0):\n    try:\n        return llm.invoke(p)\n    except Exception:\n        if attempt < MAX_RETRIES:\n            return call(p, attempt+1)\n"
+    }
+  },
+  {
+    "check": "Fallback/recovery patterns",
+    "label": false,
+    "files": {
+      "d.py": "import openai\nclient = openai.OpenAI()\ndef run(p):\n    return client.chat.completions.create(model='gpt-4o', messages=p)\n"
+    }
+  },
+  {
+    "check": "Fallback/recovery patterns",
+    "label": false,
+    "files": {
+      "e.py": "def summarize(text):\n    return llm.invoke('summarize: ' + text)\n"
+    }
+  },
+  {
+    "check": "Fallback/recovery patterns",
+    "label": false,
+    "files": {
+      "f.py": "class Agent:\n    def act(self, obs):\n        return self.model.generate(obs)\n"
+    }
+  },
+  {
+    "check": "Input validation / schema enforcement",
+    "label": true,
+    "files": {
+      "a.py": "from pydantic import BaseModel, field_validator\nclass Req(BaseModel):\n    prompt: str\n    @field_validator('prompt')\n    def chk(cls, v): return v\nimport openai\nopenai.OpenAI().chat.completions.create(model='gpt-4o', messages=[])\n"
+    }
+  },
+  {
+    "check": "Input validation / schema enforcement",
+    "label": true,
+    "files": {
+      "b.py": "import jsonschema\nschema = {'type':'object'}\ndef handle(payload):\n    jsonschema.validate(payload, schema)\n    return llm.invoke(payload)\n"
+    }
+  },
+  {
+    "check": "Input validation / schema enforcement",
+    "label": true,
+    "files": {
+      "c.py": "from pydantic import BaseModel\nclass In(BaseModel):\n    q: str\ndef run(d):\n    parsed = In(**d)\n    return ChatOpenAI().invoke(parsed.q)\n"
+    }
+  },
+  {
+    "check": "Input validation / schema enforcement",
+    "label": false,
+    "files": {
+      "d.py": "import openai\ndef run(d):\n    return openai.OpenAI().chat.completions.create(model='gpt-4o', messages=d['messages'])\n"
+    }
+  },
+  {
+    "check": "Input validation / schema enforcement",
+    "label": false,
+    "files": {
+      "e.py": "def handle(payload):\n    return llm.invoke(payload['text'])\n"
+    }
+  },
+  {
+    "check": "Input validation / schema enforcement",
+    "label": false,
+    "files": {
+      "f.py": "class Pipe:\n    def run(self, x):\n        return self.model.generate(x)\n"
+    }
+  },
+  {
+    "check": "Application logging",
+    "label": true,
+    "files": {
+      "a.py": "import logging\nlog = logging.getLogger(__name__)\ndef run(p):\n    log.info('calling llm')\n    return llm.invoke(p)\n"
+    }
+  },
+  {
+    "check": "Application logging",
+    "label": true,
+    "files": {
+      "b.py": "import structlog\nlog = structlog.get_logger()\ndef go(x):\n    log.info('event', x=x)\n"
+    }
+  },
+  {
+    "check": "Application logging",
+    "label": true,
+    "files": {
+      "c.py": "import logging\nlogging.basicConfig(level=logging.INFO)\ndef f():\n    logging.error('boom')\n"
+    }
+  },
+  {
+    "check": "Application logging",
+    "label": false,
+    "files": {
+      "d.py": "def run(p):\n    print('calling llm')\n    return llm.invoke(p)\n"
+    }
+  },
+  {
+    "check": "Application logging",
+    "label": false,
+    "files": {
+      "e.py": "def go(x):\n    return model.generate(x)\n"
+    }
+  },
+  {
+    "check": "Application logging",
+    "label": false,
+    "files": {
+      "f.py": "class S:\n    def step(self):\n        return 42\n"
+    }
+  },
+  {
+    "check": "Tracing / observability",
+    "label": true,
+    "files": {
+      "a.py": "from opentelemetry import trace\ntracer = trace.get_tracer(__name__)\ndef run(p):\n    with tracer.start_as_current_span('llm'):\n        return llm.invoke(p)\n"
+    }
+  },
+  {
+    "check": "Tracing / observability",
+    "label": true,
+    "files": {
+      "b.py": "import langsmith\n@langsmith.traceable\ndef call(x):\n    return llm.invoke(x)\n"
+    }
+  },
+  {
+    "check": "Tracing / observability",
+    "label": true,
+    "files": {
+      "c.py": "from langfuse import Langfuse\nlf = Langfuse()\ndef go(x):\n    trace_id = lf.trace(name='run')\n    return x\n"
+    }
+  },
+  {
+    "check": "Tracing / observability",
+    "label": false,
+    "files": {
+      "d.py": "def run(p):\n    return llm.invoke(p)\n"
+    }
+  },
+  {
+    "check": "Tracing / observability",
+    "label": false,
+    "files": {
+      "e.py": "import logging\nlogging.getLogger(__name__).info('hi')\n"
+    }
+  },
+  {
+    "check": "Tracing / observability",
+    "label": false,
+    "files": {
+      "f.py": "class Agent:\n    def act(self, o):\n        return self.m.generate(o)\n"
+    }
+  },
+  {
+    "check": "Human-in-the-loop patterns",
+    "label": true,
+    "files": {
+      "a.py": "def send_email(draft):\n    if not require_approval(draft):\n        return\n    smtp.send(draft)\ndef require_approval(d):\n    return ask_human(d)\n"
+    }
+  },
+  {
+    "check": "Human-in-the-loop patterns",
+    "label": true,
+    "files": {
+      "b.py": "from langgraph.graph import StateGraph\ng = StateGraph(dict)\ng.compile(interrupt_before=['tool'])\n"
+    }
+  },
+  {
+    "check": "Human-in-the-loop patterns",
+    "label": true,
+    "files": {
+      "c.py": "human_approval = True\ndef act(x):\n    if human_approval:\n        return confirm_gate(x)\ndef confirm_gate(x): return x\n"
+    }
+  },
+  {
+    "check": "Human-in-the-loop patterns",
+    "label": false,
+    "files": {
+      "d.py": "def send_email(draft):\n    smtp.send(draft)\n"
+    }
+  },
+  {
+    "check": "Human-in-the-loop patterns",
+    "label": false,
+    "files": {
+      "e.py": "from crewai import Agent, Task\na = Agent(role='x', allow_delegation=True)\n"
+    }
+  },
+  {
+    "check": "Human-in-the-loop patterns",
+    "label": false,
+    "files": {
+      "f.py": "def act(x):\n    return model.generate(x)\n"
+    }
+  },
+  {
+    "check": "Usage limits / budget controls",
+    "label": true,
+    "files": {
+      "a.py": "cost_limit = 10.0\ndef run(p):\n    if spend > cost_limit: raise\n    return llm.invoke(p)\nspend = 0\n"
+    }
+  },
+  {
+    "check": "Usage limits / budget controls",
+    "label": true,
+    "files": {
+      "b.py": "from crewai import Crew\ncrew = Crew(max_rpm=10)\n"
+    }
+  },
+  {
+    "check": "Usage limits / budget controls",
+    "label": true,
+    "files": {
+      "c.py": "token_budget = 100000\ndef guard():\n    if used > token_budget: raise RuntimeError('quota_exceeded')\nused = 0\n"
+    }
+  },
+  {
+    "check": "Usage limits / budget controls",
+    "label": false,
+    "files": {
+      "d.py": "def run(p):\n    return llm.invoke(p, max_tokens=500)\n"
+    }
+  },
+  {
+    "check": "Usage limits / budget controls",
+    "label": false,
+    "files": {
+      "e.py": "def go(x):\n    return model.generate(x)\n"
+    }
+  },
+  {
+    "check": "Usage limits / budget controls",
+    "label": false,
+    "files": {
+      "f.py": "class P:\n    def run(self, x): return x\n"
+    }
+  },
+  {
+    "check": "Retry / backoff logic",
+    "label": true,
+    "files": {
+      "a.py": "import tenacity\n@tenacity.retry(wait=tenacity.wait_exponential())\ndef call(): return llm.invoke('x')\n"
+    }
+  },
+  {
+    "check": "Retry / backoff logic",
+    "label": true,
+    "files": {
+      "b.py": "import backoff\n@backoff.on_exception(backoff.expo, Exception)\ndef go(): return llm.invoke('y')\n"
+    }
+  },
+  {
+    "check": "Retry / backoff logic",
+    "label": true,
+    "files": {
+      "c.py": "max_retries = 5\ndef call(a=0):\n    try: return llm.invoke('z')\n    except: \n        if a < max_retries: return call(a+1)\n"
+    }
+  },
+  {
+    "check": "Retry / backoff logic",
+    "label": false,
+    "files": {
+      "d.py": "def run(p):\n    return llm.invoke(p)\n"
+    }
+  },
+  {
+    "check": "Retry / backoff logic",
+    "label": false,
+    "files": {
+      "e.py": "import logging\nlogging.info('x')\n"
+    }
+  },
+  {
+    "check": "Retry / backoff logic",
+    "label": false,
+    "files": {
+      "f.py": "class A:\n    def act(self,o): return self.m.generate(o)\n"
+    }
+  },
+  {
+    "check": "Prompt injection defense",
+    "label": true,
+    "files": {
+      "a.py": "from nemoguardrails import LLMRails\nrails = LLMRails(config)\n"
+    }
+  },
+  {
+    "check": "Prompt injection defense",
+    "label": true,
+    "files": {
+      "b.py": "def guard(user_input):\n    if detect_prompt_injection(user_input):\n        raise ValueError('blocked')\ndef detect_prompt_injection(x): return False\n"
+    }
+  },
+  {
+    "check": "Prompt injection defense",
+    "label": true,
+    "files": {
+      "c.py": "import lakera\ndef check(prompt):\n    return lakera.moderation(prompt)\n"
+    }
+  },
+  {
+    "check": "Prompt injection defense",
+    "label": false,
+    "files": {
+      "d.py": "def run(user_input):\n    return llm.invoke(user_input)\n"
+    }
+  },
+  {
+    "check": "Prompt injection defense",
+    "label": false,
+    "files": {
+      "e.py": "def sanitize_filename(name):\n    return name.replace('/', '_')\n"
+    }
+  },
+  {
+    "check": "Prompt injection defense",
+    "label": false,
+    "files": {
+      "f.py": "class A:\n    def act(self,o): return self.m.generate(o)\n"
+    }
+  },
+  {
+    "check": "LLM output validation",
+    "label": true,
+    "files": {
+      "a.py": "from langchain.output_parsers import PydanticOutputParser\nparser = PydanticOutputParser(pydantic_object=Foo)\n"
+    }
+  },
+  {
+    "check": "LLM output validation",
+    "label": true,
+    "files": {
+      "b.py": "def run(p):\n    resp = openai.OpenAI().chat.completions.create(model='gpt-4o', messages=p, response_format={'type':'json_object'})\n    return resp\n"
+    }
+  },
+  {
+    "check": "LLM output validation",
+    "label": true,
+    "files": {
+      "c.py": "from crewai import Task\nt = Task(description='x', output_pydantic=Result, expected_output='json')\n"
+    }
+  },
+  {
+    "check": "LLM output validation",
+    "label": false,
+    "files": {
+      "d.py": "def run(p):\n    return llm.invoke(p).content\n"
+    }
+  },
+  {
+    "check": "LLM output validation",
+    "label": false,
+    "files": {
+      "e.py": "def go(x):\n    return model.generate(x)\n"
+    }
+  },
+  {
+    "check": "LLM output validation",
+    "label": false,
+    "files": {
+      "f.py": "import logging\nlogging.info('x')\n"
+    }
+  },
+  {
+    "check": "Type annotations",
+    "label": true,
+    "files": {
+      "a.py": "def run(prompt: str) -> str:\n    return prompt\ndef parse(data: dict) -> list:\n    return []\ndef go(x: int) -> bool:\n    return True\n"
+    }
+  },
+  {
+    "check": "Type annotations",
+    "label": true,
+    "files": {
+      "b.py": "from typing import Optional\ndef f(a: int, b: Optional[str]) -> None:\n    pass\ndef g(items: list) -> dict:\n    return {}\n"
+    }
+  },
+  {
+    "check": "Type annotations",
+    "label": true,
+    "files": {
+      "c.py": "def alpha(x: float) -> float:\n    return x\ndef beta(s: str) -> int:\n    return len(s)\ndef gamma(d: dict) -> bool:\n    return True\ndef delta(n: int) -> str:\n    return str(n)\n"
+    }
+  },
+  {
+    "check": "Type annotations",
+    "label": false,
+    "files": {
+      "d.py": "def run(prompt):\n    return prompt\ndef parse(data):\n    return []\ndef go(x):\n    return True\n"
+    }
+  },
+  {
+    "check": "Type annotations",
+    "label": false,
+    "files": {
+      "e.py": "def f(a, b):\n    pass\ndef g(items):\n    return {}\ndef h(z):\n    return z\n"
+    }
+  },
+  {
+    "check": "Type annotations",
+    "label": false,
+    "files": {
+      "f.py": "def alpha(x):\n    return x\ndef beta(s):\n    return s\ndef gamma(d):\n    return d\ndef delta(n):\n    return n\n"
+    }
+  },
+  {
+    "check": "PII handling in code",
+    "label": true,
+    "files": {
+      "a.py": "from presidio_analyzer import AnalyzerEngine\nanalyzer = AnalyzerEngine()\ndef redact(text):\n    return analyzer.analyze(text=text, language='en')\n"
+    }
+  },
+  {
+    "check": "PII handling in code",
+    "label": true,
+    "files": {
+      "b.py": "import scrubadub\ndef clean(text):\n    return scrubadub.clean(text)\n"
+    }
+  },
+  {
+    "check": "PII handling in code",
+    "label": true,
+    "files": {
+      "c.py": "def mask_email(s):\n    return redact_pii(s)\ndef redact_pii(s): return s\n"
+    }
+  },
+  {
+    "check": "PII handling in code",
+    "label": false,
+    "files": {
+      "d.py": "def run(p):\n    return llm.invoke(p)\n"
+    }
+  },
+  {
+    "check": "PII handling in code",
+    "label": false,
+    "files": {
+      "e.py": "import logging\nlogging.info('processing user data')\n"
+    }
+  },
+  {
+    "check": "PII handling in code",
+    "label": false,
+    "files": {
+      "f.py": "class A:\n    def act(self,o): return self.m.generate(o)\n"
+    }
+  }
+]

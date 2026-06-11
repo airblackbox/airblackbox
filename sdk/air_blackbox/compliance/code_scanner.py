@@ -491,7 +491,7 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
         r'prompt.?injection', r'sql.?injection',
         r'inject.*(?:attack|detect|prevent|filter)',
         r'escape_prompt', r'content_filter', r'moderation',
-        r'prompt_guard', r'nemo_guardrails', r'rebuff', r'lakera',
+        r'prompt_guard', r'nemo_?guardrails', r'rebuff', r'lakera', r'guardrails_ai', r'llm_?guard',
         r'system_prompt.*?boundary',
         r'hallucination_guardrail', r'llm_guardrail',  # CrewAI built-in
         r'output_guardrail', r'input_guardrail',  # Guardrail patterns
