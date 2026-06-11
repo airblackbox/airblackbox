@@ -9,7 +9,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -93,14 +92,34 @@ func runSingleReplay() {
 	fmt.Println()
 	fmt.Printf("Similarity: %.2f\n", result.Similarity)
 
+	// Semantic diff: show exactly what changed between original and replay.
+	if result.Diff != nil {
+		fmt.Printf("Diff:       %s\n", result.Diff.StatLine())
+		if len(result.Diff.Segments) > 0 && (result.Diff.Stats.WordsAdded > 0 || result.Diff.Stats.WordsRemoved > 0) {
+			fmt.Println()
+			fmt.Println("  original [-removed-] / replay {+added+}:")
+			fmt.Println()
+			fmt.Println("  " + result.Diff.Render(useColorTTY()))
+			fmt.Println()
+		}
+	}
+
 	if result.Drift {
 		fmt.Printf("DRIFT DETECTED: %s\n", result.DriftSummary)
-		data, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(data))
 		os.Exit(1)
 	}
 
 	fmt.Println("NO DRIFT — replay matches original within threshold.")
+}
+
+// useColorTTY reports whether stdout looks like an interactive terminal, so
+// ANSI color is only emitted when a human is watching (not in pipes or CI).
+func useColorTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 // --- Batch replay (new) ---

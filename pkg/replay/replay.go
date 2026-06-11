@@ -25,6 +25,7 @@ type Result struct {
 	OriginalTokens int     `json:"original_tokens"`
 	ReplayTokens   int     `json:"replay_tokens"`
 	Similarity     float64 `json:"similarity"` // 0.0–1.0 basic token overlap
+	Diff           *SemanticDiff `json:"diff,omitempty"`
 }
 
 // Options configures a replay.
@@ -119,6 +120,8 @@ func Run(ctx context.Context, rec recorder.Record, opts Options) (Result, error)
 
 	result.Similarity = tokenSimilarity(originalContent, replayContent)
 	result.Drift = result.Similarity < 0.8
+	d := WordDiff(originalContent, replayContent)
+	result.Diff = &d
 
 	if result.Drift {
 		result.DriftSummary = fmt.Sprintf(
