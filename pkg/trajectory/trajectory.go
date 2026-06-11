@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // StepKind classifies what a step did.
@@ -56,15 +57,31 @@ type Step struct {
 	TimestampUTC string      `json:"timestamp"` // RFC3339 UTC
 }
 
-// canonical returns the deterministic byte encoding of a step that the leaf
-// hash is computed over. ParentIDs are sorted so the set, not the recording
-// order, is what the hash commits to.
+// canonicalStepVersion identifies the byte format the leaf hash commits to.
+// Bump it if the encoding ever changes, so old and new leaves never collide.
+const canonicalStepVersion = "TRAJ-STEP-v1"
+
+// canonical returns the deterministic, language-neutral byte encoding of a
+// step that the leaf hash is computed over. It is a newline-delimited record
+// rather than JSON, so a Go and a Python implementation produce byte-identical
+// leaves (JSON differs across languages in key order, whitespace, and unicode
+// escaping). ParentIDs are sorted so the set, not the recording order, is what
+// the hash commits to. Fields are validated to contain no newline at Add time,
+// so the delimiter is unambiguous.
 func (s Step) canonical() []byte {
-	c := s
-	c.ParentIDs = append([]string(nil), s.ParentIDs...)
-	sort.Strings(c.ParentIDs)
-	b, _ := json.Marshal(c)
-	return b
+	parents := append([]string(nil), s.ParentIDs...)
+	sort.Strings(parents)
+	fields := []string{
+		canonicalStepVersion,
+		s.StepID,
+		strings.Join(parents, ","),
+		string(s.Kind),
+		s.InputHash,
+		s.OutputHash,
+		string(s.GateVerdict),
+		s.TimestampUTC,
+	}
+	return []byte(strings.Join(fields, "\n"))
 }
 
 // Trajectory is the signed summary of an agent run.
@@ -101,6 +118,14 @@ func (b *Builder) Add(s Step) error {
 	}
 	if _, dup := b.steps[s.StepID]; dup {
 		return fmt.Errorf("trajectory: duplicate step_id %q", s.StepID)
+	}
+	// The canonical encoding is newline-delimited, so no field may contain a
+	// newline or the leaf bytes would be ambiguous.
+	for _, v := range append([]string{s.StepID, string(s.Kind), s.InputHash,
+		s.OutputHash, string(s.GateVerdict), s.TimestampUTC}, s.ParentIDs...) {
+		if strings.ContainsRune(v, '\n') {
+			return fmt.Errorf("trajectory: field contains newline, not allowed: %q", v)
+		}
 	}
 	b.steps[s.StepID] = s
 	b.order = append(b.order, s.StepID)
@@ -194,7 +219,7 @@ func merkleRoot(leaves [][]byte) []byte {
 			if i+1 < len(level) {
 				next = append(next, internalHash(level[i], level[i+1]))
 			} else {
-				next = append(next, internalHash(level[i], level[i])) // duplicate last
+				next = append(next, level[i]) // promote lone node (RFC 6962)
 			}
 		}
 		level = next

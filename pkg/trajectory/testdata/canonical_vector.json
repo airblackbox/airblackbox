@@ -1,0 +1,69 @@
+{
+  "expected_root": "5a7933c9c33cd3769d7720f4d787b2ac82e193a2fd1e4569934e2c256058939e",
+  "leaf_hashes": [
+    "caa3f4063e2bd743daeef0ec4e0e0ca6207be9bb169a50b588ea01e98bf0ccf3",
+    "4945f7496002b02e77ed8823f90daa4dd5a0a002702ee1cc33ef9494df654bc3",
+    "d34ea8f3b6f5bd8f9f467d5922ec92fe529b1f28146bdea4cf30c67d2c2bb215",
+    "439208fe839e52599b80b91b49f4f8a8c2916d8ec4261b89e8c287735e0deab2",
+    "5b4b46092ff8efc9f8da985d03346cb9c75a8ca015f52e728da27017d38fc20f"
+  ],
+  "root_goal_hash": "deadbeef",
+  "steps": [
+    {
+      "step_id": "s1",
+      "parent_ids": null,
+      "kind": "llm_call",
+      "input_hash": "aaaa",
+      "output_hash": "bbbb",
+      "gate_verdict": "n/a",
+      "timestamp": "2026-06-10T00:00:00Z"
+    },
+    {
+      "step_id": "s2",
+      "parent_ids": [
+        "s1"
+      ],
+      "kind": "tool_call",
+      "input_hash": "cccc",
+      "output_hash": "dddd",
+      "gate_verdict": "permit",
+      "timestamp": "2026-06-10T00:00:01Z"
+    },
+    {
+      "step_id": "s3",
+      "parent_ids": [
+        "s1"
+      ],
+      "kind": "observation",
+      "input_hash": "eeee",
+      "output_hash": "ffff",
+      "gate_verdict": "n/a",
+      "timestamp": "2026-06-10T00:00:01Z"
+    },
+    {
+      "step_id": "s4",
+      "parent_ids": [
+        "s2",
+        "s3"
+      ],
+      "kind": "action",
+      "input_hash": "1111",
+      "output_hash": "",
+      "gate_verdict": "forbid",
+      "timestamp": "2026-06-10T00:00:02Z"
+    },
+    {
+      "step_id": "s5",
+      "parent_ids": [
+        "s4"
+      ],
+      "kind": "llm_call",
+      "input_hash": "2222",
+      "output_hash": "3333",
+      "gate_verdict": "n/a",
+      "timestamp": "2026-06-10T00:00:03Z"
+    }
+  ],
+  "trajectory_id": "vec-traj-1",
+  "version": "TRAJ-STEP-v1"
+}
