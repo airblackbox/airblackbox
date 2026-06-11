@@ -61,3 +61,20 @@ sdk/air_blackbox.egg-info/
 # Soak test run artifacts
 bench/results/soak-round.json
 bench/results/soak-samples.csv
+
+# Internal working docs and drafts (never belong in this public repo)
+/AIR-BLACKBOX-SESSION-HANDOFF.md
+/P0-RUNBOOK.md
+/SPEC-feedback-retrain-pipeline.md
+/CREATE_ISSUES.sh
+/repo-readmes/
+# Marketing drafts (never commit BD/marketing content to a public repo)
+/devto-article.md
+/hn-post.md
+/demo-phase3.html
+# Generated evidence/anchor artifacts and stray build binaries
+/checkpoint.json
+/trajectory-anchor.json
+/*-anchor.json
+/evidencectl
+/gateway-bin
