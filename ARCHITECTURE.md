@@ -138,9 +138,9 @@ writer succeeds. The canonical PII and injection regex strings are shared from
 
 The package metadata advertises optional extras for `langchain`, `crewai`,
 `haystack`, `openai`, `autogen`, `adk`, `claude`, `pdf`, `gate`, and `pqc`.
-The root `sdk/README.md` mentions an `AirTrust` facade, but the inspected trust
-package currently exposes framework-specific modules rather than a populated
-top-level `air_blackbox.trust` facade.
+The root `sdk/README.md` mentions an `AirTrust` facade. In this repository it is implemented in
+`sdk/air_blackbox/__init__.py` and can be imported via `from air_blackbox import AirTrust`,
+while `air_blackbox.trust.__init__` currently does not re-export it.
 
 ## Gateway Recording Path
 
