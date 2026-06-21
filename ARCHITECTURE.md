@@ -71,10 +71,7 @@ architecture are:
 2. `GatewayClient.get_status()` checks the gateway health endpoint. If the
    gateway is reachable, it also calls `/v1/audit` to obtain chain and runtime
    control status.
-3. The same client analyzes local `.air.json` records from `RUNS_DIR`,
-   `./runs`, `../runs`, `~/.air-blackbox/runs`, or a `runs/` directory inside
-   the scanned project. It extracts models, providers, token totals, status
-   counts, timestamps, PII alerts, injection alerts, and chain-hash presence.
+3. The same client analyzes local `.air.json` records from `RUNS_DIR`, `./runs`, `../runs`, `~/.airblackbox/runs`, or a `runs/` directory inside the scanned project. It aggregates models, providers, token totals, status counts, and timestamps. When a `scan_path` is provided, trust-layer record analysis can also derive PII alert counts, injection alert counts, and chain-hash presence.
 4. `run_all_checks()` runs static scanners. The main code scanner walks Python
    files, skipping common build, virtualenv, cache, and dependency directories.
    It checks for patterns such as LLM error handling, fallback logic, input
@@ -138,9 +135,7 @@ writer succeeds. The canonical PII and injection regex strings are shared from
 
 The package metadata advertises optional extras for `langchain`, `crewai`,
 `haystack`, `openai`, `autogen`, `adk`, `claude`, `pdf`, `gate`, and `pqc`.
-The root `sdk/README.md` mentions an `AirTrust` facade, but the inspected trust
-package currently exposes framework-specific modules rather than a populated
-top-level `air_blackbox.trust` facade.
+The root `sdk/README.md` mentions an `AirTrust` facade. In this repository, `AirTrust` is implemented in `sdk/air_blackbox/__init__.py` and users can import it with `from air_blackbox import AirTrust`. The current limitation is that `air_blackbox.trust.__init__` does not re-export that facade.
 
 ## Gateway Recording Path
 
@@ -249,8 +244,8 @@ AIR Blackbox currently has multiple evidence export formats.
 - An HMAC-SHA256 attestation over the bundle content, excluding the attestation
   field itself.
 
-The signing key is `--signing-key`, `TRUST_SIGNING_KEY`, or
-`air-blackbox-default`.
+The signing key comes from `TRUST_SIGNING_KEY` or falls back to `air-blackbox-default`.
+The `--signing-key` option is currently only applied in the `--format evidence` export path.
 
 ### Python PDF report
 
@@ -263,7 +258,7 @@ This path requires the optional `reportlab` dependency.
 `air-blackbox export --format evidence` calls
 `sdk/air_blackbox/export/evidence_bundle.py`. It creates a ZIP file containing:
 
-- `audit_chain.json`: raw loaded `.air.json` records.
+-`audit_chain.json`: ordered trust-layer records with valid chain hashes, used for HMAC chain verification.
 - `scan_results.json`: compliance scan output.
 - `bundle_meta.json`: metadata and SHA-256 digests for included files.
 - `verify.py`: a standalone verifier using only the Python standard library.
@@ -309,10 +304,7 @@ come from `/v1/audit/export`, which serializes the live gateway audit chain.
 - The Python evidence ZIP verifies HMAC-chain integrity and file digests. The
   Go checkpoint flow adds digital signatures and optional external timestamping
   via Rekor. These are separate export surfaces today.
-- The inspected code does not show the Python trust-layer top-level `AirTrust`
-  facade populated in `air_blackbox.trust.__init__`; adopters should use the
-  framework-specific trust modules directly unless another package facade is
-  present in their installed version.
+- `AirTrust` is implemented and exported from `air_blackbox`, so adopters can use `from air_blackbox import AirTrust`. The current limitation is that `air_blackbox.trust.__init__` does not expose or re-export the facade directly.
 - ML-DSA-65 support exists in the Go checkpoint/signing code. The Python
   self-verifying ZIP currently verifies HMAC-SHA256 chains with stdlib-only
   code and does not require ML-DSA libraries.
