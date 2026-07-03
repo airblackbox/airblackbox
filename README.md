@@ -54,6 +54,9 @@ air-blackbox discover
 # Replay any recorded episode
 air-blackbox replay
 
+# Verify the tamper-evident chain (zero config: reads the gateway's local key)
+air-blackbox replay --verify
+
 # Generate a signed evidence package for audit or regulator review
 air-blackbox export
 ```

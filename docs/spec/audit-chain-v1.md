@@ -120,9 +120,19 @@ Additional custom fields MAY be added by implementations, but MUST NOT override 
 The chain_hash for a record is computed using HMAC-SHA256 as follows:
 
 1. Sort all fields in the record alphabetically by key (excluding chain_hash itself).
-2. Serialize to JSON with no whitespace (canonical form).
-3. Compute HMAC-SHA256(signing_key, previous_hash_bytes || record_bytes).
+2. Serialize to canonical JSON: Python's `json.dumps(record, sort_keys=True)` with its
+   default separators (`", "` and `": "`) and default `ensure_ascii=True` escaping.
+3. Compute HMAC-SHA256(signing_key, previous_digest_bytes || record_bytes).
 4. Encode the result as hexadecimal (lowercase).
+
+The canonical form is exactly what Python's `json.dumps(record, sort_keys=True)`
+produces for a record round-tripped through `json.loads`. Non-Python
+implementations MUST reproduce it byte-for-byte: sorted keys, a space after
+every `,` and `:`, non-ASCII characters escaped as lowercase `\uXXXX` (astral
+code points as surrogate pairs), and integers preserved without float
+conversion. The Go gateway's `pkg/recorder/canonical.go` is a conforming
+implementation, locked down against Python-generated golden vectors in
+`pkg/recorder/canonical_test.go`.
 
 Pseudocode:
 
@@ -131,33 +141,35 @@ import hashlib
 import hmac
 import json
 
-def compute_chain_hash(signing_key, previous_hash, record):
-    # Remove chain_hash field if present
+def compute_chain_hash(signing_key, previous_digest, record):
+    # Remove chain_hash field if present. All other fields, including
+    # chain_seq, are covered by the hash.
     record_copy = {k: v for k, v in record.items() if k != "chain_hash"}
-    
-    # Canonical JSON: sorted keys, no whitespace
-    record_json = json.dumps(record_copy, sort_keys=True, separators=(",", ":"))
+
+    # Canonical JSON: sorted keys, default separators and escaping
+    record_json = json.dumps(record_copy, sort_keys=True)
     record_bytes = record_json.encode("utf-8")
-    
-    # Convert previous_hash to bytes
-    if previous_hash == "genesis":
-        prev_bytes = b"genesis"
-    else:
-        prev_bytes = bytes.fromhex(previous_hash)
-    
-    # HMAC-SHA256
-    h = hmac.new(signing_key, prev_bytes + record_bytes, hashlib.sha256)
-    return h.hexdigest()
+
+    # previous_digest is b"genesis" for the first record, otherwise the raw
+    # 32-byte HMAC digest of the previous chained record's computation
+    h = hmac.new(signing_key, previous_digest + record_bytes, hashlib.sha256)
+    return h.hexdigest(), h.digest()  # (stored chain_hash, next previous_digest)
 ```
 
-### 4.5 Previous Hash Linkage
+### 4.5 Previous Digest Linkage
 
-The previous_hash field creates the chain linkage:
+The previous digest creates the chain linkage. It is implicit walk state, not
+a field embedded in records:
 
-- **Genesis record**: previous_hash is the literal string "genesis" (not a computed value).
-- **Subsequent records**: previous_hash is the hex-encoded chain_hash of the preceding record.
+- **Genesis record**: the previous digest is the literal bytes `b"genesis"`.
+- **Subsequent records**: the previous digest is the raw 32-byte HMAC digest
+  from the preceding chained record's hash computation (equivalent to
+  `bytes.fromhex(previous_chain_hash)`).
 
-This linkage ensures that deleting or reordering records breaks the chain, making tampering detectable during verification.
+Writers advance this state on every successful chained write; verifiers
+recompute it while walking the chain in order. This linkage ensures that
+modifying, deleting, or reordering records breaks every chain_hash from that
+point forward, making tampering detectable during verification.
 
 ## 5. Record Fields Reference
 
@@ -193,12 +205,18 @@ This linkage ensures that deleting or reordering records breaks the chain, makin
 - MUST be set before persisting the record
 - MUST be verified during chain verification (Section 6)
 
-**previous_hash** (Hex String or "genesis", COMPUTED)
+**chain_seq** (Integer, COMPUTED, OPTIONAL)
 
-- Links this record to the previous record
-- For genesis: the literal string "genesis"
-- For all others: the hex-encoded chain_hash of the previous record
+- Monotonic append order (1-based) within one writer's chain
+- Written by the Go gateway so verifiers can reconstruct append order
+  regardless of timestamp precision or concurrent writes
+- Covered by the chain hash: it is part of the record when the hash is computed
+- When present, verifiers MUST walk the chain in ascending chain_seq order;
+  when absent, verifiers fall back to timestamp order
 - MUST NOT be set by the application; the chain implementation MUST compute it
+
+Note: the previous digest (Section 4.5) is implicit verification state and is
+NOT embedded in records.
 
 ### 5.3 Optional Context Fields
 
@@ -276,63 +294,56 @@ Chain verification confirms that no records have been tampered with, deleted, or
 
 ### 6.2 Step-by-Step Verification
 
+Verifiers MUST order records by ascending chain_seq when present, falling back
+to timestamp order for records written without it. Records that carry no
+chain_hash at all (written before chaining was enabled) are outside the chain:
+they MUST NOT advance the previous digest and MUST NOT be reported as verified.
+
 ```python
+import hashlib
+import hmac
+import json
+
 def verify_chain(records, signing_key):
     """
     Verify a chain of audit records.
-    
+
     Args:
-        records: List of records in order
+        records: List of records, ordered by (chain_seq, timestamp)
         signing_key: The HMAC signing key (bytes)
-    
+
     Returns:
         dict with keys:
             valid (bool): True if chain is intact
-            events_checked (int): Number of records verified
+            events_checked (int): Number of chained records verified
             errors (list): Any verification failures
     """
     errors = []
-    
-    if not records:
-        return {"valid": True, "events_checked": 0, "errors": []}
-    
-    # Verify each record
+    prev_digest = b"genesis"
+    checked = 0
+
     for i, record in enumerate(records):
-        # Check 1: Recompute the chain_hash
-        expected_hash = compute_chain_hash(
-            signing_key,
-            record["previous_hash"],
-            record
-        )
-        if record["chain_hash"] != expected_hash:
+        stored_hash = record.get("chain_hash")
+        if not stored_hash:
+            continue  # unchained record: outside the chain
+
+        record_copy = {k: v for k, v in record.items() if k != "chain_hash"}
+        record_bytes = json.dumps(record_copy, sort_keys=True).encode("utf-8")
+        h = hmac.new(signing_key, prev_digest + record_bytes, hashlib.sha256)
+
+        if stored_hash != h.hexdigest():
             errors.append(
                 f"Record {i} ({record['run_id']}): chain_hash mismatch. "
-                f"Expected {expected_hash}, got {record['chain_hash']}. "
-                f"TAMPERING DETECTED."
+                f"TAMPERING DETECTED (modified, deleted, or reordered)."
             )
-        
-        # Check 2: Verify previous_hash linkage
-        if i == 0:
-            # Genesis record must link to "genesis"
-            if record["previous_hash"] != "genesis":
-                errors.append(
-                    f"Record 0 ({record['run_id']}): genesis record must have "
-                    f"previous_hash='genesis', got '{record['previous_hash']}'"
-                )
-        else:
-            # All other records must link to the previous record's chain_hash
-            expected_prev = records[i - 1]["chain_hash"]
-            if record["previous_hash"] != expected_prev:
-                errors.append(
-                    f"Record {i} ({record['run_id']}): chain broken. "
-                    f"previous_hash should be {expected_prev}, got "
-                    f"{record['previous_hash']}. "
-                    f"Record may have been deleted or reordered."
-                )
-    
+            break  # every subsequent hash is invalidated too
+
+        prev_digest = h.digest()
+        checked += 1
+
     return {
         "valid": len(errors) == 0,
-        "events_checked": len(records),
+        "events_checked": checked,
         "errors": errors
     }
 ```
@@ -341,12 +352,12 @@ def verify_chain(records, signing_key):
 
 Tampering is detected when:
 
-1. **Modification**: A record's field is changed. The computed chain_hash will not match the stored value.
-2. **Deletion**: A record is removed from the middle of the chain. The next record's previous_hash will not match the preceding record's chain_hash.
-3. **Reordering**: Records are placed out of sequence. The previous_hash linkage will break.
-4. **Insertion**: A new record is inserted out of order. The following record's previous_hash will not match.
+1. **Modification**: A record's field is changed. The recomputed chain_hash will not match the stored value.
+2. **Deletion**: A record is removed from the middle of the chain. The verifier's previous digest diverges at that point, so the next record's chain_hash no longer verifies.
+3. **Reordering**: Records are placed out of sequence. The digest walk produces different hashes from the reorder point onward.
+4. **Insertion**: A record is inserted mid-chain. Its chain_hash cannot be computed without the signing key, and every subsequent record's hash breaks.
 
-All tampering is immediately detectable because previous_hash values create an unbreakable dependency chain.
+All tampering is immediately detectable because each chain_hash depends on the running digest of every record before it.
 
 ### 6.4 Error Handling
 
@@ -459,8 +470,18 @@ The signing key MUST be at least 32 bytes (256 bits). Implementations SHOULD use
 1. **Direct key**: A 32-byte random value (generated by `secrets.token_bytes(32)` in Python)
 2. **Key derivation**: PBKDF2-SHA256 from a passphrase (at least 100,000 iterations)
 3. **Key from environment**: The environment variable `TRUST_SIGNING_KEY` (RECOMMENDED for deployment)
+4. **Generated keyfile**: A locally generated random key persisted next to the
+   records as `.air-signing-key` with mode 0600. The Go gateway generates this
+   automatically when no key is configured, and verifiers read it back so
+   zero-configuration deployments still get unforgeable chains. The keyfile
+   MUST be excluded from backups shared with untrusted parties and MUST NOT be
+   committed to version control.
 
 Implementations MUST NOT use short passphrases, hardcoded keys, or md5/sha1 derived keys.
+
+The gateway resolves its key in this order: `TRUST_SIGNING_KEY` environment
+variable, then the guardrails config `trust.signing_key`, then the generated
+`.air-signing-key` file in the runs directory.
 
 ### 8.2 Key Rotation Procedure
 
@@ -487,7 +508,10 @@ signing_key = os.environ.get(
 )
 ```
 
-The default value MUST NOT be used in production. In production, `TRUST_SIGNING_KEY` MUST be set to a strong, random value.
+The default value MUST NOT be used in production. In production, set
+`TRUST_SIGNING_KEY` to a strong random value, or let the gateway generate and
+persist a `.air-signing-key` file (Section 8.1) — the generated keyfile is a
+production-grade key; the hardcoded development default is not.
 
 ## 9. Security Considerations
 
