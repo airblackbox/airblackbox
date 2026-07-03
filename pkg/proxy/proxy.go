@@ -110,10 +110,21 @@ func authenticateGateway(w http.ResponseWriter, r *http.Request, gatewayKey stri
 }
 
 // chatRequest is the minimal OpenAI chat completion request we need to parse.
+// Input carries the Responses API equivalent of Messages.
 type chatRequest struct {
 	Model    string          `json:"model"`
 	Messages json.RawMessage `json:"messages"`
+	Input    json.RawMessage `json:"input"`
 	Stream   bool            `json:"stream,omitempty"`
+}
+
+// promptText returns the last user prompt regardless of API shape: chat
+// completions carry it in messages, the Responses API in input.
+func (r chatRequest) promptText() string {
+	if text := extractPromptText(r.Messages); text != "" {
+		return text
+	}
+	return extractResponsesInput(r.Input)
 }
 
 // chatResponse is the minimal response structure for token extraction.
@@ -173,7 +184,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	// model downgrade) or block entirely. Returns 403 for policy blocks.
 	if cfg.Guardrails != nil {
 		sessionID := extractSessionID(r)
-		promptText := extractPromptText(req.Messages)
+		promptText := req.promptText()
 		toolNames := extractToolNames(reqBody)
 		sessionTokens := 0
 		if cfg.Sessions != nil {
@@ -234,7 +245,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 		sessionID := extractSessionID(r)
 		cfg.Sessions.GetOrCreate(sessionID)
 
-		promptText := extractPromptText(req.Messages)
+		promptText := req.promptText()
 		toolNames := extractToolNames(reqBody)
 		cfg.Sessions.RecordRequest(sessionID, promptText, toolNames)
 
@@ -642,6 +653,47 @@ func extractPromptText(messages json.RawMessage) string {
 					if p.Type == "text" {
 						return p.Text
 					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// extractResponsesInput pulls the last user prompt from a Responses API
+// input field, which is either a plain string or an array of messages whose
+// content is a string or an array of typed parts.
+func extractResponsesInput(input json.RawMessage) string {
+	if input == nil {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(input, &text); err == nil {
+		return text
+	}
+	var items []struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(input, &items); err != nil {
+		return ""
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i].Role != "user" {
+			continue
+		}
+		var content string
+		if err := json.Unmarshal(items[i].Content, &content); err == nil {
+			return content
+		}
+		var parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(items[i].Content, &parts); err == nil {
+			for _, p := range parts {
+				if p.Type == "input_text" || p.Type == "text" {
+					return p.Text
 				}
 			}
 		}
