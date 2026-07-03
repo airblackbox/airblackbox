@@ -671,6 +671,8 @@ def discover(gateway, runs_dir, approved, fmt, output, init_registry):
 @click.option("--verify", is_flag=True, help="Verify HMAC audit chain")
 def replay(gateway, runs_dir, episode, last, verify):
     """Reconstruct AI incidents from the audit chain."""
+    import os
+
     from air_blackbox.replay.engine import ReplayEngine
 
     console.print("\n[bold blue]AIR Blackbox[/] - Incident Replay\n")
@@ -686,6 +688,10 @@ def replay(gateway, runs_dir, episode, last, verify):
     # Verify chain if requested
     if verify:
         console.print("[bold]Verifying HMAC audit chain...[/]\n")
+        _keyfile = os.path.join(runs_dir or "./runs", ".air-signing-key")
+        if not os.environ.get("TRUST_SIGNING_KEY") and not os.path.isfile(_keyfile):
+            console.print("  [dim]TRUST_SIGNING_KEY not set and no .air-signing-key found - verifying with the built-in default key.[/]")
+            console.print("  [dim]If the chain was signed with your own key, set TRUST_SIGNING_KEY first.[/]\n")
         result = engine.verify_chain()
         if result.intact and result.records_with_hash == 0:
             console.print(f"  [yellow]⚠  NO CHAIN HASHES[/] - {result.total_records:,} records loaded, but none carry a chain_hash.")

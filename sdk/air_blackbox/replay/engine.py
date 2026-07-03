@@ -68,7 +68,11 @@ class ReplayEngine:
                     self._raw_records.append(rec)
             except (json.JSONDecodeError, IOError):
                 continue
-        self._raw_records.sort(key=lambda r: r.get("timestamp", ""))
+        # Chained records (chain_seq set, e.g. from the Go gateway) verify in
+        # append order; everything else falls back to timestamp order.
+        self._raw_records.sort(
+            key=lambda r: (r.get("chain_seq", 0), r.get("timestamp", ""))
+        )
         self.records = [self._parse(r) for r in self._raw_records]
         return len(self.records)
 
@@ -115,12 +119,19 @@ class ReplayEngine:
         Each record's hash should chain to the next. If any record
         is modified, the chain breaks from that point forward.
         """
-        key = (signing_key or os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")).encode()
+        key = (signing_key or os.environ.get("TRUST_SIGNING_KEY")
+               or self._runs_dir_key() or "air-blackbox-default").encode()
         prev_hash = b"genesis"
         verified = 0
         with_hash = 0
 
         for i, raw in enumerate(self._raw_records):
+            stored_hash = raw.get("chain_hash")
+            if not stored_hash:
+                # Unchained records (written before chaining was enabled)
+                # are outside the chain entirely.
+                continue
+
             # The chain hash is computed over the record as it existed before
             # the hash was embedded, so it must be excluded here (this matches
             # trust.chain.AuditChain.write and the evidence bundle verifier).
@@ -128,23 +139,31 @@ class ReplayEngine:
             record_bytes = json.dumps(record_clean, sort_keys=True).encode()
             expected = hmac.new(key, prev_hash + record_bytes, hashlib.sha256)
 
-            stored_hash = raw.get("chain_hash")
-            if stored_hash:
-                with_hash += 1
-                if stored_hash != expected.hexdigest():
-                    return ChainVerification(
-                        intact=False, total_records=len(self._raw_records),
-                        verified_records=verified, first_break_at=i,
-                        first_break_run_id=raw.get("run_id"),
-                        records_with_hash=with_hash,
-                    )
-                verified += 1
+            with_hash += 1
+            if stored_hash != expected.hexdigest():
+                return ChainVerification(
+                    intact=False, total_records=len(self._raw_records),
+                    verified_records=verified, first_break_at=i,
+                    first_break_run_id=raw.get("run_id"),
+                    records_with_hash=with_hash,
+                )
+            verified += 1
             prev_hash = expected.digest()
 
         return ChainVerification(
             intact=True, total_records=len(self._raw_records),
             verified_records=verified, records_with_hash=with_hash,
         )
+
+    def _runs_dir_key(self) -> Optional[str]:
+        """Read the signing key the gateway auto-generates alongside the
+        records (.air-signing-key), so verification works with zero config."""
+        try:
+            with open(os.path.join(self.runs_dir, ".air-signing-key")) as f:
+                key = f.read().strip()
+                return key or None
+        except OSError:
+            return None
 
     def get_stats(self) -> dict:
         """Get summary statistics for all records."""

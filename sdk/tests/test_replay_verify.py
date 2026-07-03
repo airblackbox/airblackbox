@@ -66,6 +66,32 @@ def test_wrong_key_breaks_chain():
         assert not result.intact
 
 
+def test_legacy_unchained_records_do_not_break_the_chain():
+    """Records written before chaining was enabled sit outside the chain:
+    they must not advance the chain state or cause false breaks."""
+    with tempfile.TemporaryDirectory() as d:
+        # A legacy record with the earliest timestamp and no chain_hash.
+        legacy = {
+            "run_id": "99999999-0000-0000-0000-000000000000",
+            "model": "gpt-3.5",
+            "tokens": {"total": 5},
+            "status": "success",
+            "timestamp": "2026-01-01T00:00:00Z",
+        }
+        with open(os.path.join(d, legacy["run_id"] + ".air.json"), "w") as f:
+            json.dump(legacy, f)
+
+        _write_chained_records(d, "test-key")
+
+        engine = ReplayEngine(runs_dir=d)
+        engine.load()
+        result = engine.verify_chain(signing_key="test-key")
+        assert result.intact
+        assert result.verified_records == 3
+        assert result.records_with_hash == 3
+        assert result.total_records == 4
+
+
 def test_records_without_chain_hash_are_not_counted_verified():
     with tempfile.TemporaryDirectory() as d:
         # Gateway-style records: no chain_hash field.
