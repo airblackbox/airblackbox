@@ -687,7 +687,10 @@ def replay(gateway, runs_dir, episode, last, verify):
     if verify:
         console.print("[bold]Verifying HMAC audit chain...[/]\n")
         result = engine.verify_chain()
-        if result.intact:
+        if result.intact and result.records_with_hash == 0:
+            console.print(f"  [yellow]⚠  NO CHAIN HASHES[/] - {result.total_records:,} records loaded, but none carry a chain_hash.")
+            console.print("  [yellow]  Records written without a trust layer cannot be verified for tampering.[/]\n")
+        elif result.intact:
             console.print(f"  [green]✅ CHAIN INTACT[/] - {result.verified_records:,} records verified. No tampering detected.\n")
         else:
             console.print(f"  [red]❌ CHAIN BROKEN[/] at record {result.first_break_at} (run: {result.first_break_run_id})")

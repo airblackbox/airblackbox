@@ -42,6 +42,7 @@ class ChainVerification:
     verified_records: int
     first_break_at: Optional[int] = None
     first_break_run_id: Optional[str] = None
+    records_with_hash: int = 0
 
 
 class ReplayEngine:
@@ -117,27 +118,32 @@ class ReplayEngine:
         key = (signing_key or os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")).encode()
         prev_hash = b"genesis"
         verified = 0
+        with_hash = 0
 
         for i, raw in enumerate(self._raw_records):
-            record_bytes = json.dumps(raw, sort_keys=True).encode()
-            expected_hash = hmac.new(key, prev_hash + record_bytes, hashlib.sha256).digest()
+            # The chain hash is computed over the record as it existed before
+            # the hash was embedded, so it must be excluded here (this matches
+            # trust.chain.AuditChain.write and the evidence bundle verifier).
+            record_clean = {k: v for k, v in raw.items() if k != "chain_hash"}
+            record_bytes = json.dumps(record_clean, sort_keys=True).encode()
+            expected = hmac.new(key, prev_hash + record_bytes, hashlib.sha256)
 
-            # Check if record has a stored hash
             stored_hash = raw.get("chain_hash")
             if stored_hash:
-                if stored_hash != expected_hash.hex():
+                with_hash += 1
+                if stored_hash != expected.hexdigest():
                     return ChainVerification(
                         intact=False, total_records=len(self._raw_records),
                         verified_records=verified, first_break_at=i,
                         first_break_run_id=raw.get("run_id"),
+                        records_with_hash=with_hash,
                     )
-            # Even without stored hashes, we compute the chain
-            prev_hash = expected_hash
-            verified += 1
+                verified += 1
+            prev_hash = expected.digest()
 
         return ChainVerification(
             intact=True, total_records=len(self._raw_records),
-            verified_records=verified,
+            verified_records=verified, records_with_hash=with_hash,
         )
 
     def get_stats(self) -> dict:
