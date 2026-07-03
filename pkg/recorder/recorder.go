@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -29,9 +30,14 @@ type Record struct {
 	Error            string    `json:"error,omitempty"`
 	// Trajectory linkage (additive, backward compatible). A lone call is a
 	// trajectory of one step. See docs/SPEC-trajectory-chain.md.
-	TrajectoryID     string    `json:"trajectory_id,omitempty"`
-	StepID           string    `json:"step_id,omitempty"`
-	ParentIDs        []string  `json:"parent_ids,omitempty"`
+	TrajectoryID string   `json:"trajectory_id,omitempty"`
+	StepID       string   `json:"step_id,omitempty"`
+	ParentIDs    []string `json:"parent_ids,omitempty"`
+	// Tamper-evidence (present when the writer has chaining enabled).
+	// chain_hash = HMAC-SHA256(key, prev_digest || canonical record JSON),
+	// the same construction the Python SDK trust layer writes and verifies.
+	ChainSeq  int64  `json:"chain_seq,omitempty"`
+	ChainHash string `json:"chain_hash,omitempty"`
 }
 
 // Tokens holds token usage from the provider response.
@@ -41,9 +47,16 @@ type Tokens struct {
 	Total      int `json:"total"`
 }
 
-// Writer writes AIR records to a directory.
+// Writer writes AIR records to a directory. With chaining enabled (see
+// EnableChaining) writes are serialized and each record is linked to the
+// previous one with an HMAC chain hash.
 type Writer struct {
 	dir string
+
+	mu   sync.Mutex
+	key  []byte // nil = chaining disabled
+	prev []byte
+	seq  int64
 }
 
 // NewWriter creates a writer that saves AIR files to dir.
@@ -57,6 +70,16 @@ func NewWriter(dir string) (*Writer, error) {
 // Write persists an AIR record as <run_id>.air.json.
 func (w *Writer) Write(r Record) error {
 	r.Version = "1.0.0"
+
+	if w.key != nil {
+		// Never trust caller-supplied chain fields; the writer owns them.
+		r.ChainSeq = 0
+		r.ChainHash = ""
+		if err := w.writeChained(r); err != nil {
+			return fmt.Errorf("recorder: write chained %s: %w", r.RunID, err)
+		}
+		return nil
+	}
 
 	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
