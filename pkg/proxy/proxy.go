@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -101,7 +102,7 @@ func authenticateGateway(w http.ResponseWriter, r *http.Request, gatewayKey stri
 	if provided == "" {
 		provided = r.Header.Get("X-Api-Key")
 	}
-	if provided != gatewayKey {
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(gatewayKey)) != 1 {
 		http.Error(w, `{"error":"unauthorized: invalid or missing gateway key"}`, http.StatusUnauthorized)
 		return false
 	}
@@ -309,25 +310,27 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 
 	// --- Streaming vs non-streaming response handling ---
-	if req.Stream && resp.Header.Get("Content-Type") == "text/event-stream" {
-		handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+	var tokens recorder.Tokens
+	if req.Stream && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		tokens = handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	} else {
-		handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+		tokens = handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	}
 
 	// Update guardrails session state after response.
 	if cfg.Guardrails != nil && cfg.Sessions != nil {
 		sessionID := extractSessionID(r)
 		isError := resp.StatusCode >= 400
-		cfg.Sessions.RecordResponse(sessionID, 0, isError)
+		cfg.Sessions.RecordResponse(sessionID, tokens.Total, isError)
 	}
 }
 
 // handleStreamingResponse forwards SSE chunks to the client in real-time while
 // capturing the full response in the background for vault storage.
+// It returns the token usage extracted from the stream (zero if unavailable).
 func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) {
+	provider, endpoint string, reqBody []byte, start time.Time) recorder.Tokens {
 
 	// Set streaming headers.
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -396,18 +399,20 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
 		reqBody, respBytes, start, status, "")
+	return tokens
 }
 
 // handleBufferedResponse handles traditional (non-streaming) responses.
+// It returns the token usage extracted from the response (zero if unavailable).
 func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) {
+	provider, endpoint string, reqBody []byte, start time.Time) recorder.Tokens {
 
 	// Read response body.
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, `{"error":"failed to read upstream response"}`, http.StatusBadGateway)
-		return
+		return recorder.Tokens{}
 	}
 
 	// Extract token usage.
@@ -458,6 +463,7 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
 		reqBody, respBody, start, status, "")
+	return tokens
 }
 
 // backgroundRecord handles vault storage and AIR record writing off the hot path.
