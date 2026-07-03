@@ -23,6 +23,7 @@ router = APIRouter()
 
 RUNS_DIR = os.environ.get("RUNS_DIR", "./runs")
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8080")
+GATEWAY_KEY = os.environ.get("GATEWAY_KEY", "")
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -45,9 +46,10 @@ def _load_runs(limit: int = 500) -> list[dict]:
 
 async def _chain_status() -> dict:
     """Fetch live audit chain verification from the gateway."""
+    headers = {"X-Gateway-Key": GATEWAY_KEY} if GATEWAY_KEY else {}
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{GATEWAY_URL}/v1/audit")
+            resp = await client.get(f"{GATEWAY_URL}/v1/audit", headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 return {
