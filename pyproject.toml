@@ -48,6 +48,7 @@ adk = ["google-adk>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.0"]
 pdf = ["reportlab>=4.0"]
 gate = ["cryptography>=42.0"]
+lake = ["pyarrow>=14.0"]  # Parquet lake sink + in-lake chain verification
 pqc = ["oqs>=0.10.0"]  # post-quantum ML-DSA-65 signing (opt-in)
 all = [
     "air-blackbox[langchain]",
@@ -58,6 +59,7 @@ all = [
     "air-blackbox[claude]",
     "air-blackbox[pdf]",
     "air-blackbox[gate]",
+    "air-blackbox[lake]",
     "air-blackbox[pqc]",
 ]
 

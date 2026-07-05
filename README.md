@@ -98,6 +98,31 @@ python3 dashboard/replay.py   # open http://localhost:8090
 
 To re-execute a recorded run against the provider and diff the behavior, use `replayctl replay <run.air.json>`.
 
+## AIR on the Lakehouse (preview)
+
+Land the audit chain next to your business data as an open-format Parquet
+dataset - queryable with Spark, DuckDB, or anything that reads Parquet, and
+still tamper-evident: chain verification runs directly over the table.
+
+```bash
+pip install air-blackbox[lake]
+
+air-blackbox lake export --runs-dir ./runs -o ./air-lake   # incremental Parquet export
+air-blackbox lake verify -o ./air-lake                     # HMAC chain walk over the table
+```
+
+```sql
+-- Your agent audit trail is now just a table:
+SELECT model, provider, count(*) AS calls, sum(tokens_total) AS tokens
+FROM read_parquet('air-lake/**/*.parquet')
+GROUP BY model, provider;
+```
+
+Each row carries flattened columns for SQL plus the record's exact JSON as
+the verified source of truth. Edit any row - the payload or the SQL columns -
+and `lake verify` reports exactly which record broke. The signing key never
+enters the lake.
+
 ## Deploy on Kubernetes
 
 ```bash

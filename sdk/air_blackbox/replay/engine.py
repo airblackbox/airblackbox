@@ -45,6 +45,50 @@ class ChainVerification:
     records_with_hash: int = 0
 
 
+def verify_records(records: list, key: bytes) -> ChainVerification:
+    """Verify a HMAC-SHA256 chain over ordered record dicts.
+
+    This is the single verification implementation shared by the replay
+    engine (records from .air.json files) and the lake verifier (records
+    from Parquet tables). Records must already be ordered by
+    (chain_seq, timestamp); records without a chain_hash are outside the
+    chain and never advance the digest.
+    """
+    prev_hash = b"genesis"
+    verified = 0
+    with_hash = 0
+
+    for i, raw in enumerate(records):
+        stored_hash = raw.get("chain_hash")
+        if not stored_hash:
+            # Unchained records (written before chaining was enabled)
+            # are outside the chain entirely.
+            continue
+
+        # The chain hash is computed over the record as it existed before
+        # the hash was embedded, so it must be excluded here (this matches
+        # trust.chain.AuditChain.write and the evidence bundle verifier).
+        record_clean = {k: v for k, v in raw.items() if k != "chain_hash"}
+        record_bytes = json.dumps(record_clean, sort_keys=True).encode()
+        expected = hmac.new(key, prev_hash + record_bytes, hashlib.sha256)
+
+        with_hash += 1
+        if stored_hash != expected.hexdigest():
+            return ChainVerification(
+                intact=False, total_records=len(records),
+                verified_records=verified, first_break_at=i,
+                first_break_run_id=raw.get("run_id"),
+                records_with_hash=with_hash,
+            )
+        verified += 1
+        prev_hash = expected.digest()
+
+    return ChainVerification(
+        intact=True, total_records=len(records),
+        verified_records=verified, records_with_hash=with_hash,
+    )
+
+
 class ReplayEngine:
     """Loads, filters, and replays .air.json audit records."""
 
@@ -121,39 +165,7 @@ class ReplayEngine:
         """
         key = (signing_key or os.environ.get("TRUST_SIGNING_KEY")
                or self._runs_dir_key() or "air-blackbox-default").encode()
-        prev_hash = b"genesis"
-        verified = 0
-        with_hash = 0
-
-        for i, raw in enumerate(self._raw_records):
-            stored_hash = raw.get("chain_hash")
-            if not stored_hash:
-                # Unchained records (written before chaining was enabled)
-                # are outside the chain entirely.
-                continue
-
-            # The chain hash is computed over the record as it existed before
-            # the hash was embedded, so it must be excluded here (this matches
-            # trust.chain.AuditChain.write and the evidence bundle verifier).
-            record_clean = {k: v for k, v in raw.items() if k != "chain_hash"}
-            record_bytes = json.dumps(record_clean, sort_keys=True).encode()
-            expected = hmac.new(key, prev_hash + record_bytes, hashlib.sha256)
-
-            with_hash += 1
-            if stored_hash != expected.hexdigest():
-                return ChainVerification(
-                    intact=False, total_records=len(self._raw_records),
-                    verified_records=verified, first_break_at=i,
-                    first_break_run_id=raw.get("run_id"),
-                    records_with_hash=with_hash,
-                )
-            verified += 1
-            prev_hash = expected.digest()
-
-        return ChainVerification(
-            intact=True, total_records=len(self._raw_records),
-            verified_records=verified, records_with_hash=with_hash,
-        )
+        return verify_records(self._raw_records, key)
 
     def _runs_dir_key(self) -> Optional[str]:
         """Read the signing key the gateway auto-generates alongside the
