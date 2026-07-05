@@ -123,6 +123,28 @@ the verified source of truth. Edit any row - the payload or the SQL columns -
 and `lake verify` reports exactly which record broke. The signing key never
 enters the lake.
 
+To verify inside Databricks/Spark instead, use
+[docs/notebooks/verify_air_lake.py](docs/notebooks/verify_air_lake.py) - the
+chain walk needs only the rows and the key, on any engine.
+
+## Compliance Sandbox (preview)
+
+Agents graduate to production with a signed behavioral record. A sandbox
+session provisions an isolated gateway (fresh runs directory, locally
+generated signing key), points your agent at it via `OPENAI_BASE_URL`,
+records everything, and issues a PASS/FAIL verdict computed from the
+evidence - not the agent's word:
+
+```bash
+air-blackbox sandbox-run --gateway-bin ./gateway -- python my_agent.py
+```
+
+PASS requires: agent exited cleanly, every LLM call recorded and chained,
+chain verifies intact, zero errored calls. The session emits `report.json`,
+a Parquet lake dataset, and a signed `.air-evidence` bundle an approver can
+verify independently - the graduation certificate. Agents that bypass the
+gateway fail: no records, no graduation.
+
 ## Deploy on Kubernetes
 
 ```bash
