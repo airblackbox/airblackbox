@@ -985,9 +985,6 @@ def demo(output):
         pass
 
 
-if __name__ == "__main__":
-    main()
-
 
 @main.command()
 @click.option("--output", "-o", default=".", help="Directory to initialize")
@@ -2110,3 +2107,97 @@ def retrain_all(canonical, min_count):
         console.print(f"  [red]Publish failed:[/] {pub_result.error}")
 
     console.print()
+
+
+@main.group()
+def lake():
+    """Land audit records in an open lakehouse table and verify them there.
+
+    Exports the gateway's chained .air.json records into a date-partitioned
+    Parquet dataset so agent audit data lives next to business data
+    (Databricks, Iceberg/Delta catalogs, DuckDB) and stays tamper-evident:
+    chain verification runs directly over the table.
+
+    Requires: pip install air-blackbox[lake]
+
+    Subcommands:
+
+        air-blackbox lake export    Export records to a Parquet dataset
+
+        air-blackbox lake verify    Verify the HMAC chain over the dataset
+    """
+    pass
+
+
+@lake.command("export")
+@click.option("--runs-dir", default="./runs", help="Directory of .air.json records")
+@click.option("--output", "-o", default="./air-lake", help="Lake dataset directory")
+@click.option("--full", is_flag=True, help="Re-export everything (default: only new records)")
+def lake_export(runs_dir, output, full):
+    """Export .air.json records into a partitioned Parquet dataset."""
+    try:
+        from air_blackbox.lake import export_records
+        import pyarrow  # noqa: F401
+    except ImportError:
+        console.print("[red]pyarrow is required:[/] pip install air-blackbox[lake]\n")
+        raise SystemExit(1)
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Lake Export\n")
+    with console.status("[bold green]Exporting records..."):
+        count = export_records(runs_dir, output, incremental=not full)
+
+    if count == 0:
+        console.print("[yellow]No new records to export.[/]\n")
+        return
+
+    console.print(Panel(
+        f"[bold green]Export Complete[/]\n\n"
+        f"  Records written: {count}\n"
+        f"  Dataset: {output} (Parquet, hive-partitioned by date)\n\n"
+        f"  Query it with Spark, DuckDB, or any Parquet reader.\n"
+        f"  Verify it: air-blackbox lake verify -o {output}",
+        border_style="green",
+    ))
+    console.print()
+
+
+@lake.command("verify")
+@click.option("--output", "-o", "lake_dir", default="./air-lake", help="Lake dataset directory")
+@click.option("--runs-dir", default="./runs", help="Used to find the gateway's .air-signing-key")
+@click.option("--signing-key", default=None, help="Explicit HMAC signing key")
+def lake_verify(lake_dir, runs_dir, signing_key):
+    """Verify the HMAC audit chain directly over the Parquet dataset."""
+    try:
+        from air_blackbox.lake import verify_lake
+        import pyarrow  # noqa: F401
+    except ImportError:
+        console.print("[red]pyarrow is required:[/] pip install air-blackbox[lake]\n")
+        raise SystemExit(1)
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Lake Verify\n")
+    with console.status("[bold green]Verifying chain over the table..."):
+        result = verify_lake(lake_dir, signing_key=signing_key, runs_dir=runs_dir)
+
+    chain = result.chain
+    if result.intact and chain.records_with_hash == 0:
+        console.print(f"  [yellow]⚠  NO CHAIN HASHES[/] - {chain.total_records:,} rows loaded, but none carry a chain_hash.")
+        console.print("  [yellow]  Records written without chaining cannot be verified for tampering.[/]\n")
+        return
+
+    if result.intact:
+        console.print(f"  [green]✅ CHAIN INTACT[/] - {chain.verified_records:,} records verified in the lake. No tampering detected.\n")
+        return
+
+    if not chain.intact:
+        console.print(f"  [red]❌ CHAIN BROKEN[/] at record {chain.first_break_at} (run: {chain.first_break_run_id})")
+        console.print(f"  [red]  {chain.verified_records} of {chain.total_records} records verified before break.[/]")
+    for m in result.column_mismatches[:10]:
+        console.print(f"  [red]❌ COLUMN MISMATCH[/] run {m['run_id']}: {m['column']} = {m['column_value']!r}, record says {m['record_value']!r}")
+    if len(result.column_mismatches) > 10:
+        console.print(f"  [red]  ...and {len(result.column_mismatches) - 10} more mismatches[/]")
+    console.print()
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
