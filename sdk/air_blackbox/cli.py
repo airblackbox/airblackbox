@@ -2199,5 +2199,66 @@ def lake_verify(lake_dir, runs_dir, signing_key):
     raise SystemExit(1)
 
 
+@main.command("sandbox-run", context_settings={"ignore_unknown_options": True})
+@click.argument("command", nargs=-1, required=True, type=click.UNPROCESSED)
+@click.option("--gateway-bin", envvar="AIR_GATEWAY_BIN", default=None,
+              help="Path to the AIR gateway binary (managed mode)")
+@click.option("--gateway-url", default=None, help="Existing gateway URL (external mode)")
+@click.option("--runs-dir", default=None, help="Runs dir of the external gateway")
+@click.option("--provider", default="https://api.openai.com", help="Upstream LLM provider")
+@click.option("--guardrails", default=None, help="Guardrails config for the managed gateway")
+@click.option("--output", "-o", default="./sandbox-session", help="Session output directory")
+@click.option("--timeout", default=600, help="Agent timeout in seconds")
+def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrails, output, timeout):
+    """Run an agent in a recorded compliance sandbox.
+
+    Provisions an isolated gateway, points the agent at it via
+    OPENAI_BASE_URL, records every LLM call into a tamper-evident chain,
+    and emits a PASS/FAIL graduation report plus a signed evidence bundle.
+
+    \b
+        air-blackbox sandbox-run --gateway-bin ./gateway -- python my_agent.py
+    """
+    import os
+    from air_blackbox.sandbox import SandboxSession
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Compliance Sandbox\n")
+    os.makedirs(output, exist_ok=True)
+    try:
+        session = SandboxSession(
+            sandbox_dir=output, gateway_bin=gateway_bin,
+            gateway_url=gateway_url, runs_dir=runs_dir,
+            provider_url=provider, guardrails_config=guardrails)
+    except ValueError as e:
+        console.print(f"[red]{e}[/]\n")
+        raise SystemExit(2)
+
+    console.print(f"  Agent: [bold]{' '.join(command)}[/]")
+    with console.status("[bold green]Running agent in sandbox..."):
+        verdict = session.run(list(command), timeout=timeout)
+
+    color = "green" if verdict.passed else "red"
+    lines = [
+        f"[bold {color}]{'PASS - agent graduates' if verdict.passed else 'FAIL - agent does not graduate'}[/]",
+        "",
+        f"  LLM calls recorded: {verdict.total_calls} ({verdict.error_calls} errored)",
+        f"  Chain: {'INTACT, ' + str(verdict.chain_verified) + ' verified' if verdict.chain_intact else 'BROKEN'}",
+        f"  Models: {', '.join(verdict.models) or 'none'}",
+        f"  Tokens: {verdict.total_tokens:,}  Duration: {verdict.duration_seconds}s",
+    ]
+    for reason in verdict.reasons:
+        lines.append(f"  [red]- {reason}[/]")
+    lines.append("")
+    lines.append(f"  Report: {verdict.sandbox_dir}/report.json")
+    if verdict.evidence_path:
+        lines.append(f"  Evidence bundle: {verdict.evidence_path}")
+    if verdict.lake_dir:
+        lines.append(f"  Lake dataset: {verdict.lake_dir}")
+    console.print(Panel("\n".join(lines), border_style=color))
+    console.print()
+    if not verdict.passed:
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
     main()
