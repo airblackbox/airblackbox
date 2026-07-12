@@ -238,6 +238,17 @@ NOT embedded in records.
 - Examples: "agent_start", "tool_call", "email_send", "database_write", "file_access"
 - Used for filtering and analysis
 
+**config_hash** (Hex String, OPTIONAL)
+
+- SHA-256 of the agent's attested config bundle (prompts, skills, covenants),
+  produced by `air-blackbox attest create` and stamped by the gateway from
+  the `AIR_CONFIG_HASH` environment variable or the `X-Air-Config-Hash`
+  request header
+- Covered by chain_hash, so chained records bind each call to the exact
+  configuration that produced it
+- Verifiers resolve it against the config manifest to identify which file
+  changed after an incident
+
 **tokens** (Integer, OPTIONAL)
 
 - Number of tokens consumed or generated

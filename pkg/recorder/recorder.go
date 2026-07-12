@@ -38,6 +38,11 @@ type Record struct {
 	// the same construction the Python SDK trust layer writes and verifies.
 	ChainSeq  int64  `json:"chain_seq,omitempty"`
 	ChainHash string `json:"chain_hash,omitempty"`
+	// Config attestation: hash of the agent's config bundle (prompts,
+	// skills, covenants) active for this call. Covered by chain_hash, so
+	// chained records bind each call to the exact configuration that
+	// produced it.
+	ConfigHash string `json:"config_hash,omitempty"`
 }
 
 // Tokens holds token usage from the provider response.

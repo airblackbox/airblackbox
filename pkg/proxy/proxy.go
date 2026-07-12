@@ -43,6 +43,7 @@ type Config struct {
 	Sessions    *guardrails.Manager // session state for guardrails (nil = disabled)
 	Analytics   *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
 	AuditChain  *trust.AuditChain  // cryptographic audit chain (nil = disabled)
+	ConfigHash  string             // agent config bundle hash stamped into records ("" = unset)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -140,6 +141,12 @@ type chatResponse struct {
 
 func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint string) {
 	start := time.Now()
+
+	// Per-request config attestation overrides the gateway-wide hash.
+	// cfg is a value copy, so this mutation is request-local.
+	if h := r.Header.Get("X-Air-Config-Hash"); h != "" {
+		cfg.ConfigHash = h
+	}
 
 	// Generate run ID.
 	runID := uuid.New().String()
@@ -519,7 +526,7 @@ func backgroundRecord(cfg Config, runID string, span trace.Span,
 
 	// Write AIR record (best-effort).
 	writeAIRRecord(cfg.Recorder, runID, span, model, provider, endpoint,
-		reqRef, respRef, tokens, start, status, errMsg)
+		reqRef, respRef, tokens, start, status, errMsg, cfg.ConfigHash)
 
 	// Append to cryptographic audit chain (best-effort).
 	if cfg.AuditChain != nil {
@@ -576,7 +583,7 @@ func vaultStore(ctx context.Context, vc *vault.Client, runID, name string, data 
 }
 
 func writeAIRRecord(w *recorder.Writer, runID string, span trace.Span, model, provider, endpoint string,
-	reqRef, respRef vault.Ref, tokens recorder.Tokens, start time.Time, status, errMsg string) {
+	reqRef, respRef vault.Ref, tokens recorder.Tokens, start time.Time, status, errMsg, configHash string) {
 
 	if w == nil {
 		return
@@ -602,6 +609,7 @@ func writeAIRRecord(w *recorder.Writer, runID string, span trace.Span, model, pr
 		DurationMS:       time.Since(start).Milliseconds(),
 		Status:           status,
 		Error:            errMsg,
+		ConfigHash:       configHash,
 	}
 
 	if err := w.Write(rec); err != nil {

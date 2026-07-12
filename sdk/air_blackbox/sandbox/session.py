@@ -41,6 +41,7 @@ class SandboxVerdict:
     sandbox_dir: str = ""
     evidence_path: Optional[str] = None
     lake_dir: Optional[str] = None
+    config_hash: Optional[str] = None
 
 
 def _free_port() -> int:
@@ -59,7 +60,8 @@ class SandboxSession:
                  gateway_url: Optional[str] = None,
                  runs_dir: Optional[str] = None,
                  provider_url: str = "https://api.openai.com",
-                 guardrails_config: Optional[str] = None):
+                 guardrails_config: Optional[str] = None,
+                 config_paths: Optional[list] = None):
         if not gateway_bin and not (gateway_url and runs_dir):
             raise ValueError(
                 "need gateway_bin (managed mode) or gateway_url + runs_dir "
@@ -70,6 +72,8 @@ class SandboxSession:
         self.runs_dir = runs_dir or os.path.join(self.sandbox_dir, "runs")
         self.provider_url = provider_url
         self.guardrails_config = guardrails_config
+        self.config_paths = config_paths or []
+        self._manifest = None
         self._gateway_proc = None
 
     # -- gateway lifecycle ------------------------------------------------
@@ -85,6 +89,8 @@ class SandboxSession:
         })
         if self.guardrails_config:
             env["GUARDRAILS_CONFIG"] = os.path.abspath(self.guardrails_config)
+        if self._manifest:
+            env["AIR_CONFIG_HASH"] = self._manifest["config_hash"]
         log = open(os.path.join(self.sandbox_dir, "gateway.log"), "w")
         self._gateway_proc = subprocess.Popen(
             [self.gateway_bin], env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -122,6 +128,15 @@ class SandboxSession:
         os.makedirs(self.runs_dir, exist_ok=True)
         started = time.monotonic()
 
+        # Attest the agent's config bundle before it runs; the gateway
+        # stamps the hash into every record, binding each call to the
+        # exact prompts/skills/covenants that produced it.
+        if self.config_paths:
+            from air_blackbox.attest import build_manifest, save_manifest
+            self._manifest = build_manifest(self.config_paths)
+            save_manifest(self._manifest,
+                          os.path.join(self.sandbox_dir, "config-manifest.json"))
+
         url = self.gateway_url
         try:
             if self.gateway_bin:
@@ -134,6 +149,8 @@ class SandboxSession:
                 "AIR_GATEWAY_URL": url,
                 "AIR_SANDBOX": "1",
             })
+            if self._manifest:
+                env["AIR_CONFIG_HASH"] = self._manifest["config_hash"]
             with open(os.path.join(self.sandbox_dir, "agent.stdout"), "wb") as out, \
                  open(os.path.join(self.sandbox_dir, "agent.stderr"), "wb") as err:
                 try:
@@ -175,6 +192,15 @@ class SandboxSession:
         if errors:
             reasons.append(f"{errors} LLM call(s) errored")
 
+        config_hash = None
+        if self._manifest:
+            from air_blackbox.attest import check_manifest
+            config_hash = self._manifest["config_hash"]
+            drift = check_manifest(self._manifest)
+            if drift:
+                changed = ", ".join(d["path"] for d in drift[:5])
+                reasons.append(f"agent config changed during the run: {changed}")
+
         verdict = SandboxVerdict(
             passed=not reasons,
             reasons=reasons,
@@ -187,6 +213,7 @@ class SandboxSession:
             total_tokens=stats.get("total_tokens", 0),
             duration_seconds=round(duration, 2),
             sandbox_dir=self.sandbox_dir,
+            config_hash=config_hash,
         )
 
         verdict.lake_dir = self._export_lake()

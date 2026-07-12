@@ -160,6 +160,15 @@ func main() {
 		log.Println("Trust layer: disabled (enable in guardrails.yaml trust section)")
 	}
 
+	// --- Config attestation (opt-in) ---
+	// Set AIR_CONFIG_HASH (e.g. from `air-blackbox attest create`) to bind
+	// every record to the agent config bundle that produced it. Clients can
+	// override per request with the X-Air-Config-Hash header.
+	configHash := envOr("AIR_CONFIG_HASH", "")
+	if configHash != "" {
+		log.Printf("Config attestation: %s", configHash)
+	}
+
 	// --- Proxy handler ---
 	handler := proxy.Handler(proxy.Config{
 		ProviderURL: *providerURL,
@@ -170,6 +179,7 @@ func main() {
 		Sessions:    grMgr,
 		Analytics:   analytics,
 		AuditChain:  auditChain,
+		ConfigHash:  configHash,
 	})
 
 	srv := &http.Server{

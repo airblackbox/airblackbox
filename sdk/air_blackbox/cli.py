@@ -2209,7 +2209,9 @@ def lake_verify(lake_dir, runs_dir, signing_key):
 @click.option("--guardrails", default=None, help="Guardrails config for the managed gateway")
 @click.option("--output", "-o", default="./sandbox-session", help="Session output directory")
 @click.option("--timeout", default=600, help="Agent timeout in seconds")
-def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrails, output, timeout):
+@click.option("--config", "config_paths", multiple=True,
+              help="Attest these config files/dirs and bind every record to their hash")
+def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrails, output, timeout, config_paths):
     """Run an agent in a recorded compliance sandbox.
 
     Provisions an isolated gateway, points the agent at it via
@@ -2228,7 +2230,8 @@ def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrail
         session = SandboxSession(
             sandbox_dir=output, gateway_bin=gateway_bin,
             gateway_url=gateway_url, runs_dir=runs_dir,
-            provider_url=provider, guardrails_config=guardrails)
+            provider_url=provider, guardrails_config=guardrails,
+            config_paths=list(config_paths) or None)
     except ValueError as e:
         console.print(f"[red]{e}[/]\n")
         raise SystemExit(2)
@@ -2246,6 +2249,8 @@ def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrail
         f"  Models: {', '.join(verdict.models) or 'none'}",
         f"  Tokens: {verdict.total_tokens:,}  Duration: {verdict.duration_seconds}s",
     ]
+    if verdict.config_hash:
+        lines.append(f"  Config attested: {verdict.config_hash[:16]}... (bound into every record)")
     for reason in verdict.reasons:
         lines.append(f"  [red]- {reason}[/]")
     lines.append("")
@@ -2258,6 +2263,56 @@ def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrail
     console.print()
     if not verdict.passed:
         raise SystemExit(1)
+
+
+@main.group()
+def attest():
+    """Attest agent config bundles (prompts, skills, covenants).
+
+    \b
+        air-blackbox attest create prompts/ skills/ -o config-manifest.json
+        air-blackbox attest check -m config-manifest.json
+
+    Set the resulting hash as AIR_CONFIG_HASH on the gateway (or send the
+    X-Air-Config-Hash header per request) and every AIR record binds to the
+    exact configuration that produced it - tamper-evident via the chain.
+    """
+    pass
+
+
+@attest.command("create")
+@click.argument("paths", nargs=-1, required=True)
+@click.option("--output", "-o", default="config-manifest.json", help="Manifest output path")
+def attest_create(paths, output):
+    """Hash a config bundle into a deterministic manifest."""
+    from air_blackbox.attest import build_manifest, save_manifest
+
+    manifest = build_manifest(list(paths))
+    save_manifest(manifest, output)
+    console.print(f"\n[bold blue]AIR Blackbox[/] - Config Attestation\n")
+    console.print(f"  Files attested: {len(manifest['files'])}")
+    console.print(f"  config_hash: [bold]{manifest['config_hash']}[/]")
+    console.print(f"  Manifest: {output}\n")
+    console.print(f"  Bind it: export AIR_CONFIG_HASH={manifest['config_hash']}\n")
+
+
+@attest.command("check")
+@click.option("--manifest", "-m", default="config-manifest.json", help="Manifest to check against")
+def attest_check(manifest):
+    """Re-hash the attested files and report drift. Exits 1 on drift."""
+    from air_blackbox.attest import check_manifest, load_manifest
+
+    m = load_manifest(manifest)
+    drift = check_manifest(m)
+    console.print(f"\n[bold blue]AIR Blackbox[/] - Config Check\n")
+    if not drift:
+        console.print(f"  [green]✅ UNCHANGED[/] - all {len(m['files'])} files match the manifest ({m['config_hash'][:16]}...).\n")
+        return
+    for d in drift[:10]:
+        state = "deleted" if d["actual"] is None else "modified"
+        console.print(f"  [red]❌ {state}:[/] {d['path']}")
+    console.print(f"\n  [red]{len(drift)} file(s) drifted from the attested bundle.[/]\n")
+    raise SystemExit(1)
 
 
 if __name__ == "__main__":
