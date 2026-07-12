@@ -48,8 +48,12 @@ pip install air-blackbox
 # Run your first gap analysis - works on any Python AI project
 air-blackbox comply --scan . -v
 
-# Inventory every model and provider observed in live gateway traffic
-air-blackbox discover
+# Inventory runtime AI use and static AI-related dependencies
+air-blackbox discover --scan-path .
+
+# Export machine-readable AI-BOM/SBOM output
+air-blackbox discover --scan-path . --format cyclonedx
+air-blackbox discover --scan-path . --format spdx
 
 # Replay any recorded episode
 air-blackbox replay
@@ -57,6 +61,69 @@ air-blackbox replay
 # Generate a signed evidence package for audit or regulator review
 air-blackbox export
 ```
+
+
+## AI-BOM and Dependency Discovery
+
+`air-blackbox discover` combines runtime-observed models, providers, and tools with static dependency scanning from your project:
+
+```bash
+air-blackbox discover --scan-path . --format table
+air-blackbox discover --scan-path . --format cyclonedx
+air-blackbox discover --scan-path . --format spdx
+```
+
+Formats:
+
+- `--format table` is the human-readable inventory.
+- `--format json` remains an alias for CycloneDX 1.6 JSON.
+- `--format cyclonedx` emits CycloneDX 1.6 JSON.
+- `--format spdx` emits SPDX 2.3 JSON.
+
+Static scanning supports `requirements.txt`, `pyproject.toml`, `package.json`, and `package-lock.json`. `requirements.txt` and `pyproject.toml` provide declared direct Python dependencies only. `package.json` provides direct npm dependencies. `package-lock.json` v2/v3 can provide installed direct and transitive npm dependencies. Python transitive resolution is not performed, and discovery does not call the network, `pip`, `npm`, Poetry, or other package managers. `devDependencies` are currently excluded.
+
+Each package in a reliable dependency graph is classified independently, so transitive AI libraries can be detected:
+
+```text
+application
+  -> wrapper-package
+     -> openai
+```
+
+Custom AI-library rules can extend or override the built-in classifier:
+
+```bash
+air-blackbox discover   --scan-path .   --ai-libraries custom-ai-libraries.yaml   --format cyclonedx
+```
+
+```yaml
+version: 1
+packages:
+  python:
+    my-ai-sdk:
+      category: llm-sdk
+      provider: Example AI
+      reason: Internal AI SDK
+  npm:
+    "@example/ai-client":
+      category: llm-sdk
+      provider: Example AI
+      reason: Internal AI client
+```
+
+Custom rules extend defaults; a rule with the same ecosystem and normalized package name overrides the default. Python names use PEP 503 normalization, and npm scoped package names such as `@example/ai-client` are supported. Invalid explicit classifier configuration exits with an error.
+
+Use `--output` for machine-readable files:
+
+```bash
+air-blackbox discover   --scan-path .   --format spdx   --output sbom.spdx.json
+```
+
+Machine-readable output goes to the file, warnings go to stderr, JSON files are UTF-8 and end with a newline, and table output cannot be combined with `--output`.
+
+Runtime model components include the model name, provider when observed, and explicit model version when available. AIR record or schema version is never treated as the model version.
+
+Current limitations: no Python transitive resolution, no package-manager or network resolution, package-lock v2/v3 is the reliable transitive npm source, SPDX 2.3 represents models as packages plus annotations, and formal schema validation is not yet part of the test suite.
 
 Full stack (Gateway + Episode Store + Policy Engine + observability):
 

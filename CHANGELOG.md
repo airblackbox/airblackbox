@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+**Added**
+- Add static dependency discovery for AI-BOM output from requirements.txt, pyproject.toml, package.json, and package-lock.json.
+- Add configurable AI-library dependency classification.
+- Add CycloneDX 1.6 and SPDX 2.3 JSON output for `air-blackbox discover`.
+
 ## [1.6.1] - 2026-03-28
 
 **Fixed**
