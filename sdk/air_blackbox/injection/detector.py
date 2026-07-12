@@ -160,6 +160,7 @@ INJECTION_PATTERNS: list[PatternDef] = [
         name="safety_bypass",
         regex=re.compile(
             r"(?:bypass|disable|turn\s+off|remove|override)\s+"
+            r"(?:(?:the|your|all|any|this|these|those|its|content|output|safety)\s+){0,2}"
             r"(?:safety|filter|guard|restriction|limit|protection"
             r"|moderation|censorship|content\s+policy)",
             re.IGNORECASE,
@@ -186,7 +187,7 @@ INJECTION_PATTERNS: list[PatternDef] = [
         name="data_exfil",
         regex=re.compile(
             r"(?:send|transmit|forward|email|post|upload)\s+"
-            r"(?:all|the|my|this|your)\s+"
+            r"(?:(?:all|the|my|this|your|our|of)\s+){1,3}"
             r"(?:data|information|content|conversation|history"
             r"|context|system\s+prompt|instructions|secrets|keys)",
             re.IGNORECASE,

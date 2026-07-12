@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 	"time"
 )
@@ -32,6 +34,7 @@ type AuditChain struct {
 	entries []ChainEntry
 	last    string // hash of last entry (for chaining)
 	seq     int64
+	file    *os.File // optional append-only persistence (see NewPersistentAuditChain)
 }
 
 // NewAuditChain creates a new audit chain with the given HMAC signing key.
@@ -71,6 +74,13 @@ func (ac *AuditChain) Append(runID string, recordJSON []byte) ChainEntry {
 	ac.last = sha256Hex(entryJSON)
 
 	ac.entries = append(ac.entries, entry)
+
+	// Best-effort write-through: persistence failures never block the chain.
+	if ac.file != nil {
+		if _, err := ac.file.Write(append(entryJSON, '\n')); err != nil {
+			log.Printf("trust: persist chain entry %d: %v", entry.Sequence, err)
+		}
+	}
 	return entry
 }
 

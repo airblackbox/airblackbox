@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -61,6 +62,12 @@ func main() {
 		log.Println("WARN: VAULT_ENDPOINT not set — vault storage disabled")
 	}
 
+	// --- Signing key resolution (env → guardrails config → generated keyfile) ---
+	// Used for both the on-disk record chain and the trust layer, so records
+	// are tamper-evident even when the trust layer is disabled.
+	signingKey := envOr("TRUST_SIGNING_KEY", "")
+	keySource := "TRUST_SIGNING_KEY"
+
 	// --- Recorder setup ---
 	rec, err := recorder.NewWriter(*runsDir)
 	if err != nil {
@@ -107,19 +114,59 @@ func main() {
 		log.Println("Optimization analytics: disabled")
 	}
 
+	// Finish key resolution now that the guardrails config is loaded.
+	if signingKey == "" && grCfg != nil && grCfg.Trust.SigningKey != "" {
+		signingKey = grCfg.Trust.SigningKey
+		keySource = "guardrails config"
+	}
+	if signingKey == "" {
+		keyPath := filepath.Join(*runsDir, ".air-signing-key")
+		signingKey, err = trust.LoadOrGenerateKey(keyPath)
+		if err != nil {
+			log.Fatalf("signing key: %v", err)
+		}
+		keySource = keyPath
+	}
+	log.Printf("Signing key: %s", keySource)
+
+	// --- Record chaining ---
+	// Every AIR record gets a chain_seq + chain_hash verifiable by the Python
+	// SDK (air-blackbox replay --verify) and the evidence bundle tooling.
+	if rec != nil {
+		resumedAt, err := rec.EnableChaining(signingKey)
+		if err != nil {
+			log.Printf("WARN: record chaining disabled: %v", err)
+		} else if resumedAt > 0 {
+			log.Printf("Record chain: resumed at sequence %d", resumedAt)
+		} else {
+			log.Println("Record chain: started")
+		}
+	}
+
 	// --- Trust layer setup (opt-in) ---
 	var auditChain *trust.AuditChain
 	if grCfg != nil && grCfg.Trust.Enabled {
-		signingKey := envOr("TRUST_SIGNING_KEY", grCfg.Trust.SigningKey)
-		if signingKey == "" {
-			log.Println("WARN: Trust layer enabled but no signing key set (set TRUST_SIGNING_KEY)")
-			signingKey = "insecure-default-key"
-		}
 		grCfg.Trust.SigningKey = signingKey // store resolved key for export endpoint
-		auditChain = trust.NewAuditChain(signingKey)
+		chainPath := filepath.Join(*runsDir, "audit-chain.jsonl")
+		auditChain, err = trust.NewPersistentAuditChain(signingKey, chainPath)
+		if err != nil {
+			log.Printf("WARN: audit chain persistence unavailable (%v); using in-memory chain", err)
+			auditChain = trust.NewAuditChain(signingKey)
+		} else {
+			log.Printf("Audit chain: persisted to %s (%d entries loaded)", chainPath, auditChain.Len())
+		}
 		log.Printf("Trust layer: enabled (frameworks: %v)", grCfg.Trust.Compliance.Frameworks)
 	} else {
 		log.Println("Trust layer: disabled (enable in guardrails.yaml trust section)")
+	}
+
+	// --- Config attestation (opt-in) ---
+	// Set AIR_CONFIG_HASH (e.g. from `air-blackbox attest create`) to bind
+	// every record to the agent config bundle that produced it. Clients can
+	// override per request with the X-Air-Config-Hash header.
+	configHash := envOr("AIR_CONFIG_HASH", "")
+	if configHash != "" {
+		log.Printf("Config attestation: %s", configHash)
 	}
 
 	// --- Proxy handler ---
@@ -132,6 +179,7 @@ func main() {
 		Sessions:    grMgr,
 		Analytics:   analytics,
 		AuditChain:  auditChain,
+		ConfigHash:  configHash,
 	})
 
 	srv := &http.Server{
