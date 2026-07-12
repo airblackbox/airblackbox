@@ -718,7 +718,18 @@ def _render_discover_table(status, inventory, approved, metadata) -> None:
         t.add_column("Risk", justify="center")
         t.add_column("Reason")
         for alert in alerts:
-            t.add_row(alert.model, f"[red]{alert.level.upper()}[/]", alert.reason)
+            severity = alert.severity
+            severity_color = {
+                "high": "red",
+                "medium": "yellow",
+                "low": "dim",
+            }.get(severity.lower(), "white")
+
+            t.add_row(
+                alert.model,
+                f"[{severity_color}]{severity.upper()}[/{severity_color}]",
+                alert.reason,
+            )
         console.print(t)
         console.print()
 
