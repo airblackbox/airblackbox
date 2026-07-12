@@ -781,32 +781,7 @@ def _render_discover_table(status, inventory, approved, metadata) -> None:
     default=None,
     help="Optional YAML or JSON classifier rules that extend and override built-in defaults",
 )
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
-@click.option("--runs-dir", default=None, help="Path to .air.json records")
-@click.option("--approved", default=None, help="Path to approved models YAML")
-@click.option(
-    "--format",
-    "fmt",
-    type=click.Choice(["table", "cyclonedx", "json", "spdx"]),
-    default="table",
-    help="Output format: table, json alias for CycloneDX 1.6 JSON, cyclonedx, or spdx",
-)
-@click.option(
-    "--output",
-    "-o",
-    default=None,
-    help="Write machine-readable JSON to a file; table output cannot use this option",
-)
-@click.option(
-    "--scan-path",
-    default=".",
-    help="Project root to scan for requirements.txt, pyproject.toml, package.json, and package-lock.json",
-)
-@click.option(
-    "--ai-libraries",
-    default=None,
-    help="Optional YAML or JSON classifier rules that extend and override built-in defaults",
-)
+
 @click.option("--init-registry", is_flag=True, help="Generate approved-models.json from current traffic")
 def discover(gateway, runs_dir, approved, fmt, output, scan_path, ai_libraries, init_registry):
     """Discover AI models, tools, services, and package dependencies."""
