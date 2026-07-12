@@ -49,9 +49,6 @@ def test_export_is_incremental():
         assert export_records(runs, lake) == 0
 
         # A new record lands, only it gets exported.
-        chain = AuditChain(runs_dir=runs, signing_key="lake-key")
-        # Continue the chain manually: AuditChain restarts at genesis, so
-        # write to a fresh dir and copy - simpler to just verify count here.
         extra_runs = os.path.join(runs, "extra")
         os.makedirs(extra_runs)
         rec = {"run_id": "11111111-0000-0000-0000-000000000000",

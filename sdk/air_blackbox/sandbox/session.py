@@ -16,7 +16,6 @@ exited 0. The evidence bundle is generated with the same tooling as
 
 import json
 import os
-import shutil
 import socket
 import subprocess
 import time
@@ -75,6 +74,7 @@ class SandboxSession:
         self.config_paths = config_paths or []
         self._manifest = None
         self._gateway_proc = None
+        self._gateway_log = None
 
     # -- gateway lifecycle ------------------------------------------------
 
@@ -91,9 +91,10 @@ class SandboxSession:
             env["GUARDRAILS_CONFIG"] = os.path.abspath(self.guardrails_config)
         if self._manifest:
             env["AIR_CONFIG_HASH"] = self._manifest["config_hash"]
-        log = open(os.path.join(self.sandbox_dir, "gateway.log"), "w")
+        self._gateway_log = open(os.path.join(self.sandbox_dir, "gateway.log"), "w")
         self._gateway_proc = subprocess.Popen(
-            [self.gateway_bin], env=env, stdout=log, stderr=subprocess.STDOUT)
+            [self.gateway_bin], env=env,
+            stdout=self._gateway_log, stderr=subprocess.STDOUT)
         self._wait_healthy(url)
         return url
 
@@ -109,18 +110,25 @@ class SandboxSession:
                 if httpx.get(f"{url}/health", timeout=1.0).status_code == 200:
                     return
             except httpx.HTTPError:
+                # Expected while the gateway is still binding its port;
+                # keep polling until the deadline.
                 pass
             time.sleep(0.2)
         raise RuntimeError(f"gateway not healthy after {timeout}s")
 
     def _stop_gateway(self):
-        if self._gateway_proc and self._gateway_proc.poll() is None:
-            self._gateway_proc.terminate()
-            try:
-                self._gateway_proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self._gateway_proc.kill()
-        self._gateway_proc = None
+        try:
+            if self._gateway_proc and self._gateway_proc.poll() is None:
+                self._gateway_proc.terminate()
+                try:
+                    self._gateway_proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self._gateway_proc.kill()
+        finally:
+            self._gateway_proc = None
+            if self._gateway_log:
+                self._gateway_log.close()
+                self._gateway_log = None
 
     # -- the session ------------------------------------------------------
 
@@ -263,5 +271,7 @@ class SandboxSession:
                 if key:
                     return key
         except OSError:
+            # No generated keyfile (external-gateway mode, or recording was
+            # disabled); fall back to the env var / development default.
             pass
         return os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")

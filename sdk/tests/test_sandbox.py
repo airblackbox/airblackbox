@@ -44,7 +44,8 @@ def _run(n_calls, exit_code, status="success"):
         verdict = session.run(
             [sys.executable, "-c", agent, str(n_calls), str(exit_code), status],
             timeout=60)
-        report = json.load(open(os.path.join(d, "report.json")))
+        with open(os.path.join(d, "report.json")) as f:
+            report = json.load(f)
         # The temp dir vanishes when this function returns, so capture
         # artifact existence while it still exists.
         artifacts = {

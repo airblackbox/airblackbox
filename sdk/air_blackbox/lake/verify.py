@@ -58,6 +58,8 @@ def _resolve_key(signing_key: Optional[str], runs_dir: Optional[str]) -> bytes:
                 if key:
                     return key.encode()
         except OSError:
+            # The keyfile is an optional convenience source; fall through
+            # to the development default when it doesn't exist.
             pass
     return b"air-blackbox-default"
 
