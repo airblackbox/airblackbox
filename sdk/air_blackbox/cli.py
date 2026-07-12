@@ -807,7 +807,7 @@ def _render_discover_table(status, inventory, approved, metadata) -> None:
     default=None,
     help="Optional YAML or JSON classifier rules that extend and override built-in defaults",
 )
-@click.option("--init-registry", is_flag=True, help="Generate approved-models.yaml from current traffic")
+@click.option("--init-registry", is_flag=True, help="Generate approved-models.json from current traffic")
 def discover(gateway, runs_dir, approved, fmt, output, scan_path, ai_libraries, init_registry):
     """Discover AI models, tools, services, and package dependencies."""
     import json as jsonlib
