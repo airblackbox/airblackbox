@@ -78,3 +78,24 @@ bench/results/soak-samples.csv
 /*-anchor.json
 /evidencectl
 /gateway-bin
+
+# Internal drafts, outreach, and generated artifacts (untracked 2026-07-13;
+# root-anchored so legitimate nested files are unaffected)
+/AIR_Gate_*.md
+/DEVTO_*.md
+/README_TEMPLATE.md
+/air-gate-README.md
+/air-platform-README.md
+/compliance-action-README.md
+/gateway-README.md
+/outreach-*.md
+/reply-*.md
+/pico-reply.md
+/show-hn-post.md
+/twitter-post.md
+/tuesday-launch-checklist.md
+/ph-gallery-*
+/ph-launch-kit.md
+/outlines-compliance-report.md
+/evidence-bundle-*.air-evidence
+/docs/community-outreach-posts.md
