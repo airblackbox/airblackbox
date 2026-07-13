@@ -842,6 +842,8 @@ def discover(gateway, runs_dir, approved, fmt, output, scan_path, ai_libraries, 
 @click.option("--verify", is_flag=True, help="Verify HMAC audit chain")
 def replay(gateway, runs_dir, episode, last, verify):
     """Reconstruct AI incidents from the audit chain."""
+    import os
+
     from air_blackbox.replay.engine import ReplayEngine
 
     console.print("\n[bold blue]AIR Blackbox[/] - Incident Replay\n")
@@ -857,12 +859,45 @@ def replay(gateway, runs_dir, episode, last, verify):
     # Verify chain if requested
     if verify:
         console.print("[bold]Verifying HMAC audit chain...[/]\n")
+        _keyfile = os.path.join(runs_dir or "./runs", ".air-signing-key")
+
+        if not os.environ.get("TRUST_SIGNING_KEY") and not os.path.isfile(_keyfile):
+            console.print(
+                "  [dim]TRUST_SIGNING_KEY not set and no .air-signing-key found - "
+                "verifying with the built-in default key.[/]"
+            )
+            console.print(
+                "  [dim]If the chain was signed with your own key, "
+                "set TRUST_SIGNING_KEY first.[/]\n"
+            )
+
         result = engine.verify_chain()
-        if result.intact:
-            console.print(f"  [green]ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ CHAIN INTACT[/] - {result.verified_records:,} records verified. No tampering detected.\n")
+
+        if result.intact and result.records_with_hash == 0:
+            console.print(
+                f"  [yellow]⚠ NO CHAIN HASHES[/] - "
+                f"{result.total_records:,} records loaded, but none carry a chain_hash."
+            )
+            console.print(
+                "  [yellow]Records written without a trust layer cannot be "
+                "verified for tampering.[/]\n"
+            )
+        elif result.intact:
+            console.print(
+                f"  [green]✅ CHAIN INTACT[/] - "
+                f"{result.verified_records:,} records verified. "
+                "No tampering detected.\n"
+            )
         else:
-            console.print(f"  [red]ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CHAIN BROKEN[/] at record {result.first_break_at} (run: {result.first_break_run_id})")
-            console.print(f"  [red]  {result.verified_records} of {result.total_records} records verified before break.[/]\n")
+            console.print(
+                f"  [red]❌ CHAIN BROKEN[/] at record "
+                f"{result.first_break_at} (run: {result.first_break_run_id})"
+            )
+            console.print(
+                f"  [red]{result.verified_records:,} of "
+                f"{result.total_records:,} records verified before break.[/]\n"
+            )
+
         return
 
     # Detail view for single episode
@@ -1146,9 +1181,6 @@ def demo(output):
     except Exception:
         pass
 
-
-if __name__ == "__main__":
-    main()
 
 
 @main.command()
@@ -2272,3 +2304,213 @@ def retrain_all(canonical, min_count):
         console.print(f"  [red]Publish failed:[/] {pub_result.error}")
 
     console.print()
+
+
+@main.group()
+def lake():
+    """Land audit records in an open lakehouse table and verify them there.
+
+    Exports the gateway's chained .air.json records into a date-partitioned
+    Parquet dataset so agent audit data lives next to business data
+    (Databricks, Iceberg/Delta catalogs, DuckDB) and stays tamper-evident:
+    chain verification runs directly over the table.
+
+    Requires: pip install air-blackbox[lake]
+
+    Subcommands:
+
+        air-blackbox lake export    Export records to a Parquet dataset
+
+        air-blackbox lake verify    Verify the HMAC chain over the dataset
+    """
+    pass
+
+
+@lake.command("export")
+@click.option("--runs-dir", default="./runs", help="Directory of .air.json records")
+@click.option("--output", "-o", default="./air-lake", help="Lake dataset directory")
+@click.option("--full", is_flag=True, help="Re-export everything (default: only new records)")
+def lake_export(runs_dir, output, full):
+    """Export .air.json records into a partitioned Parquet dataset."""
+    try:
+        from air_blackbox.lake import export_records
+        import pyarrow  # noqa: F401
+    except ImportError:
+        console.print("[red]pyarrow is required:[/] pip install air-blackbox[lake]\n")
+        raise SystemExit(1)
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Lake Export\n")
+    with console.status("[bold green]Exporting records..."):
+        count = export_records(runs_dir, output, incremental=not full)
+
+    if count == 0:
+        console.print("[yellow]No new records to export.[/]\n")
+        return
+
+    console.print(Panel(
+        f"[bold green]Export Complete[/]\n\n"
+        f"  Records written: {count}\n"
+        f"  Dataset: {output} (Parquet, hive-partitioned by date)\n\n"
+        f"  Query it with Spark, DuckDB, or any Parquet reader.\n"
+        f"  Verify it: air-blackbox lake verify -o {output}",
+        border_style="green",
+    ))
+    console.print()
+
+
+@lake.command("verify")
+@click.option("--output", "-o", "lake_dir", default="./air-lake", help="Lake dataset directory")
+@click.option("--runs-dir", default="./runs", help="Used to find the gateway's .air-signing-key")
+@click.option("--signing-key", default=None, help="Explicit HMAC signing key")
+def lake_verify(lake_dir, runs_dir, signing_key):
+    """Verify the HMAC audit chain directly over the Parquet dataset."""
+    try:
+        from air_blackbox.lake import verify_lake
+        import pyarrow  # noqa: F401
+    except ImportError:
+        console.print("[red]pyarrow is required:[/] pip install air-blackbox[lake]\n")
+        raise SystemExit(1)
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Lake Verify\n")
+    with console.status("[bold green]Verifying chain over the table..."):
+        result = verify_lake(lake_dir, signing_key=signing_key, runs_dir=runs_dir)
+
+    chain = result.chain
+    if result.intact and chain.records_with_hash == 0:
+        console.print(f"  [yellow]⚠  NO CHAIN HASHES[/] - {chain.total_records:,} rows loaded, but none carry a chain_hash.")
+        console.print("  [yellow]  Records written without chaining cannot be verified for tampering.[/]\n")
+        return
+
+    if result.intact:
+        console.print(f"  [green]✅ CHAIN INTACT[/] - {chain.verified_records:,} records verified in the lake. No tampering detected.\n")
+        return
+
+    if not chain.intact:
+        console.print(f"  [red]❌ CHAIN BROKEN[/] at record {chain.first_break_at} (run: {chain.first_break_run_id})")
+        console.print(f"  [red]  {chain.verified_records} of {chain.total_records} records verified before break.[/]")
+    for m in result.column_mismatches[:10]:
+        console.print(f"  [red]❌ COLUMN MISMATCH[/] run {m['run_id']}: {m['column']} = {m['column_value']!r}, record says {m['record_value']!r}")
+    if len(result.column_mismatches) > 10:
+        console.print(f"  [red]  ...and {len(result.column_mismatches) - 10} more mismatches[/]")
+    console.print()
+    raise SystemExit(1)
+
+
+@main.command("sandbox-run", context_settings={"ignore_unknown_options": True})
+@click.argument("command", nargs=-1, required=True, type=click.UNPROCESSED)
+@click.option("--gateway-bin", envvar="AIR_GATEWAY_BIN", default=None,
+              help="Path to the AIR gateway binary (managed mode)")
+@click.option("--gateway-url", default=None, help="Existing gateway URL (external mode)")
+@click.option("--runs-dir", default=None, help="Runs dir of the external gateway")
+@click.option("--provider", default="https://api.openai.com", help="Upstream LLM provider")
+@click.option("--guardrails", default=None, help="Guardrails config for the managed gateway")
+@click.option("--output", "-o", default="./sandbox-session", help="Session output directory")
+@click.option("--timeout", default=600, help="Agent timeout in seconds")
+@click.option("--config", "config_paths", multiple=True,
+              help="Attest these config files/dirs and bind every record to their hash")
+def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrails, output, timeout, config_paths):
+    """Run an agent in a recorded compliance sandbox.
+
+    Provisions an isolated gateway, points the agent at it via
+    OPENAI_BASE_URL, records every LLM call into a tamper-evident chain,
+    and emits a PASS/FAIL graduation report plus a signed evidence bundle.
+
+    \b
+        air-blackbox sandbox-run --gateway-bin ./gateway -- python my_agent.py
+    """
+    import os
+    from air_blackbox.sandbox import SandboxSession
+
+    console.print("\n[bold blue]AIR Blackbox[/] - Compliance Sandbox\n")
+    os.makedirs(output, exist_ok=True)
+    try:
+        session = SandboxSession(
+            sandbox_dir=output, gateway_bin=gateway_bin,
+            gateway_url=gateway_url, runs_dir=runs_dir,
+            provider_url=provider, guardrails_config=guardrails,
+            config_paths=list(config_paths) or None)
+    except ValueError as e:
+        console.print(f"[red]{e}[/]\n")
+        raise SystemExit(2)
+
+    console.print(f"  Agent: [bold]{' '.join(command)}[/]")
+    with console.status("[bold green]Running agent in sandbox..."):
+        verdict = session.run(list(command), timeout=timeout)
+
+    color = "green" if verdict.passed else "red"
+    lines = [
+        f"[bold {color}]{'PASS - agent graduates' if verdict.passed else 'FAIL - agent does not graduate'}[/]",
+        "",
+        f"  LLM calls recorded: {verdict.total_calls} ({verdict.error_calls} errored)",
+        f"  Chain: {'INTACT, ' + str(verdict.chain_verified) + ' verified' if verdict.chain_intact else 'BROKEN'}",
+        f"  Models: {', '.join(verdict.models) or 'none'}",
+        f"  Tokens: {verdict.total_tokens:,}  Duration: {verdict.duration_seconds}s",
+    ]
+    if verdict.config_hash:
+        lines.append(f"  Config attested: {verdict.config_hash[:16]}... (bound into every record)")
+    for reason in verdict.reasons:
+        lines.append(f"  [red]- {reason}[/]")
+    lines.append("")
+    lines.append(f"  Report: {verdict.sandbox_dir}/report.json")
+    if verdict.evidence_path:
+        lines.append(f"  Evidence bundle: {verdict.evidence_path}")
+    if verdict.lake_dir:
+        lines.append(f"  Lake dataset: {verdict.lake_dir}")
+    console.print(Panel("\n".join(lines), border_style=color))
+    console.print()
+    if not verdict.passed:
+        raise SystemExit(1)
+
+
+@main.group()
+def attest():
+    """Attest agent config bundles (prompts, skills, covenants).
+
+    \b
+        air-blackbox attest create prompts/ skills/ -o config-manifest.json
+        air-blackbox attest check -m config-manifest.json
+
+    Set the resulting hash as AIR_CONFIG_HASH on the gateway (or send the
+    X-Air-Config-Hash header per request) and every AIR record binds to the
+    exact configuration that produced it - tamper-evident via the chain.
+    """
+    pass
+
+
+@attest.command("create")
+@click.argument("paths", nargs=-1, required=True)
+@click.option("--output", "-o", default="config-manifest.json", help="Manifest output path")
+def attest_create(paths, output):
+    """Hash a config bundle into a deterministic manifest."""
+    from air_blackbox.attest import build_manifest, save_manifest
+
+    manifest = build_manifest(list(paths))
+    save_manifest(manifest, output)
+    console.print(f"\n[bold blue]AIR Blackbox[/] - Config Attestation\n")
+    console.print(f"  Files attested: {len(manifest['files'])}")
+    console.print(f"  config_hash: [bold]{manifest['config_hash']}[/]")
+    console.print(f"  Manifest: {output}\n")
+    console.print(f"  Bind it: export AIR_CONFIG_HASH={manifest['config_hash']}\n")
+
+
+@attest.command("check")
+@click.option("--manifest", "-m", default="config-manifest.json", help="Manifest to check against")
+def attest_check(manifest):
+    """Re-hash the attested files and report drift. Exits 1 on drift."""
+    from air_blackbox.attest import check_manifest, load_manifest
+
+    m = load_manifest(manifest)
+    drift = check_manifest(m)
+    console.print(f"\n[bold blue]AIR Blackbox[/] - Config Check\n")
+    if not drift:
+        console.print(f"  [green]✅ UNCHANGED[/] - all {len(m['files'])} files match the manifest ({m['config_hash'][:16]}...).\n")
+        return
+    for d in drift[:10]:
+        state = "deleted" if d["actual"] is None else "modified"
+        console.print(f"  [red]❌ {state}:[/] {d['path']}")
+    console.print(f"\n  [red]{len(drift)} file(s) drifted from the attested bundle.[/]\n")
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

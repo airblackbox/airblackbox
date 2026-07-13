@@ -14,6 +14,8 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=collector:4317
       - RUNS_DIR=/data/runs
       - GUARDRAILS_CONFIG=/app/guardrails.yaml
+      # Optional: when unset, the gateway generates a random key and persists
+      # it as .air-signing-key in RUNS_DIR (survives restarts via the volume).
       - TRUST_SIGNING_KEY=${TRUST_SIGNING_KEY:-}
       # - GATEWAY_KEY=your-secret-key  # Uncomment to require authentication
     volumes:

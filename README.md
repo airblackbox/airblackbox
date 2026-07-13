@@ -58,6 +58,9 @@ air-blackbox discover --scan-path . --format spdx
 # Replay any recorded episode
 air-blackbox replay
 
+# Verify the tamper-evident chain (zero config: reads the gateway's local key)
+air-blackbox replay --verify
+
 # Generate a signed evidence package for audit or regulator review
 air-blackbox export
 ```
@@ -161,6 +164,53 @@ python3 dashboard/replay.py   # open http://localhost:8090
 ```
 
 To re-execute a recorded run against the provider and diff the behavior, use `replayctl replay <run.air.json>`.
+
+## AIR on the Lakehouse (preview)
+
+Land the audit chain next to your business data as an open-format Parquet
+dataset - queryable with Spark, DuckDB, or anything that reads Parquet, and
+still tamper-evident: chain verification runs directly over the table.
+
+```bash
+pip install air-blackbox[lake]
+
+air-blackbox lake export --runs-dir ./runs -o ./air-lake   # incremental Parquet export
+air-blackbox lake verify -o ./air-lake                     # HMAC chain walk over the table
+```
+
+```sql
+-- Your agent audit trail is now just a table:
+SELECT model, provider, count(*) AS calls, sum(tokens_total) AS tokens
+FROM read_parquet('air-lake/**/*.parquet')
+GROUP BY model, provider;
+```
+
+Each row carries flattened columns for SQL plus the record's exact JSON as
+the verified source of truth. Edit any row - the payload or the SQL columns -
+and `lake verify` reports exactly which record broke. The signing key never
+enters the lake.
+
+To verify inside Databricks/Spark instead, use
+[docs/notebooks/verify_air_lake.py](docs/notebooks/verify_air_lake.py) - the
+chain walk needs only the rows and the key, on any engine.
+
+## Compliance Sandbox (preview)
+
+Agents graduate to production with a signed behavioral record. A sandbox
+session provisions an isolated gateway (fresh runs directory, locally
+generated signing key), points your agent at it via `OPENAI_BASE_URL`,
+records everything, and issues a PASS/FAIL verdict computed from the
+evidence - not the agent's word:
+
+```bash
+air-blackbox sandbox-run --gateway-bin ./gateway -- python my_agent.py
+```
+
+PASS requires: agent exited cleanly, every LLM call recorded and chained,
+chain verifies intact, zero errored calls. The session emits `report.json`,
+a Parquet lake dataset, and a signed `.air-evidence` bundle an approver can
+verify independently - the graduation certificate. Agents that bypass the
+gateway fail: no records, no graduation.
 
 ## Deploy on Kubernetes
 
