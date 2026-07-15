@@ -2211,7 +2211,9 @@ def lake_verify(lake_dir, runs_dir, signing_key):
 @click.option("--timeout", default=600, help="Agent timeout in seconds")
 @click.option("--config", "config_paths", multiple=True,
               help="Attest these config files/dirs and bind every record to their hash")
-def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrails, output, timeout, config_paths):
+@click.option("--covenant", default=None,
+              help="Covenant YAML applied to recorded calls at graduation (needs an llm_call rule)")
+def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrails, output, timeout, config_paths, covenant):
     """Run an agent in a recorded compliance sandbox.
 
     Provisions an isolated gateway, points the agent at it via
@@ -2231,7 +2233,8 @@ def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrail
             sandbox_dir=output, gateway_bin=gateway_bin,
             gateway_url=gateway_url, runs_dir=runs_dir,
             provider_url=provider, guardrails_config=guardrails,
-            config_paths=list(config_paths) or None)
+            config_paths=list(config_paths) or None,
+            covenant_path=covenant)
     except ValueError as e:
         console.print(f"[red]{e}[/]\n")
         raise SystemExit(2)
@@ -2251,6 +2254,8 @@ def sandbox_run(command, gateway_bin, gateway_url, runs_dir, provider, guardrail
     ]
     if verdict.config_hash:
         lines.append(f"  Config attested: {verdict.config_hash[:16]}... (bound into every record)")
+    if verdict.covenant_hash:
+        lines.append(f"  Covenant: {verdict.covenant_hash[:16]}... ({verdict.covenant_violations} violation(s))")
     for reason in verdict.reasons:
         lines.append(f"  [red]- {reason}[/]")
     lines.append("")

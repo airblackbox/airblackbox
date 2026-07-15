@@ -41,6 +41,8 @@ class SandboxVerdict:
     evidence_path: Optional[str] = None
     lake_dir: Optional[str] = None
     config_hash: Optional[str] = None
+    covenant_hash: Optional[str] = None
+    covenant_violations: int = 0
 
 
 def _free_port() -> int:
@@ -60,7 +62,8 @@ class SandboxSession:
                  runs_dir: Optional[str] = None,
                  provider_url: str = "https://api.openai.com",
                  guardrails_config: Optional[str] = None,
-                 config_paths: Optional[list] = None):
+                 config_paths: Optional[list] = None,
+                 covenant_path: Optional[str] = None):
         if not gateway_bin and not (gateway_url and runs_dir):
             raise ValueError(
                 "need gateway_bin (managed mode) or gateway_url + runs_dir "
@@ -72,6 +75,8 @@ class SandboxSession:
         self.provider_url = provider_url
         self.guardrails_config = guardrails_config
         self.config_paths = config_paths or []
+        self.covenant_path = covenant_path
+        self._covenant = None
         self._manifest = None
         self._gateway_proc = None
         self._gateway_log = None
@@ -135,6 +140,15 @@ class SandboxSession:
     def run(self, command: list, timeout: int = 600) -> SandboxVerdict:
         os.makedirs(self.runs_dir, exist_ok=True)
         started = time.monotonic()
+
+        # Load the covenant (pre-execution policy) before the agent runs;
+        # its rules are applied to the recorded evidence at graduation, and
+        # the covenant file itself joins the attested config bundle.
+        if self.covenant_path:
+            from air_blackbox.gate.covenant import Covenant
+            self._covenant = Covenant.from_yaml(self.covenant_path)
+            if self.covenant_path not in self.config_paths:
+                self.config_paths = list(self.config_paths) + [self.covenant_path]
 
         # Attest the agent's config bundle before it runs; the gateway
         # stamps the hash into every record, binding each call to the
@@ -200,6 +214,35 @@ class SandboxSession:
         if errors:
             reasons.append(f"{errors} LLM call(s) errored")
 
+        covenant_hash = None
+        violations = 0
+        if self._covenant:
+            from air_blackbox.gate.covenant import RuleAction
+            covenant_hash = self._covenant.hash
+            examples = []
+            for raw in engine._raw_records:
+                context = {
+                    "model": raw.get("model", ""),
+                    "provider": raw.get("provider", ""),
+                    "endpoint": raw.get("endpoint", ""),
+                    "status": raw.get("status", ""),
+                    "tokens_total": (raw.get("tokens") or {}).get("total", 0),
+                    "category": "llm",
+                }
+                decision = self._covenant.evaluate("llm_call", context)
+                # The sandbox is unattended, so require_approval cannot be
+                # satisfied and counts as a violation like forbid.
+                if decision != RuleAction.PERMIT:
+                    violations += 1
+                    if len(examples) < 3:
+                        examples.append(
+                            f"{raw.get('run_id', '?')[:8]} ({context['model']}, "
+                            f"{context['tokens_total']} tokens): {decision.value}")
+            if violations:
+                reasons.append(
+                    f"{violations} call(s) violated covenant '{self._covenant.agent}': "
+                    + "; ".join(examples))
+
         config_hash = None
         if self._manifest:
             from air_blackbox.attest import check_manifest
@@ -222,6 +265,8 @@ class SandboxSession:
             duration_seconds=round(duration, 2),
             sandbox_dir=self.sandbox_dir,
             config_hash=config_hash,
+            covenant_hash=covenant_hash,
+            covenant_violations=violations,
         )
 
         verdict.lake_dir = self._export_lake()
