@@ -197,3 +197,22 @@ def test_export_clean_chain_reports_verified(tmp_path, monkeypatch):
     out = srv.export_evidence()
     assert "chain fully verified at export time" in out
     assert "WARNING" not in out
+
+
+def test_human_approval_flow_is_recordable(tmp_path, monkeypatch):
+    # Field-test regression: a decision requires approval, and recording the
+    # human's approval must be permitted (not a default-deny vocabulary miss).
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", _load_recruiting_covenant(srv))
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    gated = srv.log_screening_decision("Dana Okafor", "reject", "provenance only")
+    assert "REQUIRES HUMAN APPROVAL" in gated
+
+    approved = srv.record_action(
+        "human_approval", detail="reject Dana approved by user", category="screening")
+    assert approved.startswith("Recorded")           # not blocked
+    assert "NO RULE" not in approved and "BLOCKED" not in approved
+
+    assert "CHAIN INTACT: all 2 records verified" in srv.verify_chain()

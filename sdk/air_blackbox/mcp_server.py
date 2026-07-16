@@ -48,7 +48,8 @@ While this connector is enabled you MUST:
    the policy blocked it.
 3. If record_action says REQUIRES HUMAN APPROVAL, stop and ask the user to
    explicitly approve. Only proceed after they clearly say yes, then call
-   record_action again with action "human_approved_<original_action>".
+   record_action with action "human_approval" and a detail naming what was
+   approved (e.g. "reject_candidate for Dana Okafor, approved by user").
 4. When unsure whether something is allowed, call check_covenant first.
 5. When the user asks for proof, a report, or an audit trail, call
    verify_chain and export_evidence.

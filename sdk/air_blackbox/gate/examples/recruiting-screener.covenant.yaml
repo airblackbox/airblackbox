@@ -16,6 +16,10 @@ version: "1.0"
 description: "ADM-safe policy for candidate sourcing and screening agents"
 
 rules:
+  # Recording a human's explicit approval of a gated action is itself a
+  # governance event and is always permitted (it is the Article 14 sign-off).
+  - permit: human_approval
+
   # Research and enrichment - permitted (no candidate-affecting decision)
   - permit: search_candidates
   - permit: read_profile
