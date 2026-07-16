@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from air_blackbox.gate.covenant import Covenant, RuleAction
+from air_blackbox.gate.covenant import Covenant
 from air_blackbox.replay.engine import ReplayEngine
 from air_blackbox.trust.chain import AuditChain
 
