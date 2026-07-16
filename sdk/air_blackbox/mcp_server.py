@@ -20,7 +20,6 @@ Claude Desktop config:
     "args": ["-m", "air_blackbox.mcp_server"]}}}
 """
 
-import json
 import os
 import uuid
 from datetime import datetime, timezone
@@ -28,7 +27,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from air_blackbox.gate.covenant import Covenant, RuleAction
+from air_blackbox.gate.covenant import Covenant
 from air_blackbox.mcp_auth import build_auth
 from air_blackbox.replay.engine import ReplayEngine
 from air_blackbox.trust.chain import AuditChain
@@ -63,6 +62,8 @@ def _current_tenant() -> str:
         if token and token.subject:
             return _safe_tenant(token.subject)
     except Exception:
+        # Any failure to read the auth context (no request scope, middleware
+        # not active) intentionally falls back to the isolated local tenant.
         pass
     return "_local"
 

@@ -62,10 +62,10 @@ def test_build_auth_introspection_mode(monkeypatch):
 
 
 def test_tenant_id_is_filesystem_safe():
-    from air_blackbox.mcp_server import _safe_tenant
-    assert _safe_tenant("../etc/passwd") == "___etc_passwd"
-    assert "/" not in _safe_tenant("a/b/c")
-    assert _safe_tenant("normal-id_1") == "normal-id_1"
+    import air_blackbox.mcp_server as srv
+    assert srv._safe_tenant("../etc/passwd") == "___etc_passwd"
+    assert "/" not in srv._safe_tenant("a/b/c")
+    assert srv._safe_tenant("normal-id_1") == "normal-id_1"
 
 
 def test_tenant_chains_are_isolated(tmp_path, monkeypatch):
