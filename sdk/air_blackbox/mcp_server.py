@@ -20,10 +20,13 @@ Claude Desktop config:
     "args": ["-m", "air_blackbox.mcp_server"]}}}
 """
 
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger("air_blackbox.mcp")
 
 from mcp.server.fastmcp import FastMCP
 
@@ -164,7 +167,13 @@ def _tenant_signer(tenant: str) -> ReceiptSigner:
                     f.write(priv.hex())
                 os.chmod(key_path, 0o600)
             except OSError:
-                pass
+                # Non-fatal: signing still works this session with the
+                # in-memory key, but the keyfile could not be written, so the
+                # tenant's public key will change on restart. Warn the
+                # operator; do not fail the request.
+                logger.warning(
+                    "could not persist receipt key at %s; public key will not "
+                    "be stable across restarts", key_path)
         signer = ReceiptSigner(private_key=priv,
                                hmac_key=os.environ.get("TRUST_SIGNING_KEY"))
         _signers[tenant] = signer
