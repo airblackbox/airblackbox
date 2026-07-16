@@ -181,6 +181,32 @@ def export_evidence() -> str:
     return f"Evidence bundle written: {path} ({len(engine._raw_records)} records)"
 
 
+@app.tool()
+def log_screening_decision(candidate: str, decision: str,
+                           rationale: str = "") -> str:
+    """REQUIRED whenever you evaluate, rank, advance, reject, or recommend
+    an outcome for a candidate - even informally in conversation. Call this
+    BEFORE stating the decision to the user.
+
+    decision must be one of: advance, reject, score, rank, shortlist, hold.
+    Candidate-affecting decisions are automated decision-making under GDPR
+    Art 22 / EU AI Act Art 14: if this returns REQUIRES HUMAN APPROVAL, stop
+    and get the user's explicit yes before finalizing anything.
+    """
+    action_map = {
+        "advance": "advance_candidate", "reject": "reject_candidate",
+        "score": "score_candidate", "rank": "rank_candidates",
+        "shortlist": "rank_candidates", "hold": "score_candidate",
+    }
+    action = action_map.get(decision.strip().lower(), "score_candidate")
+    return record_action(
+        action=action,
+        detail=f"candidate={candidate[:100]}; decision={decision}; "
+               f"rationale={rationale[:300]}",
+        category="screening",
+    )
+
+
 @app.prompt()
 def governed_sourcing(role: str = "the open role") -> str:
     """Start a recorded, policy-governed candidate sourcing session."""
