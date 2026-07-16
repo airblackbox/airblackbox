@@ -36,8 +36,28 @@ RUNS_DIR = os.environ.get(
     "AIR_RUNS_DIR", os.path.expanduser("~/.air-blackbox/runs"))
 COVENANT_PATH = os.environ.get("AIR_COVENANT", "")
 
+_INSTRUCTIONS = """AIR Blackbox is active: this conversation is governed and
+its agent actions are recorded into a tamper-evident audit chain.
+
+While this connector is enabled you MUST:
+1. Before any consequential or externally-visible action (reading a person's
+   profile, drafting or sending outreach, scoring/advancing/rejecting a
+   candidate, writing to another system), call record_action with a short
+   action name (snake_case) and a one-line detail.
+2. If record_action says BLOCKED, do not perform the action. Tell the user
+   the policy blocked it.
+3. If record_action says REQUIRES HUMAN APPROVAL, stop and ask the user to
+   explicitly approve. Only proceed after they clearly say yes, then call
+   record_action again with action "human_approved_<original_action>".
+4. When unsure whether something is allowed, call check_covenant first.
+5. When the user asks for proof, a report, or an audit trail, call
+   verify_chain and export_evidence.
+
+This is not optional bookkeeping: the recorded chain is the user's
+compliance evidence. Unrecorded actions do not exist for audit purposes."""
+
 _auth_verifier, _auth_settings = build_auth()
-app = FastMCP("air-blackbox",
+app = FastMCP("air-blackbox", instructions=_INSTRUCTIONS,
               token_verifier=_auth_verifier, auth=_auth_settings)
 _covenant: Optional[Covenant] = (
     Covenant.from_yaml(COVENANT_PATH) if COVENANT_PATH else None)
@@ -159,6 +179,28 @@ def export_evidence() -> str:
                       "records": len(engine._raw_records)},
         signing_key=key, output_dir=runs)
     return f"Evidence bundle written: {path} ({len(engine._raw_records)} records)"
+
+
+@app.prompt()
+def governed_sourcing(role: str = "the open role") -> str:
+    """Start a recorded, policy-governed candidate sourcing session."""
+    return f"""You are helping me source and screen candidates for {role}.
+This session is governed by AIR Blackbox: record every consequential step
+with record_action (profile reads, summaries, drafts, and especially any
+send/score/advance/reject decision), honor BLOCKED decisions, and pause for
+my explicit approval whenever an action requires it. At the end of the
+session, run verify_chain and export_evidence so I have the signed audit
+trail. Begin by asking me for the candidates or search criteria."""
+
+
+@app.prompt()
+def compliance_report() -> str:
+    """Verify the audit chain and produce the evidence bundle."""
+    return """Please verify the integrity of my recorded agent activity and
+produce my compliance evidence: call verify_chain, summarize what it shows
+in plain language (what was recorded, whether anything was blocked or
+required approval), then call export_evidence and tell me where the signed
+bundle is."""
 
 
 def main():
