@@ -10,6 +10,9 @@ version: "1.0"
 description: "Accountable browser sourcing: read freely, act with a human"
 
 rules:
+  # A human's explicit approval of a gated action is always recordable.
+  - permit: human_approval
+
   # Viewing and research - permitted (a recruiter would do this by hand)
   - permit: navigate
   - permit: read_profile

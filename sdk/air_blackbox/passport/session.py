@@ -130,7 +130,7 @@ class BrowserSession:
             "run_id": str(uuid.uuid4()),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "human_approval",
-            "action": "approve",
+            "action": "human_approval",
             "approves_run_id": decision.run_id,
             "approves_action": decision.action,
             "approver": approver,

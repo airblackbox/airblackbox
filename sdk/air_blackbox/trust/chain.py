@@ -43,6 +43,7 @@ class AuditChain:
         self,
         runs_dir: str = "./runs",
         signing_key: Optional[str] = None,
+        resume: bool = False,
     ):
         self.runs_dir = runs_dir
         self._key = (
@@ -52,7 +53,41 @@ class AuditChain:
         self._prev_hash = self.GENESIS
         self._lock = threading.Lock()
         self._record_count = 0
+        self._seq = 0
         os.makedirs(self.runs_dir, exist_ok=True)
+        if resume:
+            self._resume()
+
+    def _resume(self) -> None:
+        """Continue an existing chain instead of restarting at genesis.
+
+        Without this, every new process writing into the same runs directory
+        starts a second genesis-rooted chain, and the combined records can
+        never verify as one. Mirrors the verifier: walk chained records in
+        (chain_seq, timestamp) order, advancing the expected digest.
+        """
+        import glob as _glob
+
+        records = []
+        for path in _glob.glob(os.path.join(self.runs_dir, "*.air.json")):
+            try:
+                with open(path) as f:
+                    rec = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if rec.get("chain_hash"):
+                records.append(rec)
+        records.sort(key=lambda r: (r.get("chain_seq") or 0,
+                                    r.get("timestamp") or ""))
+
+        for rec in records:
+            clean = {k: v for k, v in rec.items() if k != "chain_hash"}
+            record_bytes = json.dumps(clean, sort_keys=True).encode("utf-8")
+            h = hmac.new(self._key, self._prev_hash + record_bytes,
+                         hashlib.sha256)
+            self._prev_hash = h.digest()
+            self._record_count += 1
+            self._seq = max(self._seq, int(rec.get("chain_seq") or 0))
 
     def write(self, record: dict) -> Optional[str]:
         """Write a record with chain_hash to the runs directory.
@@ -76,6 +111,12 @@ class AuditChain:
                 if "timestamp" not in record:
                     record["timestamp"] = datetime.utcnow().isoformat() + "Z"
 
+                # The writer owns the chain fields: never trust caller values,
+                # and stamp append order so verifiers replay it exactly even
+                # when timestamps collide or the process restarts.
+                record.pop("chain_hash", None)
+                record["chain_seq"] = self._seq + 1
+
                 # Compute chain hash per spec: HMAC(key, prev_hash || JSON(record))
                 record_bytes = json.dumps(record, sort_keys=True).encode("utf-8")
                 h = hmac.new(
@@ -93,6 +134,7 @@ class AuditChain:
                 # Advance chain state
                 self._prev_hash = h.digest()
                 self._record_count += 1
+                self._seq += 1
 
                 return chain_hash
 

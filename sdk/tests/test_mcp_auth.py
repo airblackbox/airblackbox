@@ -85,3 +85,134 @@ def test_tenant_chains_are_isolated(tmp_path, monkeypatch):
     assert os.path.isfile(os.path.join(tmp_path, "alice", "a1.air.json"))
     assert os.path.isfile(os.path.join(tmp_path, "bob", "b1.air.json"))
     assert not os.path.isfile(os.path.join(tmp_path, "alice", "b1.air.json"))
+
+
+# --- field-test regressions: covenant vocabulary + honest verification ---
+
+def _load_recruiting_covenant(srv):
+    from air_blackbox.gate.covenant import Covenant
+    path = os.path.join(os.path.dirname(__file__), "..", "air_blackbox",
+                        "gate", "examples", "recruiting-screener.covenant.yaml")
+    return Covenant.from_yaml(path)
+
+
+def test_check_covenant_distinguishes_no_rule_from_explicit(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", _load_recruiting_covenant(srv))
+
+    # Free-text action name: vocabulary miss, not a policy judgment.
+    out = srv.check_covenant("say good morning to the user")
+    assert "no rule" in out
+    assert "vocabulary" in out
+    assert "read_profile" in out          # teaches the vocabulary
+
+    # Explicit rule: reported as such.
+    out = srv.check_covenant("infer_protected_attributes")
+    assert "explicit rule" in out and "forbid" in out
+
+
+def test_record_action_no_rule_message(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", _load_recruiting_covenant(srv))
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    out = srv.record_action("reviewed 3 candidate LinkedIn profiles")
+    assert "NO RULE MATCHED" in out and "vocabulary miss" in out
+
+    out = srv.record_action("infer_protected_attributes")
+    assert "BLOCKED by covenant rule" in out
+
+
+def test_verify_chain_partial_is_not_intact(tmp_path, monkeypatch):
+    import json
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    # A stray unchained record lands in the same store.
+    with open(os.path.join(tmp_path, "stray.air.json"), "w") as f:
+        json.dump({"run_id": "stray", "timestamp": "2026-01-01T00:00:00Z"}, f)
+
+    out = srv.verify_chain()
+    assert "PARTIAL" in out and "CANNOT be verified" in out
+    assert "INTACT" not in out
+
+
+def test_chain_resumes_across_server_restarts(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+
+    srv._chains.clear()
+    srv.record_action("read_profile")
+    srv.record_action("draft_message")
+
+    # Simulate a Desktop restart: fresh chain objects over the same store.
+    srv._chains.clear()
+    srv.record_action("read_profile")
+
+    out = srv.verify_chain()
+    assert "CHAIN INTACT: all 3 records verified" in out
+
+
+def test_export_warns_on_broken_chain(tmp_path, monkeypatch):
+    import json, glob, zipfile
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    srv.record_action("draft_message")
+    # Tamper with the first record.
+    path = sorted(glob.glob(os.path.join(tmp_path, "*.air.json")))[0]
+    with open(path) as f:
+        rec = json.load(f)
+    rec["action"] = "TAMPERED"
+    with open(path, "w") as f:
+        json.dump(rec, f)
+
+    out = srv.export_evidence()
+    assert "WARNING - BROKEN CHAIN EXPORTED" in out
+    assert "NOT clean compliance evidence" in out
+
+    # The signed payload itself carries the failure.
+    zpath = glob.glob(os.path.join(tmp_path, "air-evidence-*.zip"))[0]
+    with zipfile.ZipFile(zpath) as z:
+        scan = json.loads(z.read("scan_results.json"))
+    assert scan["chain_verification"]["fully_intact"] is False
+    assert scan["chain_verification"]["intact"] is False
+
+
+def test_export_clean_chain_reports_verified(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    out = srv.export_evidence()
+    assert "chain fully verified at export time" in out
+    assert "WARNING" not in out
+
+
+def test_human_approval_flow_is_recordable(tmp_path, monkeypatch):
+    # Field-test regression: a decision requires approval, and recording the
+    # human's approval must be permitted (not a default-deny vocabulary miss).
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", _load_recruiting_covenant(srv))
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    gated = srv.log_screening_decision("Dana Okafor", "reject", "provenance only")
+    assert "REQUIRES HUMAN APPROVAL" in gated
+
+    approved = srv.record_action(
+        "human_approval", detail="reject Dana approved by user", category="screening")
+    assert approved.startswith("Recorded")           # not blocked
+    assert "NO RULE" not in approved and "BLOCKED" not in approved
+
+    assert "CHAIN INTACT: all 2 records verified" in srv.verify_chain()
