@@ -121,7 +121,19 @@ def export_evidence() -> str:
 
 
 def main():
-    app.run()
+    """Run over stdio (Claude Desktop) or HTTP (claude.ai custom connector).
+
+    AIR_MCP_TRANSPORT=http serves streamable HTTP on AIR_MCP_HOST:AIR_MCP_PORT
+    (default 0.0.0.0:8085, endpoint /mcp) - put it behind TLS at e.g.
+    https://mcp.airblackbox.ai/mcp and add it in claude.ai as a custom
+    connector. Default is stdio for local Claude Desktop use.
+    """
+    if os.environ.get("AIR_MCP_TRANSPORT", "stdio") == "http":
+        app.settings.host = os.environ.get("AIR_MCP_HOST", "0.0.0.0")
+        app.settings.port = int(os.environ.get("AIR_MCP_PORT", "8085"))
+        app.run(transport="streamable-http")
+    else:
+        app.run()
 
 
 if __name__ == "__main__":

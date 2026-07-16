@@ -1,0 +1,33 @@
+# Deploy the governance MCP server and tether it to airblackbox.ai:
+#
+#   fly launch --copy-config --no-deploy   # from repo root, app name: air-mcp
+#   fly volumes create air_data --size 1
+#   fly secrets set TRUST_SIGNING_KEY=$(openssl rand -hex 32)
+#   fly deploy
+#   fly certs add mcp.airblackbox.ai
+#   # DNS: CNAME  mcp.airblackbox.ai -> air-mcp.fly.dev
+#
+# Then in claude.ai: Settings -> Connectors -> Add custom connector
+#   URL: https://mcp.airblackbox.ai/mcp
+
+app = "air-mcp"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  AIR_MCP_TRANSPORT = "http"
+  AIR_MCP_PORT = "8085"
+  AIR_RUNS_DIR = "/data/runs"
+  # AIR_COVENANT = "/app/sdk/air_blackbox/gate/examples/recruiting-screener.covenant.yaml"
+
+[mounts]
+  source = "air_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8085
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
