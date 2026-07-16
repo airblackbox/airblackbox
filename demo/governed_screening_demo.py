@@ -86,7 +86,10 @@ def main():
     call("export_evidence()", m.export_evidence())
 
     beat("[5] Independent proof — the human-readable chain")
-    rows = [json.load(open(p)) for p in glob.glob(os.path.join(runs, "*.air.json"))]
+    rows = []
+    for p in glob.glob(os.path.join(runs, "*.air.json")):
+        with open(p) as f:
+            rows.append(json.load(f))
     rows.sort(key=lambda r: r.get("chain_seq", 0))
     print(f"    {'seq':>3}  {'action':<28} {'decision':<16} detail")
     print("    " + "-" * 78)
@@ -98,10 +101,12 @@ def main():
     beat("[6] TAMPER TEST — falsify one stored record, then re-verify")
     from air_blackbox.replay.engine import ReplayEngine
     for p in glob.glob(os.path.join(runs, "*.air.json")):
-        r = json.load(open(p))
+        with open(p) as f:
+            r = json.load(f)
         if r.get("action") == "reject_candidate":
             r["detail"] = "APPROVED ON MERIT - top candidate"   # the forgery
-            json.dump(r, open(p, "w"))
+            with open(p, "w") as f:
+                json.dump(r, f)
             print(f"    {RED}✗ tampered record seq {r.get('chain_seq')}: "
                   f"rewrote the rejection rationale{RESET}")
             break
