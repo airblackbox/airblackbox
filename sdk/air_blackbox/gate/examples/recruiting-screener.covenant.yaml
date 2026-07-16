@@ -1,0 +1,42 @@
+# Covenant — AI Recruiting / Candidate Screening Agent
+#
+# Addresses automated decision-making (ADM) exposure: GDPR Article 22
+# (no solely automated significant decisions), EU AI Act Annex III
+# (employment = high-risk: Articles 9, 12, 14 apply), NYC Local Law 144,
+# Colorado SB 24-205.
+#
+# The pattern: the agent may READ and SUMMARIZE freely, but every action
+# that affects a candidate's outcome requires human approval. Run under
+# `air-blackbox sandbox-run --covenant` and the recorded evidence is
+# judged against this declaration; in production, the gateway's approval
+# webhook enforces the require_approval rules live.
+
+agent: recruiting-screener
+version: "1.0"
+description: "ADM-safe policy for candidate sourcing and screening agents"
+
+rules:
+  # Research and enrichment - permitted (no candidate-affecting decision)
+  - permit: search_candidates
+  - permit: read_profile
+  - permit: read_resume
+  - permit: summarize_candidate
+  - permit: draft_outreach          # drafting, not sending
+
+  # LLM usage - permitted within bounds
+  - permit: llm_call
+  - forbid: llm_call
+    when: "tokens_total > 100000"   # runaway-agent budget
+
+  # Candidate-affecting decisions - NEVER solely automated (GDPR Art 22,
+  # AI Act Art 14). A human must approve every outcome-changing action.
+  - require_approval: reject_candidate
+  - require_approval: advance_candidate
+  - require_approval: score_candidate
+  - require_approval: rank_candidates
+  - require_approval: send_outreach
+  - require_approval: schedule_interview
+
+  # Hard prohibitions
+  - forbid: infer_protected_attributes   # race, health, religion, etc.
+  - forbid: delete_records               # Article 12 retention

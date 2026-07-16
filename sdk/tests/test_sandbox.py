@@ -87,3 +87,55 @@ def test_requires_gateway_config():
     import pytest
     with pytest.raises(ValueError):
         SandboxSession(sandbox_dir="/tmp/x")
+
+
+COVENANT = """
+agent: test-agent
+version: "1.0"
+rules:
+  - permit: llm_call
+  - forbid: llm_call
+    when: "model == gpt-5"
+  - forbid: llm_call
+    when: "tokens_total > 50"
+"""
+
+
+def _run_with_covenant(model="gpt-4", tokens=10):
+    with tempfile.TemporaryDirectory() as d:
+        runs = os.path.join(d, "runs")
+        os.makedirs(runs)
+        with open(os.path.join(runs, ".air-signing-key"), "w") as f:
+            f.write("sandbox-test-key\n")
+        cov_path = os.path.join(d, "test.covenant.yaml")
+        with open(cov_path, "w") as f:
+            f.write(COVENANT)
+        session = SandboxSession(
+            sandbox_dir=d, gateway_url="http://unused:1", runs_dir=runs,
+            covenant_path=cov_path)
+        agent = AGENT.format(sdk_path=os.path.abspath(SDK_PATH), runs_dir=runs)
+        # Patch the model/token values the fake agent records.
+        agent = agent.replace('"model": "gpt-4"', f'"model": "{model}"')
+        agent = agent.replace('"total": 10', f'"total": {tokens}')
+        verdict = session.run([sys.executable, "-c", agent, "2", "0"], timeout=60)
+        return verdict
+
+
+def test_covenant_compliant_run_graduates():
+    verdict = _run_with_covenant(model="gpt-4", tokens=10)
+    assert verdict.passed
+    assert verdict.covenant_hash
+    assert verdict.covenant_violations == 0
+
+
+def test_covenant_forbidden_model_fails():
+    verdict = _run_with_covenant(model="gpt-5", tokens=10)
+    assert not verdict.passed
+    assert verdict.covenant_violations == 2
+    assert any("covenant" in r for r in verdict.reasons)
+
+
+def test_covenant_token_budget_fails():
+    verdict = _run_with_covenant(model="gpt-4", tokens=99)
+    assert not verdict.passed
+    assert verdict.covenant_violations == 2
