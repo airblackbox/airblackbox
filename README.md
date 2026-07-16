@@ -93,7 +93,10 @@ application
 Custom AI-library rules can extend or override the built-in classifier:
 
 ```bash
-air-blackbox discover   --scan-path .   --ai-libraries custom-ai-libraries.yaml   --format cyclonedx
+air-blackbox discover \
+  --scan-path . \
+  --ai-libraries custom-ai-libraries.yaml \
+  --format cyclonedx
 ```
 
 ```yaml
@@ -116,7 +119,10 @@ Custom rules extend defaults; a rule with the same ecosystem and normalized pack
 Use `--output` for machine-readable files:
 
 ```bash
-air-blackbox discover   --scan-path .   --format spdx   --output sbom.spdx.json
+air-blackbox discover \
+  --scan-path . \
+  --format spdx \
+  --output sbom.spdx.json
 ```
 
 Machine-readable output goes to the file, warnings go to stderr, JSON files are UTF-8 and end with a newline, and table output cannot be combined with `--output`.

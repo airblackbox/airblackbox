@@ -45,14 +45,11 @@ def discover_dependencies(
     for manifest in manifests:
         rel = path_for_display(manifest, base)
         result.inspected_manifests.append(rel)
-        before_failures = len(result.failed_manifests)
         try:
             discovered = _parse_manifest(manifest, rel, base, classifier, result)
         except Exception as exc:  # Defensive: malformed project files should not abort.
             result.failed_manifests.append(rel)
             result.warnings.append(f"Failed to parse {rel}: {exc}")
-            continue
-        if len(result.failed_manifests) > before_failures:
             continue
         for component in discovered:
             _merge_component(components, component)

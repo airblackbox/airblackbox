@@ -82,7 +82,10 @@ Discovery does not perform Python transitive resolution, inspect global environm
 Custom classifier rules extend the built-in AI-library list, and matching custom rules override defaults:
 
 ```bash
-air-blackbox discover   --scan-path .   --ai-libraries custom-ai-libraries.yaml   --format cyclonedx
+air-blackbox discover \
+  --scan-path . \
+  --ai-libraries custom-ai-libraries.yaml \
+  --format cyclonedx
 ```
 
 ```yaml

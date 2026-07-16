@@ -38,7 +38,10 @@ air-blackbox discover --scan-path . --format spdx --output sbom.spdx.json
 5. If the project uses private or internal AI SDKs, suggest a custom classifier file:
 
 ```bash
-air-blackbox discover   --scan-path .   --ai-libraries custom-ai-libraries.yaml   --format cyclonedx
+air-blackbox discover \
+  --scan-path . \
+  --ai-libraries custom-ai-libraries.yaml \
+  --format cyclonedx
 ```
 
 ```yaml

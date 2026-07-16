@@ -542,6 +542,41 @@ def test_requirements_safe_include_inside_root(tmp_path):
     )
 
 
+def test_requirements_unreadable_include_keeps_parent_dependencies(
+    tmp_path, monkeypatch
+):
+    nested = tmp_path / "reqs"
+    nested.mkdir()
+    (tmp_path / "requirements.txt").write_text(
+        "openai==1.2.3\nrequests==2.31.0\n-r reqs/sub.txt\n",
+        encoding="utf-8",
+    )
+    (nested / "sub.txt").write_text("anthropic==0.5.0\n", encoding="utf-8")
+
+    from air_blackbox.aibom import requirements_parser
+
+    original_read = requirements_parser._read_requirement_lines
+
+    def fail_for_include(path):
+        if path.name == "sub.txt":
+            raise OSError("permission denied")
+        return original_read(path)
+
+    monkeypatch.setattr(
+        requirements_parser,
+        "_read_requirement_lines",
+        fail_for_include,
+    )
+
+    result = _discover(tmp_path)
+
+    assert _by_identity(result, "python", "openai", "1.2.3")
+    assert _by_identity(result, "python", "requests", "2.31.0")
+    assert _components_by_name(result, "python", "anthropic") == []
+    assert result.failed_manifests == ["reqs/sub.txt"]
+    assert any("Failed to read reqs/sub.txt" in warning for warning in result.warnings)
+
+
 def test_package_json_exact_version_differs_from_lockfile_installed_version(tmp_path):
     (tmp_path / "package.json").write_text(
         json.dumps({"dependencies": {"openai": "4.0.0"}}),

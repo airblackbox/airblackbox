@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from pathlib import Path
 
 import pytest
@@ -36,7 +37,9 @@ def gateway(monkeypatch):
 
 @pytest.fixture
 def runner():
-    return CliRunner(mix_stderr=False)
+    if "mix_stderr" in inspect.signature(CliRunner).parameters:
+        return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _invoke(runner, args):
