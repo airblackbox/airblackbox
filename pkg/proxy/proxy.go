@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,6 +43,7 @@ type Config struct {
 	Sessions    *guardrails.Manager // session state for guardrails (nil = disabled)
 	Analytics   *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
 	AuditChain  *trust.AuditChain  // cryptographic audit chain (nil = disabled)
+	ConfigHash  string             // agent config bundle hash stamped into records ("" = unset)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -101,7 +103,7 @@ func authenticateGateway(w http.ResponseWriter, r *http.Request, gatewayKey stri
 	if provided == "" {
 		provided = r.Header.Get("X-Api-Key")
 	}
-	if provided != gatewayKey {
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(gatewayKey)) != 1 {
 		http.Error(w, `{"error":"unauthorized: invalid or missing gateway key"}`, http.StatusUnauthorized)
 		return false
 	}
@@ -109,10 +111,21 @@ func authenticateGateway(w http.ResponseWriter, r *http.Request, gatewayKey stri
 }
 
 // chatRequest is the minimal OpenAI chat completion request we need to parse.
+// Input carries the Responses API equivalent of Messages.
 type chatRequest struct {
 	Model    string          `json:"model"`
 	Messages json.RawMessage `json:"messages"`
+	Input    json.RawMessage `json:"input"`
 	Stream   bool            `json:"stream,omitempty"`
+}
+
+// promptText returns the last user prompt regardless of API shape: chat
+// completions carry it in messages, the Responses API in input.
+func (r chatRequest) promptText() string {
+	if text := extractPromptText(r.Messages); text != "" {
+		return text
+	}
+	return extractResponsesInput(r.Input)
 }
 
 // chatResponse is the minimal response structure for token extraction.
@@ -128,6 +141,12 @@ type chatResponse struct {
 
 func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint string) {
 	start := time.Now()
+
+	// Per-request config attestation overrides the gateway-wide hash.
+	// cfg is a value copy, so this mutation is request-local.
+	if h := r.Header.Get("X-Air-Config-Hash"); h != "" {
+		cfg.ConfigHash = h
+	}
 
 	// Generate run ID.
 	runID := uuid.New().String()
@@ -172,7 +191,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	// model downgrade) or block entirely. Returns 403 for policy blocks.
 	if cfg.Guardrails != nil {
 		sessionID := extractSessionID(r)
-		promptText := extractPromptText(req.Messages)
+		promptText := req.promptText()
 		toolNames := extractToolNames(reqBody)
 		sessionTokens := 0
 		if cfg.Sessions != nil {
@@ -233,7 +252,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 		sessionID := extractSessionID(r)
 		cfg.Sessions.GetOrCreate(sessionID)
 
-		promptText := extractPromptText(req.Messages)
+		promptText := req.promptText()
 		toolNames := extractToolNames(reqBody)
 		cfg.Sessions.RecordRequest(sessionID, promptText, toolNames)
 
@@ -309,25 +328,27 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 
 	// --- Streaming vs non-streaming response handling ---
-	if req.Stream && resp.Header.Get("Content-Type") == "text/event-stream" {
-		handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+	var tokens recorder.Tokens
+	if req.Stream && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		tokens = handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	} else {
-		handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+		tokens = handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	}
 
 	// Update guardrails session state after response.
 	if cfg.Guardrails != nil && cfg.Sessions != nil {
 		sessionID := extractSessionID(r)
 		isError := resp.StatusCode >= 400
-		cfg.Sessions.RecordResponse(sessionID, 0, isError)
+		cfg.Sessions.RecordResponse(sessionID, tokens.Total, isError)
 	}
 }
 
 // handleStreamingResponse forwards SSE chunks to the client in real-time while
 // capturing the full response in the background for vault storage.
+// It returns the token usage extracted from the stream (zero if unavailable).
 func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) {
+	provider, endpoint string, reqBody []byte, start time.Time) recorder.Tokens {
 
 	// Set streaming headers.
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -396,18 +417,20 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
 		reqBody, respBytes, start, status, "")
+	return tokens
 }
 
 // handleBufferedResponse handles traditional (non-streaming) responses.
+// It returns the token usage extracted from the response (zero if unavailable).
 func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) {
+	provider, endpoint string, reqBody []byte, start time.Time) recorder.Tokens {
 
 	// Read response body.
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, `{"error":"failed to read upstream response"}`, http.StatusBadGateway)
-		return
+		return recorder.Tokens{}
 	}
 
 	// Extract token usage.
@@ -458,6 +481,7 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
 		reqBody, respBody, start, status, "")
+	return tokens
 }
 
 // backgroundRecord handles vault storage and AIR record writing off the hot path.
@@ -502,7 +526,7 @@ func backgroundRecord(cfg Config, runID string, span trace.Span,
 
 	// Write AIR record (best-effort).
 	writeAIRRecord(cfg.Recorder, runID, span, model, provider, endpoint,
-		reqRef, respRef, tokens, start, status, errMsg)
+		reqRef, respRef, tokens, start, status, errMsg, cfg.ConfigHash)
 
 	// Append to cryptographic audit chain (best-effort).
 	if cfg.AuditChain != nil {
@@ -559,7 +583,7 @@ func vaultStore(ctx context.Context, vc *vault.Client, runID, name string, data 
 }
 
 func writeAIRRecord(w *recorder.Writer, runID string, span trace.Span, model, provider, endpoint string,
-	reqRef, respRef vault.Ref, tokens recorder.Tokens, start time.Time, status, errMsg string) {
+	reqRef, respRef vault.Ref, tokens recorder.Tokens, start time.Time, status, errMsg, configHash string) {
 
 	if w == nil {
 		return
@@ -585,6 +609,7 @@ func writeAIRRecord(w *recorder.Writer, runID string, span trace.Span, model, pr
 		DurationMS:       time.Since(start).Milliseconds(),
 		Status:           status,
 		Error:            errMsg,
+		ConfigHash:       configHash,
 	}
 
 	if err := w.Write(rec); err != nil {
@@ -636,6 +661,47 @@ func extractPromptText(messages json.RawMessage) string {
 					if p.Type == "text" {
 						return p.Text
 					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// extractResponsesInput pulls the last user prompt from a Responses API
+// input field, which is either a plain string or an array of messages whose
+// content is a string or an array of typed parts.
+func extractResponsesInput(input json.RawMessage) string {
+	if input == nil {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(input, &text); err == nil {
+		return text
+	}
+	var items []struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(input, &items); err != nil {
+		return ""
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i].Role != "user" {
+			continue
+		}
+		var content string
+		if err := json.Unmarshal(items[i].Content, &content); err == nil {
+			return content
+		}
+		var parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(items[i].Content, &parts); err == nil {
+			for _, p := range parts {
+				if p.Type == "input_text" || p.Type == "text" {
+					return p.Text
 				}
 			}
 		}
