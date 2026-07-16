@@ -230,18 +230,44 @@ def verify_chain() -> str:
 @app.tool()
 def export_evidence() -> str:
     """Package all recorded actions into a signed .air-evidence ZIP."""
+    from dataclasses import asdict
+
     from air_blackbox.export.evidence_bundle import generate_evidence_zip
     tenant = _current_tenant()
     runs = _tenant_runs_dir(tenant)
     engine = ReplayEngine(runs_dir=runs)
-    engine.load()
+    total = engine.load()
     key = os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")
+
+    # The bundle must never quietly attest a broken or partial chain: verify
+    # first and stamp the result INTO the signed payload, so a downstream
+    # auditor sees the integrity verdict before anything else.
+    verification = engine.verify_chain()
+    fully_intact = verification.intact and verification.verified_records == total
+
     path = generate_evidence_zip(
         chain_entries=engine._raw_records,
         scan_results={"source": "air-blackbox MCP server", "tenant": tenant,
-                      "records": len(engine._raw_records)},
+                      "records": total,
+                      "chain_verification": {
+                          "fully_intact": fully_intact,
+                          **asdict(verification)}},
         signing_key=key, output_dir=runs)
-    return f"Evidence bundle written: {path} ({len(engine._raw_records)} records)"
+
+    if not verification.intact:
+        return (f"WARNING - BROKEN CHAIN EXPORTED: {path}. The chain fails "
+                f"verification at record {verification.first_break_at} (run "
+                f"{verification.first_break_run_id}); the bundle is signed and "
+                f"its manifest records the failure, so it attests a broken "
+                f"chain - it is NOT clean compliance evidence. Tell the user.")
+    if not fully_intact:
+        unchained = total - verification.records_with_hash
+        return (f"WARNING - PARTIAL CHAIN EXPORTED: {path}. "
+                f"{verification.verified_records} of {total} records verified; "
+                f"{unchained} carry no chain hash. The manifest records this. "
+                f"Tell the user.")
+    return (f"Evidence bundle written: {path} ({total} records, chain fully "
+            f"verified at export time; verification stamped into the manifest)")
 
 
 @app.tool()

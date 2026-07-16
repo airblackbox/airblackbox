@@ -156,3 +156,44 @@ def test_chain_resumes_across_server_restarts(tmp_path, monkeypatch):
 
     out = srv.verify_chain()
     assert "CHAIN INTACT: all 3 records verified" in out
+
+
+def test_export_warns_on_broken_chain(tmp_path, monkeypatch):
+    import json, glob, zipfile
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    srv.record_action("draft_message")
+    # Tamper with the first record.
+    path = sorted(glob.glob(os.path.join(tmp_path, "*.air.json")))[0]
+    with open(path) as f:
+        rec = json.load(f)
+    rec["action"] = "TAMPERED"
+    with open(path, "w") as f:
+        json.dump(rec, f)
+
+    out = srv.export_evidence()
+    assert "WARNING - BROKEN CHAIN EXPORTED" in out
+    assert "NOT clean compliance evidence" in out
+
+    # The signed payload itself carries the failure.
+    zpath = glob.glob(os.path.join(tmp_path, "air-evidence-*.zip"))[0]
+    with zipfile.ZipFile(zpath) as z:
+        scan = json.loads(z.read("scan_results.json"))
+    assert scan["chain_verification"]["fully_intact"] is False
+    assert scan["chain_verification"]["intact"] is False
+
+
+def test_export_clean_chain_reports_verified(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    out = srv.export_evidence()
+    assert "chain fully verified at export time" in out
+    assert "WARNING" not in out
