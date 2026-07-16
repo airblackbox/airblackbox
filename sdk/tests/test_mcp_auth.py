@@ -85,3 +85,74 @@ def test_tenant_chains_are_isolated(tmp_path, monkeypatch):
     assert os.path.isfile(os.path.join(tmp_path, "alice", "a1.air.json"))
     assert os.path.isfile(os.path.join(tmp_path, "bob", "b1.air.json"))
     assert not os.path.isfile(os.path.join(tmp_path, "alice", "b1.air.json"))
+
+
+# --- field-test regressions: covenant vocabulary + honest verification ---
+
+def _load_recruiting_covenant(srv):
+    from air_blackbox.gate.covenant import Covenant
+    path = os.path.join(os.path.dirname(__file__), "..", "air_blackbox",
+                        "gate", "examples", "recruiting-screener.covenant.yaml")
+    return Covenant.from_yaml(path)
+
+
+def test_check_covenant_distinguishes_no_rule_from_explicit(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", _load_recruiting_covenant(srv))
+
+    # Free-text action name: vocabulary miss, not a policy judgment.
+    out = srv.check_covenant("say good morning to the user")
+    assert "no rule" in out
+    assert "vocabulary" in out
+    assert "read_profile" in out          # teaches the vocabulary
+
+    # Explicit rule: reported as such.
+    out = srv.check_covenant("infer_protected_attributes")
+    assert "explicit rule" in out and "forbid" in out
+
+
+def test_record_action_no_rule_message(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", _load_recruiting_covenant(srv))
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    out = srv.record_action("reviewed 3 candidate LinkedIn profiles")
+    assert "NO RULE MATCHED" in out and "vocabulary miss" in out
+
+    out = srv.record_action("infer_protected_attributes")
+    assert "BLOCKED by covenant rule" in out
+
+
+def test_verify_chain_partial_is_not_intact(tmp_path, monkeypatch):
+    import json
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    # A stray unchained record lands in the same store.
+    with open(os.path.join(tmp_path, "stray.air.json"), "w") as f:
+        json.dump({"run_id": "stray", "timestamp": "2026-01-01T00:00:00Z"}, f)
+
+    out = srv.verify_chain()
+    assert "PARTIAL" in out and "CANNOT be verified" in out
+    assert "INTACT" not in out
+
+
+def test_chain_resumes_across_server_restarts(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+
+    srv._chains.clear()
+    srv.record_action("read_profile")
+    srv.record_action("draft_message")
+
+    # Simulate a Desktop restart: fresh chain objects over the same store.
+    srv._chains.clear()
+    srv.record_action("read_profile")
+
+    out = srv.verify_chain()
+    assert "CHAIN INTACT: all 3 records verified" in out
