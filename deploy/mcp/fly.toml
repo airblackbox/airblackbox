@@ -20,7 +20,16 @@ primary_region = "iad"
   AIR_MCP_TRANSPORT = "http"
   AIR_MCP_PORT = "8085"
   AIR_RUNS_DIR = "/data/runs"
+  AIR_MCP_ISSUER_URL = "https://mcp.airblackbox.ai"
   # AIR_COVENANT = "/app/sdk/air_blackbox/gate/examples/recruiting-screener.covenant.yaml"
+  #
+  # OAuth (resource-server). Production: point at your IdP's introspection
+  # endpoint so claude.ai tokens are verified per request and tenants isolate
+  # by subject:
+  #   fly secrets set AIR_MCP_INTROSPECTION_URL=https://YOUR-IDP/oauth/introspect
+  #   fly secrets set AIR_MCP_INTROSPECTION_AUTH="Basic <base64 client:secret>"
+  # Self-host without an IdP: issue static bearer tokens (one per tenant):
+  #   fly secrets set AIR_MCP_TOKENS="tok1:recruiter-a,tok2:recruiter-b"
 
 [mounts]
   source = "air_data"

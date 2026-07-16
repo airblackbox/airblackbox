@@ -29,6 +29,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
 from air_blackbox.gate.covenant import Covenant, RuleAction
+from air_blackbox.mcp_auth import build_auth
 from air_blackbox.replay.engine import ReplayEngine
 from air_blackbox.trust.chain import AuditChain
 
@@ -36,10 +37,46 @@ RUNS_DIR = os.environ.get(
     "AIR_RUNS_DIR", os.path.expanduser("~/.air-blackbox/runs"))
 COVENANT_PATH = os.environ.get("AIR_COVENANT", "")
 
-app = FastMCP("air-blackbox")
-_chain = AuditChain(runs_dir=RUNS_DIR)
+_auth_verifier, _auth_settings = build_auth()
+app = FastMCP("air-blackbox",
+              token_verifier=_auth_verifier, auth=_auth_settings)
 _covenant: Optional[Covenant] = (
     Covenant.from_yaml(COVENANT_PATH) if COVENANT_PATH else None)
+
+# Per-tenant chains, keyed by the authenticated OAuth subject. Without auth
+# every request shares the single "_local" tenant.
+_chains: dict = {}
+
+
+def _safe_tenant(subject: str) -> str:
+    # Keep tenant ids filesystem-safe; never let a subject escape RUNS_DIR.
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in subject)[:64]
+
+
+def _current_tenant() -> str:
+    """Resolve the authenticated subject for this request, or the local tenant."""
+    if _auth_verifier is None:
+        return "_local"
+    try:
+        from mcp.server.auth.middleware.auth_context import get_access_token
+        token = get_access_token()
+        if token and token.subject:
+            return _safe_tenant(token.subject)
+    except Exception:
+        pass
+    return "_local"
+
+
+def _tenant_runs_dir(tenant: str) -> str:
+    return RUNS_DIR if tenant == "_local" else os.path.join(RUNS_DIR, tenant)
+
+
+def _tenant_chain(tenant: str) -> AuditChain:
+    chain = _chains.get(tenant)
+    if chain is None:
+        chain = AuditChain(runs_dir=_tenant_runs_dir(tenant))
+        _chains[tenant] = chain
+    return chain
 
 
 @app.tool()
@@ -52,6 +89,7 @@ def record_action(action: str, detail: str = "", model: str = "",
     forbids the action, it is recorded as BLOCKED and you must not
     proceed with it.
     """
+    tenant = _current_tenant()
     decision = "permit"
     if _covenant:
         context = {"model": model, "tokens_total": tokens_total,
@@ -71,7 +109,7 @@ def record_action(action: str, detail: str = "", model: str = "",
     }
     if _covenant:
         record["covenant_hash"] = _covenant.hash
-    chain_hash = _chain.write(record)
+    chain_hash = _tenant_chain(tenant).write(record)
 
     if decision == "forbid":
         return (f"BLOCKED by covenant (recorded, chain_hash={chain_hash}). "
@@ -94,8 +132,8 @@ def check_covenant(action: str, category: str = "") -> str:
 
 @app.tool()
 def verify_chain() -> str:
-    """Verify the integrity of everything recorded so far this deployment."""
-    engine = ReplayEngine(runs_dir=RUNS_DIR)
+    """Verify the integrity of everything recorded so far for this tenant."""
+    engine = ReplayEngine(runs_dir=_tenant_runs_dir(_current_tenant()))
     total = engine.load()
     result = engine.verify_chain()
     if result.intact:
@@ -109,14 +147,16 @@ def verify_chain() -> str:
 def export_evidence() -> str:
     """Package all recorded actions into a signed .air-evidence ZIP."""
     from air_blackbox.export.evidence_bundle import generate_evidence_zip
-    engine = ReplayEngine(runs_dir=RUNS_DIR)
+    tenant = _current_tenant()
+    runs = _tenant_runs_dir(tenant)
+    engine = ReplayEngine(runs_dir=runs)
     engine.load()
     key = os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")
     path = generate_evidence_zip(
         chain_entries=engine._raw_records,
-        scan_results={"source": "air-blackbox MCP server",
+        scan_results={"source": "air-blackbox MCP server", "tenant": tenant,
                       "records": len(engine._raw_records)},
-        signing_key=key, output_dir=os.path.dirname(RUNS_DIR) or ".")
+        signing_key=key, output_dir=runs)
     return f"Evidence bundle written: {path} ({len(engine._raw_records)} records)"
 
 
