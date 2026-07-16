@@ -216,3 +216,55 @@ def test_human_approval_flow_is_recordable(tmp_path, monkeypatch):
     assert "NO RULE" not in approved and "BLOCKED" not in approved
 
     assert "CHAIN INTACT: all 2 records verified" in srv.verify_chain()
+
+
+def test_actions_carry_verifiable_ed25519_receipts(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+    srv._signers.clear()
+
+    srv.record_action("read_profile", detail="candidate A")
+    srv.record_action("draft_message", detail="hello")
+
+    out = srv.verify_receipts()
+    assert "ALL RECEIPTS VALID: 2/2" in out
+    assert "ed25519" in out
+    assert "Public key:" in out
+
+
+def test_receipt_public_key_is_stable_across_restart(tmp_path, monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear(); srv._signers.clear()
+
+    srv.record_action("read_profile")
+    pub1 = srv._tenant_signer("_local").public_key_hex
+
+    # Simulate a restart: drop the in-memory signer, reload from the keyfile.
+    srv._signers.clear()
+    pub2 = srv._tenant_signer("_local").public_key_hex
+    assert pub1 == pub2 and pub1
+
+
+def test_tampered_receipt_is_caught(tmp_path, monkeypatch):
+    import glob, json
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear(); srv._signers.clear()
+
+    srv.record_action("read_profile", detail="candidate A")
+    # Forge the decision inside a stored receipt without re-signing.
+    path = glob.glob(os.path.join(tmp_path, "*.air.json"))[0]
+    with open(path) as f:
+        rec = json.load(f)
+    rec["receipt"]["decision"] = "permit"
+    rec["receipt"]["action_name"] = "bulk_export"
+    with open(path, "w") as f:
+        json.dump(rec, f)
+
+    out = srv.verify_receipts()
+    assert "RECEIPT FAILURE" in out

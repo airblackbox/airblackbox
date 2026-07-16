@@ -28,6 +28,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
 from air_blackbox.gate.covenant import Covenant
+from air_blackbox.gate.receipt import ActionReceipt, ReceiptSigner, hash_payload
 from air_blackbox.mcp_auth import build_auth
 from air_blackbox.replay.engine import ReplayEngine
 from air_blackbox.trust.chain import AuditChain
@@ -52,7 +53,8 @@ While this connector is enabled you MUST:
    approved (e.g. "reject_candidate for Dana Okafor, approved by user").
 4. When unsure whether something is allowed, call check_covenant first.
 5. When the user asks for proof, a report, or an audit trail, call
-   verify_chain and export_evidence.
+   verify_chain (records unaltered) and verify_receipts (who authorized
+   each action, via public-key signatures), then export_evidence.
 
 This is not optional bookkeeping: the recorded chain is the user's
 compliance evidence. Unrecorded actions do not exist for audit purposes."""
@@ -135,6 +137,58 @@ def _tenant_chain(tenant: str) -> AuditChain:
     return chain
 
 
+# Per-tenant Gate receipt signers. Ed25519 (or ML-DSA-65 if available) gives
+# every action a non-repudiable signature that anyone can verify with the
+# PUBLIC key alone - no shared secret, unlike the HMAC chain. This is the Gate
+# "bilateral receipt": the chain proves nothing was altered, the receipt
+# proves who authorized it.
+_signers: dict = {}
+
+
+def _tenant_signer(tenant: str) -> ReceiptSigner:
+    signer = _signers.get(tenant)
+    if signer is None:
+        runs = _tenant_runs_dir(tenant)
+        os.makedirs(runs, exist_ok=True)
+        key_path = os.path.join(runs, ".air-receipt-key")
+        # Own the key so the tenant's public key is stable across restarts.
+        # Any 32 random bytes is a valid Ed25519 seed.
+        priv = None
+        try:
+            with open(key_path) as f:
+                priv = bytes.fromhex(f.read().strip())
+        except (OSError, ValueError):
+            priv = os.urandom(32)
+            try:
+                with open(key_path, "w") as f:
+                    f.write(priv.hex())
+                os.chmod(key_path, 0o600)
+            except OSError:
+                pass
+        signer = ReceiptSigner(private_key=priv,
+                               hmac_key=os.environ.get("TRUST_SIGNING_KEY"))
+        _signers[tenant] = signer
+    return signer
+
+
+def _sign_receipt(tenant: str, action: str, decision: str, detail: str,
+                  category: str) -> dict:
+    """Produce a signed Gate receipt for an action and return it as a dict to
+    embed in the chained record. The signature covers the action, decision,
+    and covenant hash - independently verifiable from the record alone."""
+    receipt = ActionReceipt(
+        agent_id=tenant,
+        action_name=action,
+        action_category=category or "",
+        payload_hash=hash_payload(detail) if detail else "",
+        covenant_hash=_covenant.hash if _covenant else "",
+        decision=decision,
+        authorized=(decision == "permit"),
+    )
+    _tenant_signer(tenant).sign_authorization(receipt)
+    return receipt.to_dict()
+
+
 @app.tool()
 def record_action(action: str, detail: str = "", model: str = "",
                   tokens_total: int = 0, category: str = "") -> str:
@@ -167,6 +221,10 @@ def record_action(action: str, detail: str = "", model: str = "",
     }
     if _covenant:
         record["covenant_hash"] = _covenant.hash
+    # Attach a signed Gate receipt: the record now carries a non-repudiable
+    # signature verifiable with the tenant's public key, chained for
+    # tamper-evidence.
+    record["receipt"] = _sign_receipt(tenant, action, decision, detail, category)
     chain_hash = _tenant_chain(tenant).write(record)
 
     if decision == "forbid":
@@ -229,6 +287,62 @@ def verify_chain() -> str:
 
 
 @app.tool()
+def verify_receipts() -> str:
+    """Verify the Ed25519 signature on every recorded action for this tenant.
+
+    Unlike verify_chain (which proves records were not altered, using the
+    shared HMAC key), this proves WHO authorized each action using public-key
+    signatures - anyone can verify with the public key, no secret needed."""
+    import json as _json
+
+    tenant = _current_tenant()
+    signer = _tenant_signer(tenant)
+    engine = ReplayEngine(runs_dir=_tenant_runs_dir(tenant))
+    engine.load()
+
+    checked = valid = 0
+    for raw in engine._raw_records:
+        r = raw.get("receipt")
+        if not r:
+            continue
+        checked += 1
+        if signer.verify_authorization(_receipt_from_dict(r)):
+            valid += 1
+
+    pub = signer.public_key_hex or "(hmac fallback - no public key)"
+    if checked == 0:
+        return f"No signed receipts yet. Signing method: {signer.method}."
+    if valid == checked:
+        return (f"ALL RECEIPTS VALID: {valid}/{checked} signatures verified "
+                f"({signer.method}). Public key: {pub}. Anyone can verify these "
+                f"with the public key alone - no shared secret required.")
+    return (f"RECEIPT FAILURE: only {valid} of {checked} signatures verified "
+            f"({signer.method}). {checked - valid} receipt(s) do not match - "
+            f"tell the user.")
+
+
+def _receipt_from_dict(d: dict) -> ActionReceipt:
+    """Reconstruct an ActionReceipt from a stored record for verification."""
+    from air_blackbox.gate.receipt import ReceiptStatus
+    r = ActionReceipt(
+        receipt_id=d.get("receipt_id", ""),
+        agent_id=d.get("agent_id", ""),
+        action_name=d.get("action_name", ""),
+        action_category=d.get("action_category", ""),
+        payload_hash=d.get("payload_hash", ""),
+        covenant_hash=d.get("covenant_hash", ""),
+        decision=d.get("decision", ""),
+        authorized=d.get("authorized", False),
+        parent_receipt_id=d.get("parent_receipt_id"),
+        authorization_sig=d.get("authorization_sig", ""),
+        created_at=d.get("created_at", ""),
+        signing_method=d.get("signing_method", ""),
+        signing_public_key=d.get("signing_public_key", ""),
+    )
+    return r
+
+
+@app.tool()
 def export_evidence() -> str:
     """Package all recorded actions into a signed .air-evidence ZIP."""
     from dataclasses import asdict
@@ -252,7 +366,11 @@ def export_evidence() -> str:
                       "records": total,
                       "chain_verification": {
                           "fully_intact": fully_intact,
-                          **asdict(verification)}},
+                          **asdict(verification)},
+                      # Publish the receipt public key so a third party can
+                      # verify every action's Ed25519 signature independently.
+                      "receipt_signing_method": _tenant_signer(tenant).method,
+                      "receipt_public_key": _tenant_signer(tenant).public_key_hex or ""},
         signing_key=key, output_dir=runs)
 
     if not verification.intact:
