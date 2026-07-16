@@ -49,6 +49,7 @@ claude = ["claude-agent-sdk>=0.1.0"]
 pdf = ["reportlab>=4.0"]
 gate = ["cryptography>=42.0"]
 lake = ["pyarrow>=14.0"]  # Parquet lake sink + in-lake chain verification
+mcp = ["mcp>=1.0"]  # governance MCP server for Claude (record/enforce/prove)
 pqc = ["oqs>=0.10.0"]  # post-quantum ML-DSA-65 signing (opt-in)
 all = [
     "air-blackbox[langchain]",
@@ -60,12 +61,14 @@ all = [
     "air-blackbox[pdf]",
     "air-blackbox[gate]",
     "air-blackbox[lake]",
+    "air-blackbox[mcp]",
     "air-blackbox[pqc]",
 ]
 
 [project.scripts]
 air-blackbox = "air_blackbox.cli:main"
 air-blackbox-comply-strict = "air_blackbox.precommit:main"
+air-blackbox-mcp = "air_blackbox.mcp_server:main"
 
 [project.urls]
 Homepage = "https://airblackbox.ai"
