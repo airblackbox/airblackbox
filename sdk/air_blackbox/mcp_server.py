@@ -88,9 +88,53 @@ def _covenant_vocabulary(covenant: Covenant) -> str:
 if _covenant:
     _INSTRUCTIONS += "\n" + _covenant_vocabulary(_covenant)
 
+def _transport_security():
+    """DNS-rebinding protection trusts only localhost by default, which
+    rejects the real hostname behind a proxy (Fly, a load balancer, etc.).
+    List the public host(s) in AIR_MCP_ALLOWED_HOSTS (comma-separated); the
+    issuer host is trusted automatically. Set AIR_MCP_ALLOWED_HOSTS=* to
+    disable the check (only behind a trusted proxy that sets Host)."""
+    from urllib.parse import urlparse
+
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    raw = os.environ.get("AIR_MCP_ALLOWED_HOSTS", "").strip()
+    if raw == "*":
+        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+    hosts = {h.strip() for h in raw.split(",") if h.strip()}
+    issuer = os.environ.get("AIR_MCP_ISSUER_URL", "")
+    if issuer:
+        host = urlparse(issuer).netloc
+        if host:
+            hosts.add(host)
+    hosts.update({"localhost", "127.0.0.1"})
+    if not hosts:
+        return None
+    # Trust both bare host and host:port, and matching origins.
+    expanded = set()
+    for h in hosts:
+        expanded.add(h)
+        expanded.add(f"{h}:{os.environ.get('AIR_MCP_PORT', '8085')}")
+    origins = {f"https://{h}" for h in hosts} | {f"http://{h}" for h in hosts}
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=sorted(expanded),
+        allowed_origins=sorted(origins),
+    )
+
+
 _auth_verifier, _auth_settings = build_auth()
 app = FastMCP("air-blackbox", instructions=_INSTRUCTIONS,
-              token_verifier=_auth_verifier, auth=_auth_settings)
+              token_verifier=_auth_verifier, auth=_auth_settings,
+              transport_security=_transport_security())
+
+
+@app.custom_route("/health", methods=["GET"])
+async def _health(request):
+    """Unauthenticated liveness probe for load balancers / Fly health checks."""
+    from starlette.responses import JSONResponse
+    return JSONResponse({"status": "ok", "service": "air-blackbox-mcp"})
 
 
 def _rule_exists(action: str, context: dict) -> bool:
