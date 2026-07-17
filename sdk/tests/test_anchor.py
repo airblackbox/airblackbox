@@ -149,6 +149,17 @@ def test_missing_token_is_a_gap_not_a_pass(tmp_path):
 
 
 # --- MCP integration: export_evidence anchors, verify_anchor detects rewrite ---
+# These need the MCP SDK; skip cleanly if it is not installed (the core anchor
+# tests above do not need it).
+
+def _mcp_server(monkeypatch, tmp_path):
+    pytest.importorskip("mcp")
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear(); srv._signers.clear()
+    return srv
+
 
 def _patch_local_tsa(monkeypatch, tsa: "LocalTSA"):
     """Make the MCP server's anchor path use a local offline TSA."""
@@ -162,10 +173,7 @@ def _patch_local_tsa(monkeypatch, tsa: "LocalTSA"):
 
 
 def test_mcp_export_anchors_and_verify_anchor_passes(tmp_path, monkeypatch):
-    import air_blackbox.mcp_server as srv
-    monkeypatch.setattr(srv, "_covenant", None)
-    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
-    srv._chains.clear(); srv._signers.clear()
+    srv = _mcp_server(monkeypatch, tmp_path)
     tsa = LocalTSA(str(tmp_path / "tsa"))
     _patch_local_tsa(monkeypatch, tsa)
 
@@ -180,11 +188,8 @@ def test_mcp_export_anchors_and_verify_anchor_passes(tmp_path, monkeypatch):
 def test_mcp_rewrite_breaks_anchor_but_not_chain(tmp_path, monkeypatch):
     """Full-stack version of THE test through the MCP tools: after a rewrite,
     verify_chain and verify_receipts still pass, but verify_anchor breaks."""
-    import glob, json
-    import air_blackbox.mcp_server as srv
-    monkeypatch.setattr(srv, "_covenant", None)
-    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
-    srv._chains.clear(); srv._signers.clear()
+    import glob
+    srv = _mcp_server(monkeypatch, tmp_path)
     tsa = LocalTSA(str(tmp_path / "tsa"))
     _patch_local_tsa(monkeypatch, tsa)
 
@@ -212,10 +217,7 @@ def test_mcp_rewrite_breaks_anchor_but_not_chain(tmp_path, monkeypatch):
 
 
 def test_mcp_anchor_gap_is_reported_not_hidden(tmp_path, monkeypatch):
-    import air_blackbox.mcp_server as srv
-    monkeypatch.setattr(srv, "_covenant", None)
-    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
-    srv._chains.clear(); srv._signers.clear()
+    srv = _mcp_server(monkeypatch, tmp_path)
 
     # No reachable TSA -> anchor gap.
     monkeypatch.setattr("air_blackbox.anchor.timestamp_head",
