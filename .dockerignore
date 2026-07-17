@@ -1,0 +1,23 @@
+# The MCP image only needs pyproject.toml, README.md, and sdk/ (see
+# deploy/mcp/Dockerfile). Keep the build context small so deploys are fast -
+# without this, ~160 MB (mostly training/ and .git/) uploads on every deploy.
+.git/
+training/
+docs/
+bench/
+testdata/
+episodes/
+model/
+eval/
+sandbox/
+collector/
+deploy/helm/
+*.air-evidence
+*.air.json
+runs/
+.air-blackbox/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+node_modules/
