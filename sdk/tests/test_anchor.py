@@ -11,12 +11,11 @@ A local RFC 3161 TSA is stood up with openssl so these run offline / in CI.
 import os
 import shutil
 import subprocess
-import tempfile
 
 import pytest
 
 from air_blackbox.anchor import compute_head, verify_anchor_bytes
-from air_blackbox.anchor.tsa import make_query
+from air_blackbox.anchor.tsa import AnchorResult, make_query
 from air_blackbox.replay.engine import ReplayEngine
 from air_blackbox.trust.chain import AuditChain
 
@@ -153,14 +152,12 @@ def test_missing_token_is_a_gap_not_a_pass(tmp_path):
 
 def _patch_local_tsa(monkeypatch, tsa: "LocalTSA"):
     """Make the MCP server's anchor path use a local offline TSA."""
-    import air_blackbox.anchor.tsa as tsamod
-
     def fake_timestamp_head(head_hex, tsa_urls=None):
-        return tsamod.AnchorResult(ok=True, head=head_hex, tsr=tsa.reply(head_hex),
-                                   tsa_url="local-test-tsa", timestamp="T0")
-    # export_evidence imports timestamp_head from air_blackbox.anchor
-    import air_blackbox.anchor as anchormod
-    monkeypatch.setattr(anchormod, "timestamp_head", fake_timestamp_head)
+        return AnchorResult(ok=True, head=head_hex, tsr=tsa.reply(head_hex),
+                            tsa_url="local-test-tsa", timestamp="T0")
+    # export_evidence imports timestamp_head from air_blackbox.anchor at call
+    # time, so patch the attribute on that module by its string path.
+    monkeypatch.setattr("air_blackbox.anchor.timestamp_head", fake_timestamp_head)
     monkeypatch.setenv("AIR_TSA_CACERT", tsa.ca_pem)
 
 
@@ -216,14 +213,13 @@ def test_mcp_rewrite_breaks_anchor_but_not_chain(tmp_path, monkeypatch):
 
 def test_mcp_anchor_gap_is_reported_not_hidden(tmp_path, monkeypatch):
     import air_blackbox.mcp_server as srv
-    import air_blackbox.anchor as anchormod
     monkeypatch.setattr(srv, "_covenant", None)
     monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
     srv._chains.clear(); srv._signers.clear()
 
     # No reachable TSA -> anchor gap.
-    monkeypatch.setattr(anchormod, "timestamp_head",
-                        lambda h, u=None: anchormod.AnchorResult(
+    monkeypatch.setattr("air_blackbox.anchor.timestamp_head",
+                        lambda h, u=None: AnchorResult(
                             ok=False, head=h, error="no TSA reachable"))
     srv.record_action("read_profile")
     out = srv.export_evidence()

@@ -12,7 +12,8 @@ import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
 
-import httpx
+# httpx is imported lazily inside the functions that POST/GET, so the module
+# loads - and offline verification with a provided CA works - without it.
 
 # Public RFC 3161 timestamp authorities, tried in order.
 DEFAULT_TSA_URLS = [
@@ -61,6 +62,8 @@ def timestamp_head(head_hex: str,
     """Obtain an RFC 3161 timestamp over the head from the first reachable TSA."""
     if not head_hex:
         return AnchorResult(ok=False, head=head_hex, error="no chain head to anchor")
+    import httpx
+
     urls = tsa_urls or DEFAULT_TSA_URLS
     try:
         tsq = make_query(head_hex)
@@ -114,7 +117,9 @@ def verify_anchor_bytes(head_hex: str, tsr: bytes,
 
         ca_path = ca_pem
         if ca_path is None:
-            # Fetch FreeTSA's CA for offline-style verification of its tokens.
+            # Fetch FreeTSA's CA when no local CA was supplied. Offline
+            # verification (ca_pem provided) needs no network and no httpx.
+            import httpx
             try:
                 ca = httpx.get(FREETSA_CACERT_URL, timeout=15.0).content
                 ca_path = os.path.join(d, "cacert.pem")
