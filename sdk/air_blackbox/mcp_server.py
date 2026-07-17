@@ -56,8 +56,9 @@ While this connector is enabled you MUST:
    approved (e.g. "reject_candidate for Dana Okafor, approved by user").
 4. When unsure whether something is allowed, call check_covenant first.
 5. When the user asks for proof, a report, or an audit trail, call
-   verify_chain (records unaltered) and verify_receipts (who authorized
-   each action, via public-key signatures), then export_evidence.
+   verify_chain (records unaltered), verify_receipts (who authorized each
+   action), and verify_anchor (an external authority countersigned the
+   history, so even a re-signed rewrite is detectable), then export_evidence.
 
 This is not optional bookkeeping: the recorded chain is the user's
 compliance evidence. Unrecorded actions do not exist for audit purposes."""
@@ -413,6 +414,10 @@ def export_evidence() -> str:
     verification = engine.verify_chain()
     fully_intact = verification.intact and verification.verified_records == total
 
+    # Anchor the head at an external TSA BEFORE packaging, so the timestamp
+    # token travels inside the signed bundle (verifiable offline by a stranger).
+    anchor_note, anchor_manifest = _anchor_current_head(tenant)
+
     path = generate_evidence_zip(
         chain_entries=engine._raw_records,
         scan_results={"source": "air-blackbox MCP server", "tenant": tenant,
@@ -423,7 +428,10 @@ def export_evidence() -> str:
                       # Publish the receipt public key so a third party can
                       # verify every action's Ed25519 signature independently.
                       "receipt_signing_method": _tenant_signer(tenant).method,
-                      "receipt_public_key": _tenant_signer(tenant).public_key_hex or ""},
+                      "receipt_public_key": _tenant_signer(tenant).public_key_hex or "",
+                      # The external timestamp anchor (or a recorded gap), so the
+                      # bundle proves the head was bound at a past time.
+                      "anchor": anchor_manifest},
         signing_key=key, output_dir=runs)
 
     if not verification.intact:
@@ -439,7 +447,101 @@ def export_evidence() -> str:
                 f"{unchained} carry no chain hash. The manifest records this. "
                 f"Tell the user.")
     return (f"Evidence bundle written: {path} ({total} records, chain fully "
-            f"verified at export time; verification stamped into the manifest)")
+            f"verified at export time; verification stamped into the manifest). "
+            f"{anchor_note}")
+
+
+def _anchor_dir(tenant: str) -> str:
+    d = os.path.join(_tenant_runs_dir(tenant), "anchors")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _anchor_current_head(tenant: str):
+    """Timestamp the current chain head at an external TSA and persist the
+    token. An unreachable TSA is recorded as a gap, never silently dropped.
+    Returns (note, manifest_dict) - the manifest goes into the signed bundle."""
+    import base64
+    import json as _json
+
+    from air_blackbox.anchor import compute_head, timestamp_head
+
+    runs = _tenant_runs_dir(tenant)
+    engine = ReplayEngine(runs_dir=runs)
+    engine.load()
+    seq_max = max((r.get("chain_seq") or 0 for r in engine._raw_records), default=0)
+    head = compute_head(runs)
+    if not head:
+        return "Anchor: no chained records to anchor.", {"anchored": False,
+                                                         "reason": "no records"}
+
+    result = timestamp_head(head, _tsa_urls())
+    if not result.ok:
+        # An anchor gap is itself evidence - record it, do not hide it.
+        with open(os.path.join(_anchor_dir(tenant), "gaps.log"), "a") as f:
+            f.write(_json.dumps({"seq_max": seq_max, "head": head,
+                                 "error": result.error}) + "\n")
+        note = (f"Anchor: GAP - no external timestamp obtained ({result.error}). "
+                f"Recorded as a gap; the head is not externally bound this export.")
+        return note, {"anchored": False, "head": head, "seq_max": seq_max,
+                      "error": result.error}
+
+    manifest = {"anchored": True, "head": head, "seq_max": seq_max,
+                "tsa_url": result.tsa_url, "timestamp": result.timestamp,
+                "tsr_b64": base64.b64encode(result.tsr).decode()}
+    with open(os.path.join(_anchor_dir(tenant), f"anchor-{seq_max:012d}.json"), "w") as f:
+        _json.dump(manifest, f)
+    note = (f"Anchor: head bound to {result.tsa_url} at {result.timestamp}. "
+            f"A rewritten history cannot inherit this timestamp.")
+    return note, manifest
+
+
+def _tsa_urls():
+    urls = os.environ.get("AIR_TSA_URLS", "")
+    return [u.strip() for u in urls.split(",") if u.strip()] or None
+
+
+@app.tool()
+def verify_anchor() -> str:
+    """Verify the external timestamp anchor for this tenant.
+
+    verify_chain and verify_receipts prove records were not altered and who
+    signed them - but the operator holds those keys and could rewrite and
+    re-sign the whole history. This checks the RFC 3161 timestamp: an external
+    authority countersigned the chain head at a past time with a key the
+    operator does not control, so a rewritten head no longer matches it."""
+    import base64
+    import glob as _glob
+    import json as _json
+
+    from air_blackbox.anchor import compute_head, verify_anchor_bytes
+
+    tenant = _current_tenant()
+    anchors = sorted(_glob.glob(os.path.join(_anchor_dir(tenant), "anchor-*.json")))
+    if not anchors:
+        gaps = os.path.join(_anchor_dir(tenant), "gaps.log")
+        if os.path.exists(gaps):
+            return ("NO ANCHOR: the head has never been externally timestamped "
+                    "(anchor gaps recorded). Run export_evidence with a reachable "
+                    "TSA. Until then, a rewritten history would NOT be detectable "
+                    "by anchoring - tell the user.")
+        return "NO ANCHOR yet: run export_evidence to timestamp the chain head."
+
+    with open(anchors[-1]) as f:
+        m = _json.load(f)
+    tsr = base64.b64decode(m["tsr_b64"])
+    # Re-derive the head over exactly the records the anchor covered. A rewrite
+    # of any of those records changes this head and breaks the match.
+    head_now = compute_head(_tenant_runs_dir(tenant), up_to_seq=m["seq_max"])
+    ok, detail = verify_anchor_bytes(head_now, tsr, ca_pem=os.environ.get("AIR_TSA_CACERT"))
+    if ok:
+        return (f"ANCHOR VALID: an external authority ({m['tsa_url']}) "
+                f"countersigned this history's head at {m['timestamp']}. The "
+                f"records up to sequence {m['seq_max']} have not been rewritten "
+                f"since - verifiable by a third party against the TSA, no secret "
+                f"of ours required.")
+    return (f"ANCHOR BROKEN: {detail}. The history covered by the timestamp from "
+            f"{m['timestamp']} has been altered since it was anchored - tell the user.")
 
 
 @app.tool()
