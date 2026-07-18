@@ -179,12 +179,14 @@ def test_export_warns_on_broken_chain(tmp_path, monkeypatch):
     assert "WARNING - BROKEN CHAIN EXPORTED" in out
     assert "NOT clean compliance evidence" in out
 
-    # The signed payload itself carries the failure.
-    zpath = glob.glob(os.path.join(tmp_path, "air-evidence-*.zip"))[0]
+    # The signed payload itself carries the failure (v1 bundle: the
+    # verify_chain result is stamped into verification/chain.json).
+    zpath = glob.glob(os.path.join(tmp_path, "bundle-*.air-evidence"))[0]
     with zipfile.ZipFile(zpath) as z:
-        scan = json.loads(z.read("scan_results.json"))
-    assert scan["chain_verification"]["fully_intact"] is False
-    assert scan["chain_verification"]["intact"] is False
+        chain_doc = json.loads(z.read("verification/chain.json"))
+    verification = chain_doc["verification_at_export"]
+    assert verification["fully_intact"] is False
+    assert verification["intact"] is False
 
 
 def test_export_clean_chain_reports_verified(tmp_path, monkeypatch):
