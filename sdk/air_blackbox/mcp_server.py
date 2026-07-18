@@ -138,6 +138,72 @@ async def _health(request):
     return JSONResponse({"status": "ok", "service": "air-blackbox-mcp"})
 
 
+# --- Public demo audit endpoint -------------------------------------------
+# Lets the airblackbox.ai demo candidate page record page accesses on a REAL
+# tamper-evident chain with zero client setup (works from any surface,
+# including Claude in Chrome, which cannot mount MCP connectors). Privacy:
+# no visitor data is recorded - only that an access occurred, when. The
+# in-memory throttle map is transient and never written to the chain.
+_DEMO_TENANT = "public-demo"
+_DEMO_CORS = {
+    "Access-Control-Allow-Origin": "https://airblackbox.ai",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+}
+_demo_seen: dict = {}   # client key -> monotonic seconds of last recorded view
+_DEMO_MIN_INTERVAL = 20.0
+_DEMO_MAX_RECORDS = 5000  # stop growing the public chain past this
+
+
+def _demo_chain_state() -> dict:
+    engine = ReplayEngine(runs_dir=_tenant_runs_dir(_DEMO_TENANT))
+    total = engine.load()
+    result = engine.verify_chain()
+    return {"records": total,
+            "chain_intact": bool(result.intact),
+            "tenant": _DEMO_TENANT}
+
+
+@app.custom_route("/demo/view", methods=["POST", "OPTIONS"])
+async def _demo_view(request):
+    """Record a demo-page access on the public-demo chain and return the
+    resulting chain hash. Throttled per client; over-throttle requests get
+    the current chain state without a new record."""
+    import time as _time
+
+    from starlette.responses import JSONResponse, Response
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=_DEMO_CORS)
+
+    client = (request.client.host if request.client else "unknown")
+    now = _time.monotonic()
+    if len(_demo_seen) > 4096:
+        _demo_seen.clear()  # transient throttle map; never persisted
+    last = _demo_seen.get(client, 0.0)
+    state = _demo_chain_state()
+    if now - last < _DEMO_MIN_INTERVAL or state["records"] >= _DEMO_MAX_RECORDS:
+        return JSONResponse({**state, "recorded": False}, headers=_DEMO_CORS)
+    _demo_seen[client] = now
+
+    out = _record_event(
+        action="read_profile",
+        detail="public demo: candidate profile page accessed "
+               "(airblackbox.ai/demo/candidate; no visitor data recorded)",
+        category="demo",
+        tenant=_DEMO_TENANT)
+    chain_hash = out.rsplit("chain_hash=", 1)[-1].rstrip(".")
+    state = _demo_chain_state()
+    return JSONResponse({**state, "recorded": True,
+                         "chain_hash": chain_hash}, headers=_DEMO_CORS)
+
+
+@app.custom_route("/demo/status", methods=["GET"])
+async def _demo_status(request):
+    """Current public-demo chain state (records + integrity verdict)."""
+    from starlette.responses import JSONResponse
+    return JSONResponse(_demo_chain_state(), headers=_DEMO_CORS)
+
+
 def _rule_exists(action: str, context: dict) -> bool:
     """True if any covenant rule targets this action name at all - used to
     distinguish an explicit policy decision from a default-deny vocabulary
@@ -245,11 +311,13 @@ def _sign_receipt(tenant: str, action: str, decision: str, detail: str,
 
 def _record_event(action: str, detail: str = "", model: str = "",
                   tokens_total: int = 0, category: str = "",
-                  extra: dict | None = None) -> str:
+                  extra: dict | None = None,
+                  tenant: str | None = None) -> str:
     """Shared core for record_action and log_screening_decision: evaluate
     the covenant, build the record (plus any structured extra fields), sign
-    the receipt, and chain it."""
-    tenant = _current_tenant()
+    the receipt, and chain it. tenant overrides the auth-derived tenant
+    (used by the public demo endpoint, which has no auth context)."""
+    tenant = tenant or _current_tenant()
     decision = "permit"
     no_rule = False
     if _covenant:
