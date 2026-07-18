@@ -243,16 +243,12 @@ def _sign_receipt(tenant: str, action: str, decision: str, detail: str,
     return receipt.to_dict()
 
 
-@app.tool()
-def record_action(action: str, detail: str = "", model: str = "",
-                  tokens_total: int = 0, category: str = "") -> str:
-    """Record an agent action into the tamper-evident audit chain.
-
-    Call this for every consequential step you take (profile read,
-    outreach draft, decision, message sent). If a covenant is loaded and
-    forbids the action, it is recorded as BLOCKED and you must not
-    proceed with it.
-    """
+def _record_event(action: str, detail: str = "", model: str = "",
+                  tokens_total: int = 0, category: str = "",
+                  extra: dict | None = None) -> str:
+    """Shared core for record_action and log_screening_decision: evaluate
+    the covenant, build the record (plus any structured extra fields), sign
+    the receipt, and chain it."""
     tenant = _current_tenant()
     decision = "permit"
     no_rule = False
@@ -273,6 +269,8 @@ def record_action(action: str, detail: str = "", model: str = "",
         "covenant_decision": decision,
         "tokens": {"total": tokens_total},
     }
+    if extra:
+        record.update(extra)
     if _covenant:
         record["covenant_hash"] = _covenant.hash
     # Attach a signed Gate receipt: the record now carries a non-repudiable
@@ -298,6 +296,20 @@ def record_action(action: str, detail: str = "", model: str = "",
                 f"REQUIRES HUMAN APPROVAL before you proceed. Ask the user "
                 f"to explicitly approve, then record the approval.")
     return f"Recorded, chain_hash={chain_hash}"
+
+
+@app.tool()
+def record_action(action: str, detail: str = "", model: str = "",
+                  tokens_total: int = 0, category: str = "") -> str:
+    """Record an agent action into the tamper-evident audit chain.
+
+    Call this for every consequential step you take (profile read,
+    outreach draft, decision, message sent). If a covenant is loaded and
+    forbids the action, it is recorded as BLOCKED and you must not
+    proceed with it.
+    """
+    return _record_event(action=action, detail=detail, model=model,
+                         tokens_total=tokens_total, category=category)
 
 
 @app.tool()
@@ -398,15 +410,18 @@ def _receipt_from_dict(d: dict) -> ActionReceipt:
 
 @app.tool()
 def export_evidence() -> str:
-    """Package all recorded actions into a signed .air-evidence ZIP."""
+    """Package all recorded actions into a signed .air-evidence bundle
+    (v1 layout: manifest.json, records/, verification/, mapping/,
+    attachments/) aligned to SB 24-205 deployer documentation duties.
+    The bundle supports an impact assessment and is audit-ready; it is
+    not a legal compliance determination."""
     from dataclasses import asdict
 
-    from air_blackbox.export.evidence_bundle import generate_evidence_zip
+    from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
     tenant = _current_tenant()
     runs = _tenant_runs_dir(tenant)
     engine = ReplayEngine(runs_dir=runs)
     total = engine.load()
-    key = os.environ.get("TRUST_SIGNING_KEY", "air-blackbox-default")
 
     # The bundle must never quietly attest a broken or partial chain: verify
     # first and stamp the result INTO the signed payload, so a downstream
@@ -418,21 +433,26 @@ def export_evidence() -> str:
     # token travels inside the signed bundle (verifiable offline by a stranger).
     anchor_note, anchor_manifest = _anchor_current_head(tenant)
 
-    path = generate_evidence_zip(
+    # Deployer-supplied register info and attachments. Missing values are
+    # exported as "deployer-supplied" so gaps are explicit, never hidden.
+    system = {
+        "name": os.environ.get("AIR_SYSTEM_NAME", ""),
+        "high_risk_rationale": os.environ.get("AIR_HIGH_RISK_RATIONALE", ""),
+        "deployer": os.environ.get("AIR_SYSTEM_DEPLOYER", ""),
+    }
+    attachments_dir = os.environ.get(
+        "AIR_ATTACHMENTS_DIR", os.path.join(runs, "attachments"))
+
+    path, manifest = generate_evidence_bundle_v1(
         chain_entries=engine._raw_records,
-        scan_results={"source": "air-blackbox MCP server", "tenant": tenant,
-                      "records": total,
-                      "chain_verification": {
-                          "fully_intact": fully_intact,
-                          **asdict(verification)},
-                      # Publish the receipt public key so a third party can
-                      # verify every action's Ed25519 signature independently.
-                      "receipt_signing_method": _tenant_signer(tenant).method,
-                      "receipt_public_key": _tenant_signer(tenant).public_key_hex or "",
-                      # The external timestamp anchor (or a recorded gap), so the
-                      # bundle proves the head was bound at a past time.
-                      "anchor": anchor_manifest},
-        signing_key=key, output_dir=runs)
+        tenant=tenant,
+        signer=_tenant_signer(tenant),
+        chain_verification={"fully_intact": fully_intact,
+                            **asdict(verification)},
+        system=system,
+        attachments_dir=attachments_dir,
+        anchor_manifest=anchor_manifest,
+        output_dir=runs)
 
     if not verification.intact:
         return (f"WARNING - BROKEN CHAIN EXPORTED: {path}. The chain fails "
@@ -446,9 +466,16 @@ def export_evidence() -> str:
                 f"{verification.verified_records} of {total} records verified; "
                 f"{unchained} carry no chain hash. The manifest records this. "
                 f"Tell the user.")
+    gaps = manifest["counts"]["screening_decisions_missing_reviewer"]
+    gap_note = ""
+    if gaps:
+        gap_note = (f" NOTE: {gaps} screening decision(s) carry no "
+                    f"human_reviewer - flagged in the manifest as review-"
+                    f"protocol gaps; tell the user.")
     return (f"Evidence bundle written: {path} ({total} records, chain fully "
-            f"verified at export time; verification stamped into the manifest). "
-            f"{anchor_note}")
+            f"verified at export time; verification stamped into the signed "
+            f"manifest; verify independently with 'air-evidence verify "
+            f"<bundle>'). {anchor_note}{gap_note}")
 
 
 def _anchor_dir(tenant: str) -> str:
@@ -546,7 +573,11 @@ def verify_anchor() -> str:
 
 @app.tool()
 def log_screening_decision(candidate: str, decision: str,
-                           rationale: str = "") -> str:
+                           rationale: str = "",
+                           decision_type: str = "",
+                           human_reviewer: str = "",
+                           review_action: str = "",
+                           covenant_check_ref: str = "") -> str:
     """REQUIRED whenever you evaluate, rank, advance, reject, or recommend
     an outcome for a candidate - even informally in conversation. Call this
     BEFORE stating the decision to the user.
@@ -555,18 +586,41 @@ def log_screening_decision(candidate: str, decision: str,
     Candidate-affecting decisions are automated decision-making under GDPR
     Art 22 / EU AI Act Art 14: if this returns REQUIRES HUMAN APPROVAL, stop
     and get the user's explicit yes before finalizing anything.
+
+    Human-review-protocol fields (SB 24-205 deployer documentation - fill
+    whenever a human was involved; decisions recorded without a
+    human_reviewer are flagged as gaps in the exported evidence bundle):
+      decision_type      - advance | reject | rank | recommend
+      human_reviewer     - identity of the person who reviewed the output
+      review_action      - approved | overridden | modified
+      covenant_check_ref - chain hash of the check_covenant / record_action
+                           result that gated this decision
     """
     action_map = {
         "advance": "advance_candidate", "reject": "reject_candidate",
         "score": "score_candidate", "rank": "rank_candidates",
         "shortlist": "rank_candidates", "hold": "score_candidate",
     }
-    action = action_map.get(decision.strip().lower(), "score_candidate")
-    return record_action(
+    d = decision.strip().lower()
+    action = action_map.get(d, "score_candidate")
+    if not decision_type:
+        # Derive the SB 24-205 decision_type from the decision verb so every
+        # screening record is categorizable even when the caller omits it.
+        decision_type = {"advance": "advance", "reject": "reject",
+                         "rank": "rank", "shortlist": "rank"}.get(d, "recommend")
+    screening = {"decision_type": decision_type}
+    if human_reviewer:
+        screening["human_reviewer"] = human_reviewer[:100]
+    if review_action:
+        screening["review_action"] = review_action.strip().lower()[:20]
+    if covenant_check_ref:
+        screening["covenant_check_ref"] = covenant_check_ref[:128]
+    return _record_event(
         action=action,
         detail=f"candidate={candidate[:100]}; decision={decision}; "
                f"rationale={rationale[:300]}",
         category="screening",
+        extra={"screening": screening},
     )
 
 

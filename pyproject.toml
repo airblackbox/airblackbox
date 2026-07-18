@@ -69,6 +69,7 @@ all = [
 air-blackbox = "air_blackbox.cli:main"
 air-blackbox-comply-strict = "air_blackbox.precommit:main"
 air-blackbox-mcp = "air_blackbox.mcp_server:main"
+air-evidence = "air_blackbox.evidence_verify:main"
 
 [project.urls]
 Homepage = "https://airblackbox.ai"
@@ -78,6 +79,9 @@ Issues = "https://github.com/airblackbox/airblackbox/issues"
 
 [tool.setuptools.packages.find]
 where = ["sdk"]
+
+[tool.setuptools.package-data]
+air_blackbox = ["export/mappings/*.json", "gate/examples/*.yaml"]
 
 [tool.setuptools.package-dir]
 "" = "sdk"
