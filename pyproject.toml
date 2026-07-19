@@ -81,7 +81,8 @@ Issues = "https://github.com/airblackbox/airblackbox/issues"
 where = ["sdk"]
 
 [tool.setuptools.package-data]
-air_blackbox = ["export/mappings/*.json", "gate/examples/*.yaml"]
+air_blackbox = ["export/mappings/*.json", "gate/examples/*.yaml",
+                "mcp_assets/*"]
 
 [tool.setuptools.package-dir]
 "" = "sdk"
