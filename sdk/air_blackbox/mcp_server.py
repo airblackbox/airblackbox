@@ -138,6 +138,35 @@ async def _health(request):
     return JSONResponse({"status": "ok", "service": "air-blackbox-mcp"})
 
 
+def _asset(name: str) -> bytes:
+    with open(os.path.join(os.path.dirname(__file__), "mcp_assets", name),
+              "rb") as f:
+        return f.read()
+
+
+@app.custom_route("/favicon.svg", methods=["GET"])
+async def _favicon_svg(request):
+    """Brand mark (compact, ground-on-ink). claude.ai and other clients
+    resolve the connector icon from the server origin's favicon."""
+    from starlette.responses import Response
+    return Response(_asset("favicon.svg"), media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.custom_route("/favicon.ico", methods=["GET"])
+async def _favicon_ico(request):
+    from starlette.responses import Response
+    return Response(_asset("logo.png"), media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.custom_route("/logo.png", methods=["GET"])
+async def _logo_png(request):
+    from starlette.responses import Response
+    return Response(_asset("logo.png"), media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
 # --- Public demo audit endpoint -------------------------------------------
 # Lets the airblackbox.ai demo candidate page record page accesses on a REAL
 # tamper-evident chain with zero client setup (works from any surface,
