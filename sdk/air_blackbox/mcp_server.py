@@ -512,10 +512,16 @@ def export_evidence() -> str:
     attachments/) aligned to SB 24-205 deployer documentation duties.
     The bundle supports an impact assessment and is audit-ready; it is
     not a legal compliance determination."""
+    return _export_tenant(_current_tenant())
+
+
+def _export_tenant(tenant: str) -> str:
+    """Core evidence export for one tenant. Called by the export_evidence
+    tool and by the auto-export scheduler - evidence must never depend on
+    a busy human remembering to ask for it."""
     from dataclasses import asdict
 
     from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
-    tenant = _current_tenant()
     runs = _tenant_runs_dir(tenant)
     engine = ReplayEngine(runs_dir=runs)
     total = engine.load()
@@ -743,6 +749,89 @@ required approval), then call export_evidence and tell me where the signed
 bundle is."""
 
 
+# --- Auto-export: evidence must not depend on a busy human asking --------
+# With AIR_AUTO_EXPORT_INTERVAL_HOURS set, every tenant with new records
+# since its last bundle gets a fresh signed .air-evidence written to its
+# runs directory on the interval. Records and bundles live wherever the
+# deployer mounts AIR_RUNS_DIR (a volume, S3-backed mount, NFS - storage
+# the org controls), so evidence accumulates with zero user action.
+_AUTO_EXPORT_STATE = ".air-auto-export.json"
+
+
+def _tenants_on_disk() -> list:
+    """Every tenant that has chained records: the root dir ("_local") plus
+    one subdirectory per authenticated tenant."""
+    import glob as _glob
+    tenants = []
+    if _glob.glob(os.path.join(RUNS_DIR, "*.air.json")):
+        tenants.append("_local")
+    try:
+        for name in sorted(os.listdir(RUNS_DIR)):
+            sub = os.path.join(RUNS_DIR, name)
+            if os.path.isdir(sub) and _glob.glob(os.path.join(sub, "*.air.json")):
+                tenants.append(name)
+    except OSError:
+        pass
+    return tenants
+
+
+def _auto_export_once() -> int:
+    """Export a fresh bundle for every tenant with records newer than its
+    last export. Returns the number of bundles written. Never raises: one
+    tenant's failure must not starve the others."""
+    import glob as _glob
+    import json as _json
+    exported = 0
+    for tenant in _tenants_on_disk():
+        runs = _tenant_runs_dir(tenant)
+        count = len(_glob.glob(os.path.join(runs, "*.air.json")))
+        state_path = os.path.join(runs, _AUTO_EXPORT_STATE)
+        last = 0
+        try:
+            with open(state_path) as f:
+                last = int(_json.load(f).get("exported_records", 0))
+        except (OSError, ValueError):
+            pass
+        if count <= last:
+            continue
+        try:
+            _export_tenant(tenant)
+            with open(state_path, "w") as f:
+                _json.dump({"exported_records": count,
+                            "exported_at": datetime.now(timezone.utc).isoformat()}, f)
+            exported += 1
+            logger.info("auto_export tenant=%s records=%d", tenant, count)
+        except Exception:
+            logger.exception("auto_export failed tenant=%s", tenant)
+    return exported
+
+
+def _start_auto_export():
+    """Start the daemon scheduler when AIR_AUTO_EXPORT_INTERVAL_HOURS > 0."""
+    try:
+        hours = float(os.environ.get("AIR_AUTO_EXPORT_INTERVAL_HOURS", "0") or 0)
+    except ValueError:
+        logger.warning("invalid AIR_AUTO_EXPORT_INTERVAL_HOURS; auto-export off")
+        return None
+    if hours <= 0:
+        return None
+    import threading
+    import time as _time
+
+    def _loop():
+        while True:
+            _time.sleep(hours * 3600)
+            try:
+                _auto_export_once()
+            except Exception:
+                logger.exception("auto_export sweep failed")
+
+    t = threading.Thread(target=_loop, daemon=True, name="air-auto-export")
+    t.start()
+    logger.info("auto_export enabled: every %.2fh", hours)
+    return t
+
+
 def main():
     """Run over stdio (Claude Desktop) or HTTP (claude.ai custom connector).
 
@@ -751,6 +840,7 @@ def main():
     https://mcp.airblackbox.ai/mcp and add it in claude.ai as a custom
     connector. Default is stdio for local Claude Desktop use.
     """
+    _start_auto_export()
     if os.environ.get("AIR_MCP_TRANSPORT", "stdio") == "http":
         app.settings.host = os.environ.get("AIR_MCP_HOST", "0.0.0.0")
         app.settings.port = int(os.environ.get("AIR_MCP_PORT", "8085"))

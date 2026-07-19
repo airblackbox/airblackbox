@@ -321,7 +321,10 @@ def generate_evidence_bundle_v1(
         "public_key_hex": signer.public_key_hex or "",
     }
 
-    bundle_name = f"bundle-{now.strftime('%Y-%m-%d-%H%M%S')}-{tenant}.air-evidence"
+    # Timestamp for sortability + bundle-id fragment for uniqueness: two
+    # exports in the same second must never overwrite each other's evidence.
+    bundle_name = (f"bundle-{now.strftime('%Y-%m-%d-%H%M%S')}-{tenant}"
+                   f"-{manifest['bundle_id'][:8]}.air-evidence")
     path = os.path.join(output_dir, bundle_name)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))
