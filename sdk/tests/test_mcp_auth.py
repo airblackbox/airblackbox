@@ -270,3 +270,37 @@ def test_tampered_receipt_is_caught(tmp_path, monkeypatch):
 
     out = srv.verify_receipts()
     assert "RECEIPT FAILURE" in out
+
+
+def test_auto_export_writes_bundle_only_on_new_records(tmp_path, monkeypatch):
+    """Auto-export bundles every tenant with new records, exactly once per
+    high-water mark - evidence accumulates with zero user action."""
+    import glob
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_covenant", None)
+    monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
+    srv._chains.clear()
+
+    srv.record_action("read_profile")
+    srv.record_action("draft_message")
+
+    assert srv._auto_export_once() == 1
+    bundles = glob.glob(os.path.join(tmp_path, "bundle-*.air-evidence"))
+    assert len(bundles) == 1
+
+    # No new records: sweep is a no-op.
+    assert srv._auto_export_once() == 0
+    assert len(glob.glob(os.path.join(tmp_path, "bundle-*.air-evidence"))) == 1
+
+    # A new record triggers exactly one fresh bundle.
+    srv.record_action("read_profile")
+    assert srv._auto_export_once() == 1
+    assert len(glob.glob(os.path.join(tmp_path, "bundle-*.air-evidence"))) == 2
+
+
+def test_auto_export_disabled_without_env(monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.delenv("AIR_AUTO_EXPORT_INTERVAL_HOURS", raising=False)
+    assert srv._start_auto_export() is None
+    monkeypatch.setenv("AIR_AUTO_EXPORT_INTERVAL_HOURS", "not-a-number")
+    assert srv._start_auto_export() is None

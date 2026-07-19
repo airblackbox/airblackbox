@@ -25,6 +25,10 @@ primary_region = "iad"
   # fly.dev hostname so you can test before the custom domain is wired.
   AIR_MCP_ALLOWED_HOSTS = "air-mcp.fly.dev,mcp.airblackbox.ai"
   AIR_COVENANT = "/app/sdk/air_blackbox/gate/examples/recruiting-screener.covenant.yaml"
+  # Evidence must not depend on a busy human asking: every tenant with new
+  # records gets a fresh signed bundle on this interval, written to the
+  # volume (deployer-controlled storage).
+  AIR_AUTO_EXPORT_INTERVAL_HOURS = "24"
   #
   # OAuth (resource-server). Production: point at your IdP's introspection
   # endpoint so claude.ai tokens are verified per request and tenants isolate
