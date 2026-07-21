@@ -751,7 +751,7 @@ def _render_discover_table(status, inventory, approved, metadata) -> None:
 @main.command()
 @click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
-@click.option("--approved", default=None, help="Path to approved models YAML")
+@click.option("--approved", default=None, help="Path to approved models JSON or YAML")
 @click.option(
     "--format",
     "fmt",

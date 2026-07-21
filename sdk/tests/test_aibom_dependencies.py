@@ -101,6 +101,18 @@ sentence_transformers>=3.0  # inline comment
     assert transformers.ai_classification.is_ai
 
 
+def test_requirements_inline_comment_backslash_does_not_continue_line(tmp_path):
+    (tmp_path / "requirements.txt").write_text(
+        "openai==1.0.0  # note C:\\\nrequests==2.0.0\n",
+        encoding="utf-8",
+    )
+
+    result = _discover(tmp_path)
+
+    assert _by_identity(result, "python", "openai", "1.0.0")
+    assert _by_identity(result, "python", "requests", "2.0.0")
+
+
 def test_included_requirements_file(tmp_path):
     (tmp_path / "requirements.txt").write_text(
         "-r other-requirements.txt\n",

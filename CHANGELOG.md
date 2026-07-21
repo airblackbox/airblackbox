@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add configurable AI-library dependency classification.
 - Add CycloneDX 1.6 and SPDX 2.3 JSON output for `air-blackbox discover`.
 
+**Changed**
+- `air-blackbox discover --init-registry` now writes `approved-models.json`; `--approved` continues to accept JSON and existing YAML registries.
+
 ## [1.6.1] - 2026-03-28
 
 **Fixed**

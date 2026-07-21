@@ -371,6 +371,24 @@ def test_existing_approved_option_not_broken(runner):
     assert result.exit_code == 0
 
 
+def test_approved_option_accepts_yaml_registry(runner):
+    with runner.isolated_filesystem() as cwd:
+        Path(cwd, "approved-models.yaml").write_text(
+            "models: []\nproviders: []\n", encoding="utf-8"
+        )
+        result = _invoke(runner, ["--approved", "approved-models.yaml"])
+
+    assert result.exit_code == 0
+
+
+def test_discover_help_describes_json_and_yaml_approved_registry(runner):
+    result = _invoke(runner, ["--help"])
+
+    assert result.exit_code == 0
+    assert "Path to approved models JSON or YAML" in result.stdout
+    assert "approved-models.json" in result.stdout
+
+
 def test_existing_init_registry_behavior_not_broken(runner):
     FakeGatewayClient.status = GatewayStatus(
         reachable=True,

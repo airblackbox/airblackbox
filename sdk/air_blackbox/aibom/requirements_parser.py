@@ -191,7 +191,7 @@ def _read_requirement_lines(path: Path) -> list[tuple[int, str]]:
     pending_line = 0
     with path.open("r", encoding="utf-8") as fh:
         for line_number, raw_line in enumerate(fh, start=1):
-            line = raw_line.rstrip("\n")
+            line = _strip_requirement_comment(raw_line.rstrip("\n"))
             if pending:
                 pending += line.lstrip()
             else:
