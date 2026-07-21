@@ -127,11 +127,16 @@ def parse_requirement_declaration(line: str) -> Optional[tuple[str, Optional[str
     package_name = match.group(1)
     suffix = match.group(2).strip()
     version = None
-    if suffix.startswith("=="):
-        candidate = suffix[2:].strip().split()[0]
+    if suffix.startswith("==="):
+        pass
+    elif suffix.startswith("=="):
+        specifier = suffix[2:].strip()
+        candidate = specifier.split()[0]
+        if "," in specifier:
+            candidate = ""
         if candidate and "*" not in candidate:
             version = candidate
-    elif suffix and not suffix.startswith((">=", "<=", ">", "<", "~=", "!=", "===")):
+    elif suffix and not suffix.startswith((">=", "<=", ">", "<", "~=", "!=")):
         return None
     return package_name, version
 

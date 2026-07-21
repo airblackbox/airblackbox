@@ -81,6 +81,20 @@ def test_pinned_and_ranged_python_requirements(tmp_path):
     )
 
 
+def test_python_requirements_do_not_invent_versions_for_non_exact_specifiers(tmp_path):
+    (tmp_path / "requirements.txt").write_text(
+        "pkg===1.0.0\nother==1.0,!=1.1\n",
+        encoding="utf-8",
+    )
+
+    result = _discover(tmp_path)
+
+    pkg = _by_identity(result, "python", "pkg", None)
+    other = _by_identity(result, "python", "other", None)
+    assert pkg.package_id == "pkg:pypi/pkg"
+    assert other.package_id == "pkg:pypi/other"
+
+
 def test_requirements_comments_markers_extras_and_blank_lines(tmp_path):
     (tmp_path / "requirements.txt").write_text(
         """
