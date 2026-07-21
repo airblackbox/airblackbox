@@ -250,19 +250,26 @@ def _safe_tenant(subject: str) -> str:
 
 
 def _current_tenant() -> str:
-    """Resolve the authenticated subject for this request, or the local tenant."""
+    """Resolve the authenticated subject for this request.
+
+    Auth disabled: everything is the single "_local" tenant. Auth enabled:
+    the subject MUST resolve - a request that reaches a tool without an
+    authenticated subject is denied, never silently written into a shared
+    chain. Evidence that can't say whose it is is worse than no evidence.
+    """
     if _auth_verifier is None:
         return "_local"
     try:
         from mcp.server.auth.middleware.auth_context import get_access_token
         token = get_access_token()
-        if token and token.subject:
-            return _safe_tenant(token.subject)
-    except Exception:
-        # Any failure to read the auth context (no request scope, middleware
-        # not active) intentionally falls back to the isolated local tenant.
-        pass
-    return "_local"
+    except Exception as exc:
+        raise PermissionError(
+            "auth is enabled but no authenticated subject is available "
+            "for this request") from exc
+    if token and token.subject:
+        return _safe_tenant(token.subject)
+    raise PermissionError(
+        "auth is enabled but this request carries no authenticated subject")
 
 
 def _tenant_runs_dir(tenant: str) -> str:
@@ -770,8 +777,9 @@ def _tenants_on_disk() -> list:
             sub = os.path.join(RUNS_DIR, name)
             if os.path.isdir(sub) and _glob.glob(os.path.join(sub, "*.air.json")):
                 tenants.append(name)
-    except OSError:
-        pass
+    except OSError as exc:
+        # Tenant discovery is degraded, not fatal: sweep whoever we found.
+        logger.warning("auto_export cannot list %s: %s", RUNS_DIR, exc)
     return tenants
 
 
@@ -790,8 +798,13 @@ def _auto_export_once() -> int:
         try:
             with open(state_path) as f:
                 last = int(_json.load(f).get("exported_records", 0))
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as exc:
+            # Missing on first sweep is normal; anything else means the
+            # high-water mark reset to 0 and this sweep re-exports.
+            if not isinstance(exc, FileNotFoundError):
+                logger.warning(
+                    "auto_export state unreadable for tenant=%s, "
+                    "resetting to 0: %s", tenant, exc)
         if count <= last:
             continue
         try:

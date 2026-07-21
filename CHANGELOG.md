@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+**Added**
+- MCP OAuth: JWT/JWKS verification mode (`AIR_MCP_JWKS_URL`, `AIR_MCP_JWT_ISSUER`, `AIR_MCP_JWT_AUDIENCE`) — validates IdP-signed tokens locally against published JWKS (WorkOS AuthKit, Auth0, Okta, Keycloak); `pyjwt` added to the `mcp` extra
+- Deploy walkthrough for turning on authentication with a DCR-capable IdP so claude.ai custom connectors can log real users in
+
+**Fixed**
+- MCP tenant resolution now fails closed: with auth enabled, a request without an authenticated subject is denied instead of silently recorded into the shared `_local` chain
+- Auto-export logs a warning when tenant discovery or a tenant's export state is unreadable (previously silent)
+
 ## [1.6.1] - 2026-03-28
 
 **Fixed**

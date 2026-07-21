@@ -8,6 +8,7 @@ pytest.importorskip("mcp")
 
 from air_blackbox.mcp_auth import (  # noqa: E402
     IntrospectionTokenVerifier,
+    JwtTokenVerifier,
     StaticTokenVerifier,
     build_auth,
 )
@@ -40,6 +41,7 @@ def test_static_verifier_multiple_tenants():
 
 
 def test_build_auth_disabled_without_env(monkeypatch):
+    monkeypatch.delenv("AIR_MCP_JWKS_URL", raising=False)
     monkeypatch.delenv("AIR_MCP_INTROSPECTION_URL", raising=False)
     monkeypatch.delenv("AIR_MCP_TOKENS", raising=False)
     verifier, settings = build_auth()
@@ -47,6 +49,7 @@ def test_build_auth_disabled_without_env(monkeypatch):
 
 
 def test_build_auth_static_mode(monkeypatch):
+    monkeypatch.delenv("AIR_MCP_JWKS_URL", raising=False)
     monkeypatch.delenv("AIR_MCP_INTROSPECTION_URL", raising=False)
     monkeypatch.setenv("AIR_MCP_TOKENS", "k:tenant1")
     verifier, settings = build_auth()
@@ -55,10 +58,140 @@ def test_build_auth_static_mode(monkeypatch):
 
 
 def test_build_auth_introspection_mode(monkeypatch):
+    monkeypatch.delenv("AIR_MCP_JWKS_URL", raising=False)
     monkeypatch.setenv("AIR_MCP_INTROSPECTION_URL", "https://idp.example.com/introspect")
     verifier, settings = build_auth()
     assert isinstance(verifier, IntrospectionTokenVerifier)
     assert settings is not None
+
+
+def test_build_auth_jwks_mode_takes_precedence(monkeypatch):
+    pytest.importorskip("jwt")
+    monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/.well-known/jwks.json")
+    monkeypatch.setenv("AIR_MCP_INTROSPECTION_URL", "https://idp.example.com/introspect")
+    monkeypatch.setenv("AIR_MCP_TOKENS", "k:tenant1")
+    verifier, settings = build_auth()
+    assert isinstance(verifier, JwtTokenVerifier)
+    assert settings is not None
+
+
+# --- JWT / JWKS verification (the mode real IdPs use) ---
+
+def _rsa_keypair():
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    return key, key.public_key()
+
+
+def _jwt_verifier(public_key, **kwargs):
+    """A JwtTokenVerifier whose JWKS lookup returns our test key: no network."""
+    v = JwtTokenVerifier("https://idp.example.com/jwks.json", **kwargs)
+
+    class _Key:
+        key = public_key
+
+    class _FakeJwks:
+        def get_signing_key_from_jwt(self, token):
+            return _Key()
+
+    v._jwks = _FakeJwks()
+    return v
+
+
+def _encode(private_key, claims):
+    import jwt
+    return jwt.encode(claims, private_key, algorithm="RS256",
+                      headers={"kid": "test-key"})
+
+
+def test_jwt_verifier_valid_token():
+    import asyncio
+    import time
+    priv, pub = _rsa_keypair()
+    v = _jwt_verifier(pub, issuer="https://idp.example.com",
+                      audience="https://mcp.airblackbox.ai")
+    token = _encode(priv, {
+        "sub": "recruiter-alice", "iss": "https://idp.example.com",
+        "aud": "https://mcp.airblackbox.ai", "scope": "read write",
+        "exp": int(time.time()) + 300})
+    tok = asyncio.run(_verify(v, token))
+    assert tok is not None
+    assert tok.subject == "recruiter-alice"
+    assert tok.scopes == ["read", "write"]
+
+
+def test_jwt_verifier_rejects_expired():
+    import asyncio
+    import time
+    priv, pub = _rsa_keypair()
+    v = _jwt_verifier(pub)
+    token = _encode(priv, {"sub": "alice", "exp": int(time.time()) - 60})
+    assert asyncio.run(_verify(v, token)) is None
+
+
+def test_jwt_verifier_rejects_wrong_issuer():
+    import asyncio
+    import time
+    priv, pub = _rsa_keypair()
+    v = _jwt_verifier(pub, issuer="https://idp.example.com")
+    token = _encode(priv, {"sub": "alice", "iss": "https://evil.example.com",
+                           "exp": int(time.time()) + 300})
+    assert asyncio.run(_verify(v, token)) is None
+
+
+def test_jwt_verifier_rejects_wrong_audience():
+    import asyncio
+    import time
+    priv, pub = _rsa_keypair()
+    v = _jwt_verifier(pub, audience="https://mcp.airblackbox.ai")
+    token = _encode(priv, {"sub": "alice", "aud": "https://other-api.example.com",
+                           "exp": int(time.time()) + 300})
+    assert asyncio.run(_verify(v, token)) is None
+
+
+def test_jwt_verifier_rejects_wrong_signer():
+    # A token signed by a key the IdP never published must not verify.
+    import asyncio
+    import time
+    attacker_priv, _ = _rsa_keypair()
+    _, real_pub = _rsa_keypair()
+    v = _jwt_verifier(real_pub)
+    token = _encode(attacker_priv, {"sub": "alice",
+                                    "exp": int(time.time()) + 300})
+    assert asyncio.run(_verify(v, token)) is None
+
+
+def test_jwt_verifier_rejects_missing_exp():
+    # "require": ["exp"] - tokens that never expire are not acceptable.
+    import asyncio
+    priv, pub = _rsa_keypair()
+    v = _jwt_verifier(pub)
+    token = _encode(priv, {"sub": "alice"})
+    assert asyncio.run(_verify(v, token)) is None
+
+
+def test_jwt_verifier_rejects_garbage():
+    import asyncio
+    _, pub = _rsa_keypair()
+    v = _jwt_verifier(pub)
+    assert asyncio.run(_verify(v, "not-a-jwt-at-all")) is None
+
+
+# --- auth-enabled tenant resolution must fail closed, never fall to _local ---
+
+def test_current_tenant_local_when_auth_disabled(monkeypatch):
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_auth_verifier", None)
+    assert srv._current_tenant() == "_local"
+
+
+def test_current_tenant_hard_fails_without_subject_when_auth_enabled(monkeypatch):
+    # With auth enabled, a request whose subject can't be resolved must be
+    # denied - not silently recorded into the shared _local chain.
+    import air_blackbox.mcp_server as srv
+    monkeypatch.setattr(srv, "_auth_verifier", object())
+    with pytest.raises(PermissionError):
+        srv._current_tenant()
 
 
 def test_tenant_id_is_filesystem_safe():
