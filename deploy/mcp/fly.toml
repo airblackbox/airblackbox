@@ -30,12 +30,21 @@ primary_region = "iad"
   # volume (deployer-controlled storage).
   AIR_AUTO_EXPORT_INTERVAL_HOURS = "24"
   #
-  # OAuth (resource-server). Production: point at your IdP's introspection
-  # endpoint so claude.ai tokens are verified per request and tenants isolate
-  # by subject:
+  # OAuth (resource-server). Until one of the modes below is enabled, the
+  # server runs OPEN: anyone with the URL shares one tenant. Demo only.
+  #
+  # Production (JWKS - works with WorkOS AuthKit, Auth0, Okta; claude.ai
+  # needs the IdP to support Dynamic Client Registration):
+  #   fly secrets set AIR_MCP_JWKS_URL=https://YOUR-IDP/.well-known/jwks.json
+  #   fly secrets set AIR_MCP_JWT_ISSUER=https://YOUR-IDP
+  #   fly secrets set AIR_MCP_JWT_AUDIENCE=https://mcp.airblackbox.ai
+  # and point AIR_MCP_ISSUER_URL above at the IdP so claude.ai can discover
+  # it through /.well-known/oauth-protected-resource.
+  #
+  # Alternative (RFC 7662 introspection, e.g. Keycloak):
   #   fly secrets set AIR_MCP_INTROSPECTION_URL=https://YOUR-IDP/oauth/introspect
   #   fly secrets set AIR_MCP_INTROSPECTION_AUTH="Basic <base64 client:secret>"
-  # Self-host without an IdP: issue static bearer tokens (one per tenant):
+  # Self-host without an IdP (programmatic clients, not the claude.ai UI):
   #   fly secrets set AIR_MCP_TOKENS="tok1:recruiter-a,tok2:recruiter-b"
 
 [mounts]

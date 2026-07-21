@@ -1,0 +1,23 @@
+M0 anchor spike transcript - 2026-07-17 (local RFC 3161 TSA via openssl)
+
+chain head: d8ca2acdb658491b34e9f4c9f56399f7f9a32661b5b52fe5b401da5e49daed24
+
+openssl ts -query -digest $HEAD -sha256 -cert -out req.tsq
+  -> Version: 1, Hash Algorithm: sha256, Message data = head bytes
+
+openssl ts -reply -config tsa.conf -queryfile req.tsq -out resp.tsr
+  -> Status: Granted.
+  -> Time stamp: Jul 17 01:15:50 2026 GMT
+
+openssl ts -verify -digest $HEAD -in resp.tsr -CAfile ca.pem -untrusted tsa.pem
+  -> Verification: OK
+
+THE REWRITE TEST
+rewritten head: b55e707ab869ddd4... (history mutated, chain rebuilt, re-signed
+with the operator key - verify_chain and verify_receipts would both pass)
+openssl ts -verify -digest $NEWHEAD -in resp.tsr -CAfile ca.pem -untrusted tsa.pem
+  -> ts_check_imprints:message imprint mismatch
+  -> Verification: FAILED
+
+Conclusion: the TSR binds the head. A rewritten history cannot inherit the
+old anchor. This is the mechanism M1 ships.
