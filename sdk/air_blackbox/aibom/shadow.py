@@ -75,7 +75,7 @@ def detect_shadow_ai(status: GatewayStatus, approved_path: Optional[str] = None)
 
 
 def generate_approved_registry(status: GatewayStatus) -> dict:
-    """Generate a starter approved-models.yaml from current traffic.
+    """Generate a starter approved-models registry from current traffic.
 
     Use this to bootstrap the registry from what's currently running.
     """
@@ -111,9 +111,14 @@ def _load_approved_list(path: Optional[str]) -> Optional[dict]:
 
 def _guess_provider_simple(model: str) -> str:
     m = model.lower()
-    if any(x in m for x in ["gpt", "o1", "o3"]): return "openai"
-    if any(x in m for x in ["claude", "sonnet", "haiku"]): return "anthropic"
-    if any(x in m for x in ["gemini", "gemma"]): return "google"
-    if any(x in m for x in ["llama"]): return "meta"
-    if any(x in m for x in ["mistral", "mixtral"]): return "mistral"
+    if any(x in m for x in ["gpt", "o1", "o3"]):
+        return "openai"
+    if any(x in m for x in ["claude", "sonnet", "haiku"]):
+        return "anthropic"
+    if any(x in m for x in ["gemini", "gemma"]):
+        return "google"
+    if any(x in m for x in ["llama"]):
+        return "meta"
+    if any(x in m for x in ["mistral", "mixtral"]):
+        return "mistral"
     return "unknown"

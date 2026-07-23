@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 **Added**
+- Add static dependency discovery for AI-BOM output from requirements.txt, pyproject.toml, package.json, and package-lock.json.
+- Add configurable AI-library dependency classification.
+- Add CycloneDX 1.6 and SPDX 2.3 JSON output for `air-blackbox discover`.
+
+**Changed**
+- `air-blackbox discover --init-registry` now writes `approved-models.json`; `--approved` continues to accept JSON and existing YAML registries.
 - MCP OAuth: JWT/JWKS verification mode (`AIR_MCP_JWKS_URL`, `AIR_MCP_JWT_ISSUER`, `AIR_MCP_JWT_AUDIENCE`) — validates IdP-signed tokens locally against published JWKS (WorkOS AuthKit, Auth0, Okta, Keycloak); `pyjwt` added to the `mcp` extra
 - Deploy walkthrough for turning on authentication with a DCR-capable IdP so claude.ai custom connectors can log real users in
 

@@ -1,0 +1,72 @@
+version: 1
+packages:
+  python:
+    openai:
+      category: llm-sdk
+      reason: OpenAI Python SDK for hosted model APIs.
+      provider: OpenAI
+    anthropic:
+      category: llm-sdk
+      reason: Anthropic Python SDK for Claude model APIs.
+      provider: Anthropic
+    langchain:
+      category: agent-framework
+      reason: LangChain application and agent framework for LLM systems.
+    langchain-core:
+      category: agent-framework
+      reason: Core LangChain abstractions used by LLM applications.
+    llama-index:
+      category: agent-framework
+      reason: LlamaIndex framework for LLM data and retrieval applications.
+    transformers:
+      category: ml-framework
+      reason: Hugging Face Transformers library for model loading and inference.
+    torch:
+      category: ml-framework
+      reason: PyTorch machine learning framework commonly used for AI models.
+    tensorflow:
+      category: ml-framework
+      reason: TensorFlow machine learning framework commonly used for AI models.
+    keras:
+      category: ml-framework
+      reason: Keras neural network and model development framework.
+    sentence-transformers:
+      category: embedding-framework
+      reason: Sentence Transformers library for embedding models.
+    crewai:
+      category: agent-framework
+      reason: CrewAI framework for multi-agent AI systems.
+    haystack-ai:
+      category: agent-framework
+      reason: Haystack AI framework for LLM and retrieval applications.
+    chromadb:
+      category: vector-db
+      reason: Chroma vector database commonly used in AI retrieval systems.
+    faiss-cpu:
+      category: vector-db
+      reason: FAISS CPU vector similarity library used in AI retrieval systems.
+    faiss-gpu:
+      category: vector-db
+      reason: FAISS GPU vector similarity library used in AI retrieval systems.
+  npm:
+    openai:
+      category: llm-sdk
+      reason: OpenAI JavaScript/TypeScript SDK for hosted model APIs.
+      provider: OpenAI
+    "@anthropic-ai/sdk":
+      category: llm-sdk
+      reason: Anthropic JavaScript/TypeScript SDK for Claude model APIs.
+      provider: Anthropic
+    langchain:
+      category: agent-framework
+      reason: LangChain JavaScript framework for LLM applications.
+    "@langchain/core":
+      category: agent-framework
+      reason: Core LangChain JavaScript abstractions used by LLM applications.
+    "@huggingface/inference":
+      category: llm-sdk
+      reason: Hugging Face inference client for model APIs.
+      provider: Hugging Face
+    ai:
+      category: llm-sdk
+      reason: Vercel AI SDK for building AI-powered applications.

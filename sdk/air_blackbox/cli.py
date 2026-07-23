@@ -53,7 +53,7 @@ def main(ctx):
     Route your AI traffic through the gateway and get compliance,
     security, inventory, and incident response out of the box.
     """
-    if ctx.invoked_subcommand not in ("--version", None):
+    if ctx.invoked_subcommand not in ("--version", None, "discover"):
         print_banner()
 
 
@@ -544,123 +544,287 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
         pass  # Telemetry should never break the tool
 
 
-@main.command()
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
-@click.option("--runs-dir", default=None, help="Path to .air.json records")
-@click.option("--approved", default=None, help="Path to approved models YAML")
-@click.option("--format", "fmt", type=click.Choice(["table", "cyclonedx", "json"]), default="table")
-@click.option("--output", "-o", default=None, help="Output file path")
-@click.option("--init-registry", is_flag=True, help="Generate approved-models.yaml from current traffic")
-def discover(gateway, runs_dir, approved, fmt, output, init_registry):
-    """Discover AI models, tools, and services in your environment."""
-    from air_blackbox.gateway_client import GatewayClient
-    from air_blackbox.aibom.generator import generate_aibom
-    from air_blackbox.aibom.shadow import detect_shadow_ai, generate_approved_registry
-    import json as jsonlib
+def _is_machine_discover_format(fmt: str) -> bool:
+    return fmt in {"json", "cyclonedx", "spdx"}
 
-    console.print("\n[bold blue]AIR Blackbox[/] - AI Discovery & Inventory\n")
-    with console.status("[bold green]Scanning environment..."):
-        client = GatewayClient(gateway_url=gateway, runs_dir=runs_dir)
+
+def _validate_scan_path(scan_path: str):
+    from pathlib import Path
+
+    path = Path(scan_path)
+    if not path.exists():
+        raise click.BadParameter("path does not exist", param_hint="--scan-path")
+    if not path.is_dir():
+        raise click.BadParameter("path must be a directory", param_hint="--scan-path")
+    return path
+
+
+def _discover_metadata(scan_path):
+    from datetime import timezone
+    from uuid import uuid4
+
+    timestamp = (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    project_name = scan_path.resolve().name or "AI System"
+    serial_uuid = uuid4()
+    return {
+        "project_name": project_name,
+        "timestamp": timestamp,
+        "serial_number": f"urn:uuid:{serial_uuid}",
+        "document_namespace": f"https://airblackbox.ai/spdx/{project_name}/{serial_uuid}",
+        "tool_name": "AIR Blackbox",
+        "tool_version": _ab_version,
+    }
+
+
+def _build_discover_inventory(gateway, runs_dir, scan_path, ai_libraries):
+    from air_blackbox.aibom.classifier import AIClassifier, ClassifierConfigError
+    from air_blackbox.aibom.dependencies import discover_dependencies
+    from air_blackbox.aibom.generator import inventory_from_status
+    from air_blackbox.gateway_client import GatewayClient, GatewayStatus
+
+    try:
+        classifier = AIClassifier(ai_libraries)
+    except ClassifierConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    dependency_result = discover_dependencies(scan_path, classifier)
+    warnings = list(classifier.warnings)
+    warnings.extend(dependency_result.warnings)
+    if not dependency_result.inspected_manifests:
+        warnings.append(f"No supported dependency manifests found under {scan_path}")
+
+    try:
+        client = GatewayClient(
+            gateway_url=gateway, runs_dir=runs_dir, scan_path=str(scan_path)
+        )
         status = client.get_status()
-    if status.total_runs == 0 and not status.reachable:
-        console.print("[yellow]No traffic data found.[/] Start gateway and route AI traffic through it.\n")
-        return
+        if status.total_runs == 0:
+            if status.reachable:
+                warnings.append(
+                    "No runtime AI traffic found from gateway or local records"
+                )
+            else:
+                warnings.append(
+                    "Gateway unavailable and no runtime AI traffic records found"
+                )
+    except Exception as exc:
+        status = GatewayStatus(url=gateway)
+        warnings.append(f"Runtime discovery unavailable: {exc}")
 
-    # Generate approved registry if requested
-    if init_registry:
-        registry = generate_approved_registry(status)
-        reg_path = "approved-models.json"
-        with open(reg_path, "w") as f:
-            jsonlib.dump(registry, f, indent=2)
-        console.print(f"  [green]✓[/] Generated [bold]{reg_path}[/] with {len(registry['models'])} models, {len(registry['providers'])} providers")
-        console.print(f"  [dim]Future runs of discover will flag anything not in this list.[/]\n")
-        return
+    inventory = inventory_from_status(status, dependency_result.dependencies, warnings)
+    return inventory, status, dependency_result
 
-    # CycloneDX output
-    if fmt == "cyclonedx" or fmt == "json":
-        bom = generate_aibom(status)
-        bom_json = jsonlib.dumps(bom, indent=2)
-        if output:
-            with open(output, "w") as f:
-                f.write(bom_json)
-            console.print(f"  [green]✓[/] AI-BOM written to [bold]{output}[/]")
-            console.print(f"  [dim]{len(bom['components'])} components, CycloneDX 1.6[/]\n")
-        else:
-            click.echo(bom_json)
-        return
 
-    # Table output (default)
-    console.print(f"  Total logged events: [bold]{status.total_runs:,}[/]")
-    console.print(f"  Period: {status.date_range_start or 'N/A'} → {status.date_range_end or 'N/A'}")
-    console.print(f"  Total tokens: [bold]{status.total_tokens:,}[/]\n")
+def _json_for_discover_format(fmt, inventory, metadata):
+    from air_blackbox.aibom.serializers import to_cyclonedx, to_spdx
 
-    # Models table
+    if fmt in {"json", "cyclonedx"}:
+        return to_cyclonedx(inventory, metadata)
+    if fmt == "spdx":
+        return to_spdx(inventory, metadata)
+    raise click.ClickException(f"Unsupported discover format: {fmt}")
+
+
+def _write_discover_output(path, content: str) -> None:
+    from pathlib import Path
+
+    output_path = Path(path)
+    try:
+        output_path.write_text(content + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise click.ClickException(f"Could not write output file {path}: {exc}") from exc
+
+
+def _emit_discover_warnings(warnings, *, err: bool) -> None:
+    for warning in sorted(dict.fromkeys(warnings)):
+        click.echo(f"Warning: {warning}", err=err)
+
+
+def _render_discover_table(status, inventory, approved, metadata) -> None:
+    from air_blackbox.aibom.generator import _guess_provider, generate_aibom
+    from air_blackbox.aibom.shadow import detect_shadow_ai
+
+    console.print()
+    console.print("[bold blue]AIR Blackbox[/] - AI Discovery & Inventory")
+    console.print()
+    if not status.total_runs and not inventory.dependencies:
+        console.print("[yellow]No runtime or dependency data found.[/]")
+        console.print("Check --scan-path, --runs-dir, or gateway configuration.")
+    else:
+        console.print(f"  Total logged events: [bold]{status.total_runs:,}[/]")
+        console.print(f"  Period: {status.date_range_start or 'N/A'} -> {status.date_range_end or 'N/A'}")
+        console.print(f"  Total tokens: [bold]{status.total_tokens:,}[/]")
+
     if status.models_observed:
         t = Table(title="Models Detected", show_header=True, header_style="bold white on dark_blue")
         t.add_column("Model", style="bold", width=25)
         t.add_column("Provider", width=12)
         t.add_column("Status", justify="center", width=14)
-        for m in status.models_observed:
-            from air_blackbox.aibom.generator import _guess_provider
-            t.add_row(m, _guess_provider(m), "[green]✅ Observed[/]")
+        for model in status.models_observed:
+            t.add_row(model, _guess_provider(model), "[green]Observed[/]")
         console.print(t)
         console.print()
 
-    # Providers table
     if status.providers_observed:
         t = Table(title="API Providers", show_header=True, header_style="bold white on dark_blue")
         t.add_column("Provider", style="bold")
         t.add_column("Status", justify="center")
-        for p in status.providers_observed:
-            t.add_row(p, "[green]✅ Active[/]")
+        for provider in status.providers_observed:
+            t.add_row(provider, "[green]Active[/]")
         console.print(t)
         console.print()
 
-    # Tools table
-    tools = set()
-    for r in status.recent_runs:
-        for tc in r.get("tool_calls", []):
-            if tc: tools.add(tc)
+    if inventory.dependencies:
+        t = Table(title="Static Dependencies", show_header=True, header_style="bold white on dark_blue")
+        t.add_column("Package", style="bold")
+        t.add_column("Version", width=12)
+        t.add_column("Scope", width=11)
+        t.add_column("AI", justify="center", width=8)
+        for dependency in inventory.dependencies:
+            t.add_row(
+                dependency.package_name,
+                dependency.version or "",
+                dependency.scope.value,
+                "[green]Yes[/]" if dependency.ai_classification.is_ai else "[dim]No[/]",
+            )
+        console.print(t)
+        console.print()
+
+    tools = sorted({tool for run in status.recent_runs for tool in run.get("tool_calls", []) if tool})
     if tools:
         t = Table(title="Agent Tools Detected", show_header=True, header_style="bold white on dark_blue")
         t.add_column("Tool", style="bold")
         t.add_column("Status", justify="center")
-        for tool in sorted(tools):
-            t.add_row(tool, "[green]✅ Observed[/]")
+        for tool in tools:
+            t.add_row(tool, "[green]Observed[/]")
         console.print(t)
         console.print()
 
-    # Shadow AI alerts
     alerts = detect_shadow_ai(status, approved)
     if alerts:
         t = Table(title="Shadow AI Alerts", show_header=True, header_style="bold white on red")
-        t.add_column("Model", style="bold", width=20)
-        t.add_column("Severity", justify="center", width=10)
-        t.add_column("Reason", width=50)
-        for a in alerts:
-            sev_color = {"high": "red", "medium": "yellow", "low": "dim"}.get(a.severity, "white")
-            t.add_row(a.model, f"[{sev_color}]{a.severity.upper()}[/{sev_color}]", a.reason)
+        t.add_column("Model", style="bold")
+        t.add_column("Risk", justify="center")
+        t.add_column("Reason")
+        for alert in alerts:
+            severity = alert.severity
+            severity_color = {
+                "high": "red",
+                "medium": "yellow",
+                "low": "dim",
+            }.get(severity.lower(), "white")
+
+            t.add_row(
+                alert.model,
+                f"[{severity_color}]{severity.upper()}[/{severity_color}]",
+                alert.reason,
+            )
         console.print(t)
         console.print()
 
-    # Summary
-    bom = generate_aibom(status)
-    console.print(Panel(
-        f"[bold]{len(bom['components'])}[/] components inventoried: "
-        f"{len(status.models_observed)} models, {len(status.providers_observed)} providers, {len(tools)} tools\n\n"
-        f"[green]air-blackbox discover --format=cyclonedx -o aibom.json[/]  Export full AI-BOM\n"
-        f"[green]air-blackbox discover --init-registry[/]                    Create approved models list\n"
-        f"[green]air-blackbox discover --approved=approved-models.json[/]    Check against approved list",
-        title="[bold blue]AI-BOM Summary[/]",
-        border_style="blue",
-    ))
+    bom = generate_aibom(
+        status,
+        metadata=metadata,
+        dependencies=inventory.dependencies,
+        inventory=inventory,
+    )
+    console.print(
+        Panel(
+            f"[bold]{len(bom['components'])}[/] components inventoried: "
+            f"{len(status.models_observed)} models, {len(status.providers_observed)} providers, "
+            f"{len(inventory.runtime_tools)} tools, {len(inventory.dependencies)} dependencies\n\n"
+            f"[green]air-blackbox discover --format=cyclonedx -o aibom.json[/]  Export full AI-BOM\n"
+            f"[green]air-blackbox discover --format=spdx -o sbom.spdx.json[/] Export SPDX inventory\n"
+            f"[green]air-blackbox discover --init-registry[/]                    Create approved models list\n"
+            f"[green]air-blackbox discover --approved=approved-models.json[/]    Check against approved list",
+            title="[bold blue]AI-BOM Summary[/]",
+            border_style="blue",
+        )
+    )
 
-    # --- Telemetry ---
-    try:
-        from air_blackbox.telemetry import send_event
-        send_event(command="discover", version=_ab_version)
-    except Exception:
-        pass
+
+@main.command()
+@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--runs-dir", default=None, help="Path to .air.json records")
+@click.option("--approved", default=None, help="Path to approved models JSON or YAML")
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["table", "cyclonedx", "json", "spdx"]),
+    default="table",
+    help="Output format: table, json alias for CycloneDX 1.6 JSON, cyclonedx, or spdx",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    help="Write machine-readable JSON to a file; table output cannot use this option",
+)
+@click.option(
+    "--scan-path",
+    default=".",
+    help="Project root to scan for requirements.txt, pyproject.toml, package.json, and package-lock.json",
+)
+@click.option(
+    "--ai-libraries",
+    default=None,
+    help="Optional YAML or JSON classifier rules that extend and override built-in defaults",
+)
+@click.option("--init-registry", is_flag=True, help="Generate approved-models.json from current traffic")
+def discover(gateway, runs_dir, approved, fmt, output, scan_path, ai_libraries, init_registry):
+    """Discover AI models, tools, services, and package dependencies."""
+    import json as jsonlib
+
+    from air_blackbox.aibom.shadow import generate_approved_registry
+
+    validated_scan_path = _validate_scan_path(scan_path)
+    metadata = _discover_metadata(validated_scan_path)
+    inventory, status, _dependency_result = _build_discover_inventory(
+        gateway,
+        runs_dir,
+        validated_scan_path,
+        ai_libraries,
+    )
+
+    if init_registry:
+        registry = generate_approved_registry(status)
+        reg_path = "approved-models.json"
+        try:
+            with open(reg_path, "w", encoding="utf-8") as f:
+                jsonlib.dump(registry, f, indent=2)
+                f.write("\n")
+        except OSError as exc:
+            raise click.ClickException(f"Could not write approved registry: {exc}") from exc
+        click.echo(
+            f"Generated {reg_path} with {len(registry['models'])} models, "
+            f"{len(registry['providers'])} providers",
+            err=True,
+        )
+        return
+
+    if _is_machine_discover_format(fmt):
+        document = _json_for_discover_format(fmt, inventory, metadata)
+        payload = jsonlib.dumps(document, indent=2, sort_keys=True)
+        _emit_discover_warnings(inventory.warnings, err=True)
+        if output:
+            _write_discover_output(output, payload)
+            click.echo(f"Wrote {fmt} output to {output}", err=True)
+        else:
+            click.echo(payload)
+        return
+
+    if output:
+        raise click.ClickException(
+            "--output is only supported with json, cyclonedx, or spdx formats"
+        )
+
+    _emit_discover_warnings(inventory.warnings, err=False)
+    _render_discover_table(status, inventory, approved, metadata)
 
 
 @main.command()
@@ -689,18 +853,45 @@ def replay(gateway, runs_dir, episode, last, verify):
     if verify:
         console.print("[bold]Verifying HMAC audit chain...[/]\n")
         _keyfile = os.path.join(runs_dir or "./runs", ".air-signing-key")
+
         if not os.environ.get("TRUST_SIGNING_KEY") and not os.path.isfile(_keyfile):
-            console.print("  [dim]TRUST_SIGNING_KEY not set and no .air-signing-key found - verifying with the built-in default key.[/]")
-            console.print("  [dim]If the chain was signed with your own key, set TRUST_SIGNING_KEY first.[/]\n")
+            console.print(
+                "  [dim]TRUST_SIGNING_KEY not set and no .air-signing-key found - "
+                "verifying with the built-in default key.[/]"
+            )
+            console.print(
+                "  [dim]If the chain was signed with your own key, "
+                "set TRUST_SIGNING_KEY first.[/]\n"
+            )
+
         result = engine.verify_chain()
+
+
         if result.intact and result.records_with_hash == 0:
-            console.print(f"  [yellow]⚠  NO CHAIN HASHES[/] - {result.total_records:,} records loaded, but none carry a chain_hash.")
-            console.print("  [yellow]  Records written without a trust layer cannot be verified for tampering.[/]\n")
+            console.print(
+                f"  [yellow]⚠ NO CHAIN HASHES[/] - "
+                f"{result.total_records:,} records loaded, but none carry a chain_hash."
+            )
+            console.print(
+                "  [yellow]Records written without a trust layer cannot be "
+                "verified for tampering.[/]\n"
+            )
         elif result.intact:
-            console.print(f"  [green]✅ CHAIN INTACT[/] - {result.verified_records:,} records verified. No tampering detected.\n")
+            console.print(
+                f"  [green]✅ CHAIN INTACT[/] - "
+                f"{result.verified_records:,} records verified. "
+                "No tampering detected.\n"
+            )
         else:
-            console.print(f"  [red]❌ CHAIN BROKEN[/] at record {result.first_break_at} (run: {result.first_break_run_id})")
-            console.print(f"  [red]  {result.verified_records} of {result.total_records} records verified before break.[/]\n")
+            console.print(
+                f"  [red]❌ CHAIN BROKEN[/] at record "
+                f"{result.first_break_at} (run: {result.first_break_run_id})"
+            )
+            console.print(
+                f"  [red]{result.verified_records:,} of "
+                f"{result.total_records:,} records verified before break.[/]\n"
+            )
+
         return
 
     # Detail view for single episode
