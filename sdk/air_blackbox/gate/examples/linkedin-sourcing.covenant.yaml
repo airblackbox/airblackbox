@@ -1,0 +1,34 @@
+# Covenant — LinkedIn Sourcing Session (browser agent)
+#
+# The point is not "hide the automation" - it is to make the agent's
+# activity provably legitimate: bounded, human-approved where it matters,
+# no bulk harvesting. Pair with air_blackbox.passport.BrowserSession; the
+# session passport is the artifact you can show a client or platform.
+
+agent: linkedin-sourcing
+version: "1.0"
+description: "Accountable browser sourcing: read freely, act with a human"
+
+rules:
+  # A human's explicit approval of a gated action is always recordable.
+  - permit: human_approval
+
+  # Viewing and research - permitted (a recruiter would do this by hand)
+  - permit: navigate
+  - permit: read_profile
+  - permit: read_search_results
+  - permit: summarize_profile
+  - permit: draft_message          # draft only; sending is gated below
+
+  # Candidate-facing actions - a human approves each one (anti-spam, and the
+  # GDPR Art 22 / AI Act Art 14 human-in-the-loop requirement)
+  - require_approval: send_message
+  - require_approval: send_connection_request
+  - require_approval: send_inmail
+  - require_approval: endorse
+
+  # Abuse patterns platforms ban accounts for - forbidden outright
+  - forbid: bulk_export
+  - forbid: scrape_search_page
+  - forbid: harvest_emails
+  - forbid: auto_connect_all

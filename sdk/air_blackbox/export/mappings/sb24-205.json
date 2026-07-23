@@ -1,0 +1,37 @@
+{
+  "framework": "CO-SB24-205",
+  "framework_name": "Colorado SB 24-205 (Consumer Protections for Artificial Intelligence)",
+  "scope_note": "This mapping explains which statutory deployer duty each record category evidences. It supports an impact assessment and audit readiness; it is not a legal compliance determination.",
+  "mappings": [
+    {
+      "record_category": "screening_decision",
+      "duty": "Human review protocols and decision logs",
+      "how": "Each consequential decision carries the reviewer identity, review outcome, timestamp, and a tamper-evident signature."
+    },
+    {
+      "record_category": "blocked_action",
+      "duty": "Risk mitigation record",
+      "how": "Covenant-blocked actions are contemporaneous proof that guardrails operated and were enforced."
+    },
+    {
+      "record_category": "human_approval",
+      "duty": "Human oversight of consequential decisions",
+      "how": "Approval records show a named human authorized each gated decision before it took effect, with a signed, timestamped receipt."
+    },
+    {
+      "record_category": "chain_verification",
+      "duty": "Contemporaneous, unaltered records",
+      "how": "HMAC chain plus per-record public-key receipts prove records were not modified after the fact."
+    },
+    {
+      "record_category": "agent_action",
+      "duty": "Documentation of system operation",
+      "how": "Every consequential agent step (profile reads, drafts, LLM calls) is recorded in order with a policy decision attached, documenting how the system actually operated during the covered period."
+    },
+    {
+      "record_category": "outcome_monitoring",
+      "duty": "Ongoing monitoring for algorithmic discrimination",
+      "how": "Deployer-supplied. AIR deliberately records no protected-class attributes; the deployer's own outcome analysis ships under attachments/ and the manifest marks this duty as deployer-supplied."
+    }
+  ]
+}

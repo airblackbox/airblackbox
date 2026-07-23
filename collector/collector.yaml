@@ -17,55 +17,6 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-processors:
-  # Step 1: Normalize vendor-specific attributes to gen_ai.* semantic conventions.
-  genai_semantic_normalizer:
-    enable_defaults: true
-    overwrite: false
-    drop_original: false
-
-  # Step 2: Offload prompt/response content to filesystem vault.
-  promptvault:
-    storage:
-      backend: filesystem
-      filesystem:
-        base_path: /data/vault
-    vault:
-      keys:
-        - gen_ai.system_instructions
-        - gen_ai.input.messages
-        - gen_ai.output.messages
-        - gen_ai.prompt
-        - gen_ai.completion
-      size_threshold: 0
-      mode: replace_with_ref
-
-  # Step 3: PII redaction, token metrics, loop detection.
-  genaisafe:
-    redact:
-      mode: hash_and_preview
-      preview_chars: 48
-      salt: air-demo-salt
-      keys:
-        - gen_ai.prompt
-        - gen_ai.completion
-        - llm.prompt
-        - llm.completion
-      denylist_regex:
-        - "(?i)api[_-]?key"
-        - "(?i)authorization"
-        - "(?i)sk-[a-z0-9]{20,}"
-    metrics:
-      enable: true
-    loop_detection:
-      enable: true
-      repeat_threshold: 6
-
-  # Step 4: Standard batching before export.
-  batch:
-    timeout: 5s
-    send_batch_size: 512
-
 exporters:
   otlp/jaeger:
     endpoint: jaeger:4317

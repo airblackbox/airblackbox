@@ -1,0 +1,58 @@
+# Deploy the governance MCP server and tether it to airblackbox.ai:
+#
+#   fly launch --copy-config --no-deploy   # from repo root, app name: air-mcp
+#   fly volumes create air_data --size 1
+#   fly secrets set TRUST_SIGNING_KEY=$(openssl rand -hex 32)
+#   fly deploy
+#   fly certs add mcp.airblackbox.ai
+#   # DNS: CNAME  mcp.airblackbox.ai -> air-mcp.fly.dev
+#
+# Then in claude.ai: Settings -> Connectors -> Add custom connector
+#   URL: https://mcp.airblackbox.ai/mcp
+
+app = "air-mcp"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  AIR_MCP_TRANSPORT = "http"
+  AIR_MCP_PORT = "8085"
+  AIR_RUNS_DIR = "/data/runs"
+  AIR_MCP_ISSUER_URL = "https://mcp.airblackbox.ai"
+  # Hosts the server trusts (DNS-rebinding protection). Include the raw
+  # fly.dev hostname so you can test before the custom domain is wired.
+  AIR_MCP_ALLOWED_HOSTS = "air-mcp.fly.dev,mcp.airblackbox.ai"
+  AIR_COVENANT = "/app/sdk/air_blackbox/gate/examples/recruiting-screener.covenant.yaml"
+  # Evidence must not depend on a busy human asking: every tenant with new
+  # records gets a fresh signed bundle on this interval, written to the
+  # volume (deployer-controlled storage).
+  AIR_AUTO_EXPORT_INTERVAL_HOURS = "24"
+  #
+  # OAuth (resource-server). Until one of the modes below is enabled, the
+  # server runs OPEN: anyone with the URL shares one tenant. Demo only.
+  #
+  # Production (JWKS - works with WorkOS AuthKit, Auth0, Okta; claude.ai
+  # needs the IdP to support Dynamic Client Registration):
+  #   fly secrets set AIR_MCP_JWKS_URL=https://YOUR-IDP/.well-known/jwks.json
+  #   fly secrets set AIR_MCP_JWT_ISSUER=https://YOUR-IDP
+  #   fly secrets set AIR_MCP_JWT_AUDIENCE=https://mcp.airblackbox.ai
+  # and point AIR_MCP_ISSUER_URL above at the IdP so claude.ai can discover
+  # it through /.well-known/oauth-protected-resource.
+  #
+  # Alternative (RFC 7662 introspection, e.g. Keycloak):
+  #   fly secrets set AIR_MCP_INTROSPECTION_URL=https://YOUR-IDP/oauth/introspect
+  #   fly secrets set AIR_MCP_INTROSPECTION_AUTH="Basic <base64 client:secret>"
+  # Self-host without an IdP (programmatic clients, not the claude.ai UI):
+  #   fly secrets set AIR_MCP_TOKENS="tok1:recruiter-a,tok2:recruiter-b"
+
+[mounts]
+  source = "air_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8085
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1

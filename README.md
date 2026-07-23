@@ -218,6 +218,20 @@ a Parquet lake dataset, and a signed `.air-evidence` bundle an approver can
 verify independently - the graduation certificate. Agents that bypass the
 gateway fail: no records, no graduation.
 
+## Governance inside Claude (preview)
+
+Connect the AIR MCP server to Claude Desktop and every screening decision
+gets recorded, policy-gated, and provable - zero code for the person using
+it. Field-tested end to end: covenant-gated rejections stop for explicit
+human approval, and the audit trail exports as a signed, self-verifying
+bundle. Full setup + scripted demo (with fictional candidates):
+[docs/guides/governed-recruiting-demo.md](docs/guides/governed-recruiting-demo.md).
+Reproduce the whole flow in one command — screen, gate, approve, verify,
+export, and a live tamper test — with
+[`python demo/governed_screening_demo.py`](demo/governed_screening_demo.py),
+or record the Claude Desktop version from
+[demo/desktop-demo-shotlist.md](demo/desktop-demo-shotlist.md).
+
 ## Deploy on Kubernetes
 
 ```bash

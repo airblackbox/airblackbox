@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: pip install pytest cryptography pyarrow pyyaml
+        run: pip install pytest cryptography pyarrow pyyaml httpx mcp pyjwt
       - name: Test SDK
         run: PYTHONPATH=sdk python -m pytest tests/ sdk/tests/ -q
 
