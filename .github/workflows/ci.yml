@@ -38,7 +38,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: pip install pytest cryptography pyarrow pyyaml httpx mcp pyjwt rich click
+        # Install the package itself so runtime deps come from pyproject and
+        # can't drift from what the code imports; extras cover the optional
+        # features the suite exercises (mcp -> mcp+pyjwt, lake -> pyarrow).
+        run: pip install -e ".[mcp,lake]" pytest
       - name: Test SDK
         run: PYTHONPATH=sdk python -m pytest tests/ sdk/tests/ -q
 
