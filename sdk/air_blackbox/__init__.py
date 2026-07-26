@@ -76,39 +76,47 @@ class AirTrust:
         Args:
             agent: A LangChain chain, CrewAI crew, ADK agent, etc.
         """
-        try:
-            framework = self._detect_framework(agent)
-            self._detected_framework = framework
+        framework = self._detect_framework(agent)
+        self._detected_framework = framework
 
+        try:
             if framework == "langchain":
                 from air_blackbox.trust.langchain import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             elif framework == "crewai":
                 from air_blackbox.trust.crewai import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             elif framework == "haystack":
                 from air_blackbox.trust.haystack import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             elif framework == "openai":
                 from air_blackbox.trust.openai_agents import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             elif framework == "autogen":
                 from air_blackbox.trust.autogen import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             elif framework == "adk":
                 from air_blackbox.trust.adk import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             elif framework == "claude_agent":
                 from air_blackbox.trust.claude_agent import attach_trust
+
+                return attach_trust(agent, self.gateway_url)
+            elif framework == "pydantic_ai":
+                from air_blackbox.trust.pydantic_ai import attach_trust
+
                 return attach_trust(agent, self.gateway_url)
             else:
-                print(f"[AIR] Framework not auto-detected. Using generic wrapper.")
+                print("[AIR] Framework not auto-detected. Using generic wrapper.")
                 return agent
         except ImportError as e:
             print(f"[AIR] Import error attaching trust layer: {e}")
-            return agent
-        except Exception as e:
-            print(f"[AIR] Error attaching trust layer to {framework}: {e}")
             return agent
 
     def _detect_framework(self, agent):
@@ -129,6 +137,8 @@ class AirTrust:
             return "adk"
         elif "claude_agent_sdk" in agent_type or "claude_agent" in agent_type:
             return "claude_agent"
+        elif "pydantic_ai" in agent_type:
+            return "pydantic_ai"
 
         # Fallback: check class name for common patterns
         cls_name = type(agent).__name__
@@ -136,5 +146,9 @@ class AirTrust:
             return "haystack"
         elif cls_name == "Crew" and hasattr(agent, "kickoff"):
             return "crewai"
+        elif (
+            cls_name == "Agent" and hasattr(agent, "run") and hasattr(agent, "run_sync")
+        ):
+            return "pydantic_ai"
 
         return "unknown"
