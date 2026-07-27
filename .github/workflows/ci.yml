@@ -40,8 +40,9 @@ jobs:
       - name: Install test dependencies
         # Install the package itself so runtime deps come from pyproject and
         # can't drift from what the code imports; extras cover the optional
-        # features the suite exercises (mcp -> mcp+pyjwt, lake -> pyarrow).
-        run: pip install -e ".[mcp,lake]" pytest
+        # features the suite exercises (mcp -> mcp+pyjwt, lake -> pyarrow,
+        # pydantic-ai -> Pydantic AI + OpenTelemetry).
+        run: pip install -e ".[mcp,lake,pydantic-ai]" pytest
       - name: Test SDK
         run: PYTHONPATH=sdk python -m pytest tests/ sdk/tests/ -q
 
