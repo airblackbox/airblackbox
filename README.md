@@ -28,9 +28,11 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 **Audit chain**: every call produces an HMAC-SHA256 chained `.air.json` record, written asynchronously. Tamper with one record and every record after it breaks.
 
+**External anchoring (rewrite detection)**: on every evidence export, the chain head is countersigned by an RFC 3161 timestamp authority — a key the operator does *not* hold. A history that is rewritten and perfectly re-signed still fails `verify_anchor` with a message-imprint mismatch. Tamper-evident against outsiders, rewrite-detectable against the operator. See [ADR 0001](docs/decisions/0001-anchor-rail.md).
+
 **Quantum-safe signing**: the chain is signed with ML-DSA-65 (FIPS 204 / Dilithium3). Keys are generated locally and never leave your machine. Post-quantum secure today.
 
-**Evidence bundle**: one command packages the audit chain, scan results, and ML-DSA-65 signatures into a self-verifying `.air-evidence` ZIP. An auditor runs `python verify.py` and gets PASS/FAIL in two seconds. No pip install needed on their end.
+**Evidence bundle**: one command packages the records, chain/receipt verification results, the public key, and regulator mappings (Colorado SB 24-205) into a signed `.air-evidence` bundle (v1 format). `air-evidence verify` runs five ordered checks and needs **no secrets** — one public-key signature covers every file in the bundle. Bundles can also auto-export on a schedule (`AIR_AUTO_EXPORT_INTERVAL_HOURS`), so evidence never depends on a busy human remembering to ask for it.
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
@@ -218,13 +220,29 @@ a Parquet lake dataset, and a signed `.air-evidence` bundle an approver can
 verify independently - the graduation certificate. Agents that bypass the
 gateway fail: no records, no graduation.
 
-## Governance inside Claude (preview)
+## Governance inside Claude
 
-Connect the AIR MCP server to Claude Desktop and every screening decision
+Connect the AIR MCP server to Claude and every screening decision
 gets recorded, policy-gated, and provable - zero code for the person using
 it. Field-tested end to end: covenant-gated rejections stop for explicit
 human approval, and the audit trail exports as a signed, self-verifying
-bundle. Full setup + scripted demo (with fictional candidates):
+bundle.
+
+Two ways to connect:
+
+- **Local (Claude Desktop)**: `pip install air-blackbox[mcp]`, point your
+  Desktop config at `air-blackbox-mcp`. Records stay on your machine.
+- **Hosted (claude.ai custom connector)**: deploy the server behind a real
+  domain ([deploy/mcp](deploy/mcp/README.md)) and add it as a custom
+  connector. The server is an OAuth 2.1 resource server - verify tokens via
+  your IdP's JWKS (WorkOS AuthKit, Auth0, Okta, Keycloak), RFC 7662
+  introspection, or static tokens - and **every authenticated user gets an
+  isolated tenant**: their own chain, their own Ed25519 receipt keys, their
+  own evidence bundles. With auth enabled, a request that cannot be
+  attributed to a subject is denied, never silently recorded into a shared
+  chain.
+
+Full setup + scripted demo (with fictional candidates):
 [docs/guides/governed-recruiting-demo.md](docs/guides/governed-recruiting-demo.md).
 Reproduce the whole flow in one command — screen, gate, approve, verify,
 export, and a live tamper test — with
@@ -271,6 +289,8 @@ Works with any OpenAI-compatible API. Same format, same integration, regardless 
 You probably already have logging. The problems logging doesn't solve:
 
 **Tamper-evidence**: anyone with write access to your log store can alter a record. HMAC chains make alteration detectable. ML-DSA-65 signatures prove who signed and when.
+
+**Operator rewrite**: a hash chain alone has a blind spot — whoever holds the signing key could rewrite the *entire* history and re-sign it, and every self-check would still pass. AIR closes this by anchoring the chain head to an external timestamp authority on export: a countersignature from a key you don't control. A rewritten history no longer matches what the outside witness saw. You can still lie — but not invisibly. (Most "audit log" tools, including other HMAC hash-chain products, stop before this step.)
 
 **Prompt reconstruction**: most logging captures responses but not the full prompt context, tool calls, and intermediate reasoning. AIR records the complete episode.
 
