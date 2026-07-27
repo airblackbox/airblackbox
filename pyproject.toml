@@ -44,6 +44,11 @@ langchain = ["langchain-core>=0.2.0"]
 crewai = ["crewai>=0.50.0"]
 haystack = ["haystack-ai>=2.0.0"]
 openai = ["openai>=1.0"]
+pydantic-ai = [
+    "pydantic-ai>=2.18,<3",
+    "opentelemetry-api>=1.24,<2",
+    "opentelemetry-sdk>=1.24,<2",
+]
 autogen = ["autogen-agentchat>=0.4.0"]
 adk = ["google-adk>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.0"]
@@ -52,12 +57,24 @@ gate = ["cryptography>=42.0"]
 lake = ["pyarrow>=14.0"]  # Parquet lake sink + in-lake chain verification
 mcp = ["mcp>=1.0", "pyjwt>=2.8"]  # governance MCP server for Claude (record/enforce/prove)
 pqc = ["oqs>=0.10.0"]  # post-quantum ML-DSA-65 signing (opt-in)
+trust = [
+    "air-blackbox[langchain]",
+    "air-blackbox[crewai]",
+    "air-blackbox[haystack]",
+    "air-blackbox[openai]",
+    "air-blackbox[pydantic-ai]",
+    "air-blackbox[autogen]",
+    "air-blackbox[adk]",
+    "air-blackbox[claude]",
+]
 all = [
     "air-blackbox[langchain]",
     "air-blackbox[crewai]",
     "air-blackbox[haystack]",
     "air-blackbox[openai]",
+    "air-blackbox[pydantic-ai]",
     "air-blackbox[autogen]",
+    "air-blackbox[adk]",
     "air-blackbox[claude]",
     "air-blackbox[pdf]",
     "air-blackbox[gate]",

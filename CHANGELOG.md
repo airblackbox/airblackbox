@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add static dependency discovery for AI-BOM output from requirements.txt, pyproject.toml, package.json, and package-lock.json.
 - Add configurable AI-library dependency classification.
 - Add CycloneDX 1.6 and SPDX 2.3 JSON output for `air-blackbox discover`.
+- Add the Pydantic AI trust adapter with sync, async, streaming, safe records, chain resume, and OpenTelemetry span capture without replacing the global tracer provider.
 
 **Changed**
 - `air-blackbox discover --init-registry` now writes `approved-models.json`; `--approved` continues to accept JSON and existing YAML registries.

@@ -38,7 +38,7 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 **Replay**: load any past episode from the audit chain, verify the HMAC signature, and replay every step with timestamps. Incident reconstruction without guesswork.
 
-**Framework trust layers**: drop-in wrappers for LangChain, CrewAI, OpenAI Agents SDK, Anthropic, AutoGen, Google ADK, and Haystack. Same audit chain, native integration.
+**Framework trust layers**: drop-in wrappers for LangChain, CrewAI, OpenAI Agents SDK, Pydantic AI, Anthropic, AutoGen, Google ADK, and Haystack. Same audit chain, native integration.
 
 ## Quickstart
 
