@@ -68,11 +68,50 @@ def test_build_auth_introspection_mode(monkeypatch):
 def test_build_auth_jwks_mode_takes_precedence(monkeypatch):
     pytest.importorskip("jwt")
     monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/.well-known/jwks.json")
+    monkeypatch.setenv("AIR_MCP_JWT_AUDIENCE", "https://mcp.airblackbox.ai")
     monkeypatch.setenv("AIR_MCP_INTROSPECTION_URL", "https://idp.example.com/introspect")
     monkeypatch.setenv("AIR_MCP_TOKENS", "k:tenant1")
     verifier, settings = build_auth()
     assert isinstance(verifier, JwtTokenVerifier)
     assert settings is not None
+
+
+def test_build_auth_jwks_without_audience_refuses_to_start(monkeypatch):
+    # Fail-safe: JWKS mode without a pinned audience must not silently accept
+    # tokens for any audience (confused-deputy replay).
+    pytest.importorskip("jwt")
+    monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/jwks.json")
+    monkeypatch.delenv("AIR_MCP_JWT_AUDIENCE", raising=False)
+    monkeypatch.delenv("AIR_MCP_JWT_ALLOW_ANY_AUDIENCE", raising=False)
+    with pytest.raises(RuntimeError, match="AIR_MCP_JWT_AUDIENCE"):
+        build_auth()
+
+
+def test_build_auth_jwks_allow_any_audience_is_explicit_optout(monkeypatch):
+    pytest.importorskip("jwt")
+    monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/jwks.json")
+    monkeypatch.delenv("AIR_MCP_JWT_AUDIENCE", raising=False)
+    monkeypatch.setenv("AIR_MCP_JWT_ALLOW_ANY_AUDIENCE", "1")
+    verifier, settings = build_auth()
+    assert isinstance(verifier, JwtTokenVerifier)
+
+
+def test_static_verifier_no_subject_uses_full_token_hash_not_prefix():
+    # Two tokens sharing a long prefix must NOT collapse onto one subject.
+    v = StaticTokenVerifier("aircompliance-tenantA-secret,aircompliance-tenantB-secret")
+    import asyncio
+    a = asyncio.run(_verify(v, "aircompliance-tenantA-secret"))
+    b = asyncio.run(_verify(v, "aircompliance-tenantB-secret"))
+    assert a is not None and b is not None
+    assert a.subject != b.subject
+
+
+def test_static_verifier_skips_empty_token_entries():
+    # ":sub" / "::" must not register an empty-string token that authenticates.
+    import asyncio
+    v = StaticTokenVerifier(":orphan,::,realtok:alice")
+    assert asyncio.run(_verify(v, "")) is None
+    assert asyncio.run(_verify(v, "realtok")).subject == "alice"
 
 
 # --- JWT / JWKS verification (the mode real IdPs use) ---

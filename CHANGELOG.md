@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Security**
 - MCP tenant isolation: the authenticated-subject → tenant-directory mapping is now injective (readable prefix + SHA-256 of the full subject). The previous fold-and-truncate mapping could collide two different subjects onto one tenant (e.g. `alice@corp.com` ≡ `alice_corp_com`, or any two subjects sharing a 64-char prefix), and could route an authenticated subject into the shared `_local` root or the `public-demo` chain. Fixes #56.
+- MCP JWT auth now **refuses to start** in JWKS mode unless `AIR_MCP_JWT_AUDIENCE` is set (or `AIR_MCP_JWT_ALLOW_ANY_AUDIENCE=1` is explicitly set). Previously, a JWKS-only config accepted any validly-signed token from the IdP, including one minted for a different API behind the same tenant (confused-deputy replay). Static tokens without an explicit subject now derive it from a hash of the full token instead of a 12-char prefix (prefix-sharing tokens no longer collapse onto one tenant), and malformed empty-token entries are skipped. Part of #59.
 
 **Added**
 - Add static dependency discovery for AI-BOM output from requirements.txt, pyproject.toml, package.json, and package-lock.json.

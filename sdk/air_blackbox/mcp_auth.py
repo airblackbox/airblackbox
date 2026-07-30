@@ -30,6 +30,8 @@ The verified subject is what isolates tenants: each subject records into its
 own chain, so one recruiter's evidence never mixes with another's.
 """
 
+import hashlib
+import logging
 import os
 import time
 from typing import Optional
@@ -38,6 +40,8 @@ import httpx
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from pydantic import AnyHttpUrl
+
+logger = logging.getLogger("air_blackbox.mcp_auth")
 
 
 class StaticTokenVerifier(TokenVerifier):
@@ -51,7 +55,19 @@ class StaticTokenVerifier(TokenVerifier):
                 continue
             parts = entry.split(":")
             token = parts[0]
-            subject = parts[1] if len(parts) > 1 and parts[1] else token[:12]
+            if not token:
+                # A malformed entry like ":sub" or "::" would otherwise
+                # register an empty-string token that authenticates.
+                continue
+            # When no explicit subject is given, derive it from a hash of the
+            # FULL token, never a prefix: two tokens sharing a brand/product
+            # prefix (a common generation pattern) must not collapse onto the
+            # same tenant.
+            if len(parts) > 1 and parts[1]:
+                subject = parts[1]
+            else:
+                subject = "tok-" + hashlib.sha256(
+                    token.encode("utf-8")).hexdigest()[:16]
             scopes = parts[2].split("|") if len(parts) > 2 and parts[2] else []
             self._tokens[token] = (subject, scopes)
 
@@ -176,10 +192,34 @@ def build_auth():
         return None, None
 
     if jwks:
-        verifier = JwtTokenVerifier(
-            jwks,
-            issuer=os.environ.get("AIR_MCP_JWT_ISSUER") or None,
-            audience=os.environ.get("AIR_MCP_JWT_AUDIENCE") or None)
+        audience = os.environ.get("AIR_MCP_JWT_AUDIENCE") or None
+        issuer = os.environ.get("AIR_MCP_JWT_ISSUER") or None
+        allow_any_aud = os.environ.get(
+            "AIR_MCP_JWT_ALLOW_ANY_AUDIENCE", "").lower() in ("1", "true", "yes")
+        if audience is None and not allow_any_aud:
+            # Without an audience, any validly-signed token from the IdP is
+            # accepted - including a token minted for a DIFFERENT API behind
+            # the same IdP tenant (confused-deputy replay). Refuse to run
+            # rather than default to that hole: the operator must either pin
+            # the audience or explicitly opt into accepting any.
+            raise RuntimeError(
+                "AIR_MCP_JWKS_URL is set but AIR_MCP_JWT_AUDIENCE is not. "
+                "Without an audience, a token issued for another API behind "
+                "the same IdP is replayable against this server. Set "
+                "AIR_MCP_JWT_AUDIENCE to this server's resource identifier "
+                "(e.g. https://mcp.airblackbox.ai), or set "
+                "AIR_MCP_JWT_ALLOW_ANY_AUDIENCE=1 to explicitly accept any "
+                "audience (not recommended).")
+        if audience is None:
+            logger.warning(
+                "AIR_MCP_JWT_ALLOW_ANY_AUDIENCE is set: accepting tokens for "
+                "ANY audience from the IdP. A token minted for another API "
+                "behind the same IdP is replayable against this server.")
+        if issuer is None:
+            logger.warning(
+                "AIR_MCP_JWT_ISSUER is not set: the token issuer is not "
+                "pinned. Set it to your IdP's issuer URL.")
+        verifier = JwtTokenVerifier(jwks, issuer=issuer, audience=audience)
     elif introspection:
         verifier = IntrospectionTokenVerifier(
             introspection, os.environ.get("AIR_MCP_INTROSPECTION_AUTH") or None)
