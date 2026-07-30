@@ -74,28 +74,33 @@ class Rule:
             return True
         return False
 
-    def evaluate_condition(self, context: dict = None) -> bool:
-        """Evaluate the 'when' condition against runtime context.
+    def condition_state(self, context: dict = None):
+        """Tri-state activation of this rule's 'when'/'unless' guard.
 
-        Returns True if:
-        - No 'when' condition is set (rule always applies), OR
-        - The 'when' condition evaluates to true
-
-        Returns False if:
-        - 'unless' condition is met (exception overrides)
+        Returns True (guard satisfied), False (definitively not satisfied),
+        or None (indeterminate - the guard could not be meaningfully
+        evaluated). evaluate() resolves None fail-closed per the rule's
+        action, so a missing or garbled guard can never silently open the
+        gate or silently drop a forbid.
         """
         context = context or {}
 
-        # Check 'unless' exception first
+        # 'unless' exception is an explicit, definitive deactivation.
         if self.unless and context.get(self.unless, False):
             return False
 
-        # No condition means always active
+        # No condition means always active.
         if not self.when:
             return True
 
-        # Simple condition evaluation: "field op value"
         return _eval_condition(self.when, context)
+
+    def evaluate_condition(self, context: dict = None) -> bool:
+        """Back-compat boolean: active only when the guard is definitively
+        satisfied. Indeterminate (None) is treated as NOT active. Callers that
+        need fail-closed forbid semantics use condition_state() via evaluate().
+        """
+        return self.condition_state(context) is True
 
     def to_dict(self) -> dict:
         """Serialize to the same format the YAML parser expects.
@@ -181,8 +186,20 @@ class Covenant:
         matched_rules = []
 
         for rule in self.rules:
-            if rule.matches(action_name, context):
-                if rule.evaluate_condition(context):
+            if not rule.matches(action_name, context):
+                continue
+            state = rule.condition_state(context)
+            if rule.action == RuleAction.FORBID:
+                # Fail closed: a forbid applies unless its guard is
+                # definitively False. An indeterminate guard (missing field,
+                # non-numeric ordering, unparseable) keeps the forbid ACTIVE,
+                # so it can't be disabled by omitting or garbling the field.
+                if state is not False:
+                    matched_rules.append(rule)
+            else:
+                # permit / require_approval grant only on a definitive True;
+                # an indeterminate guard never grants.
+                if state is True:
                     matched_rules.append(rule)
 
         if not matched_rules:
@@ -222,45 +239,48 @@ class Covenant:
         return yaml.dump(self.to_dict(), default_flow_style=False, sort_keys=False)
 
 
-def _eval_condition(condition: str, context: dict) -> bool:
-    """Evaluate a simple condition string against context.
+def _eval_condition(condition: str, context: dict):
+    """Evaluate a "field op value" condition to a tri-state.
 
     Supports: "field > value", "field < value", "field >= value",
     "field <= value", "field == value", "field != value"
 
-    Args:
-        condition: e.g. "amount > 50000"
-        context: e.g. {"amount": 75000}
-
     Returns:
-        True if the condition is met.
+        True / False for a definitive comparison, or None when the condition
+        is indeterminate (unparseable, unknown field, or an ordering
+        comparison on a non-numeric value). Callers MUST resolve None fail
+        closed - see Covenant.evaluate().
     """
     import re
 
     # Parse "field op value"
     match = re.match(r"(\w+)\s*(>=|<=|!=|==|>|<)\s*(.+)", condition.strip())
     if not match:
-        return True  # Unparseable conditions default to active
+        return None  # Unparseable: indeterminate, never silently "active"
 
     field_name, op, raw_value = match.groups()
     raw_value = raw_value.strip().strip('"').strip("'")
 
     ctx_value = context.get(field_name)
     if ctx_value is None:
-        return False  # Missing context field = condition not met
+        return None  # Unknown field: indeterminate
 
-    # Try numeric comparison
+    # Numeric comparison when both sides are numbers.
     try:
         ctx_num = float(ctx_value)
         val_num = float(raw_value)
-        ops = {">": ctx_num > val_num, "<": ctx_num < val_num,
-               ">=": ctx_num >= val_num, "<=": ctx_num <= val_num,
-               "==": ctx_num == val_num, "!=": ctx_num != val_num}
-        return ops.get(op, True)
+        return {">": ctx_num > val_num, "<": ctx_num < val_num,
+                ">=": ctx_num >= val_num, "<=": ctx_num <= val_num,
+                "==": ctx_num == val_num, "!=": ctx_num != val_num}[op]
     except (ValueError, TypeError):
         pass
 
-    # String comparison
+    # Non-numeric: only equality/inequality are meaningful. An ordering
+    # operator on a non-numeric value (e.g. "amount <= 1000" with
+    # amount="1,000,000") is indeterminate, NOT true.
     ctx_str = str(ctx_value)
-    ops = {"==": ctx_str == raw_value, "!=": ctx_str != raw_value}
-    return ops.get(op, True)
+    if op == "==":
+        return ctx_str == raw_value
+    if op == "!=":
+        return ctx_str != raw_value
+    return None

@@ -43,6 +43,10 @@ class ChainVerification:
     first_break_at: Optional[int] = None
     first_break_run_id: Optional[str] = None
     records_with_hash: int = 0
+    # Where the HMAC key came from: "argument" | "env" | "colocated-keyfile"
+    # | "default". "colocated-keyfile" is not a trust anchor against a
+    # runs-dir writer - see verify_chain() and pair with verify_anchor.
+    key_source: Optional[str] = None
 
 
 def verify_records(records: list, key: bytes) -> ChainVerification:
@@ -160,12 +164,28 @@ class ReplayEngine:
     def verify_chain(self, signing_key: Optional[str] = None) -> ChainVerification:
         """Verify HMAC-SHA256 audit chain integrity.
 
-        Each record's hash should chain to the next. If any record
-        is modified, the chain breaks from that point forward.
+        Each record's hash should chain to the next. If any record is
+        modified, the chain breaks from that point forward.
+
+        Trust basis: the HMAC key is resolved in order from an explicit
+        `signing_key`, then $TRUST_SIGNING_KEY, then the `.air-signing-key`
+        file colocated with the records. The colocated file is a convenience
+        for zero-config LOCAL verification - it is NOT a trust anchor against
+        an attacker who can write the runs directory (they could rewrite the
+        history and overwrite the key). For operator-rewrite detection, supply
+        the key out-of-band (arg or env) OR pair this with verify_anchor (the
+        external RFC 3161 timestamp, whose key the operator does not hold).
+        `result.key_source` reports which source was used.
         """
+        key_source = ("argument" if signing_key
+                      else "env" if os.environ.get("TRUST_SIGNING_KEY")
+                      else "colocated-keyfile" if self._runs_dir_key()
+                      else "default")
         key = (signing_key or os.environ.get("TRUST_SIGNING_KEY")
                or self._runs_dir_key() or "air-blackbox-default").encode()
-        return verify_records(self._raw_records, key)
+        result = verify_records(self._raw_records, key)
+        result.key_source = key_source
+        return result
 
     def _runs_dir_key(self) -> Optional[str]:
         """Read the signing key the gateway auto-generates alongside the
