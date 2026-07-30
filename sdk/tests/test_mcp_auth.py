@@ -196,9 +196,40 @@ def test_current_tenant_hard_fails_without_subject_when_auth_enabled(monkeypatch
 
 def test_tenant_id_is_filesystem_safe():
     import air_blackbox.mcp_server as srv
-    assert srv._safe_tenant("../etc/passwd") == "___etc_passwd"
-    assert "/" not in srv._safe_tenant("a/b/c")
-    assert srv._safe_tenant("normal-id_1") == "normal-id_1"
+    # No path separators can survive into a tenant id (no RUNS_DIR escape).
+    for subject in ("../etc/passwd", "a/b/c", "..\\..\\x", "a/../../b"):
+        t = srv._safe_tenant(subject)
+        assert "/" not in t and "\\" not in t
+        assert ".." not in t
+
+
+def test_tenant_id_mapping_is_injective():
+    # The core isolation guarantee: distinct subjects -> distinct tenants.
+    # The previous fold-and-truncate mapping collided on all of these.
+    import air_blackbox.mcp_server as srv
+    collision_pairs = [
+        ("alice@corp.com", "alice_corp_com"),            # char folding
+        ("u" + "x" * 63 + "AAA", "u" + "x" * 63 + "BBB"),  # >64-char truncation
+        ("tenant/x", "tenant_x"),
+        ("a.b", "a_b"),
+    ]
+    for a, b in collision_pairs:
+        assert srv._safe_tenant(a) != srv._safe_tenant(b), f"{a!r} collides with {b!r}"
+    # Deterministic: same subject always maps to the same tenant.
+    assert srv._safe_tenant("alice@corp.com") == srv._safe_tenant("alice@corp.com")
+
+
+def test_authenticated_subject_cannot_reach_reserved_tenants():
+    # No authenticated subject may map to the shared unauthenticated root
+    # ("_local") or the public demo tenant, or it would read/write their chains.
+    import air_blackbox.mcp_server as srv
+    for subject in ("_local", ".local", "/local", "@local", "public-demo",
+                    "public/demo", "public.demo"):
+        t = srv._safe_tenant(subject)
+        assert t != "_local"
+        assert t != srv._DEMO_TENANT
+        # And it never resolves to the RUNS_DIR root that "_local" owns.
+        assert srv._tenant_runs_dir(t) != srv.RUNS_DIR
 
 
 def test_tenant_chains_are_isolated(tmp_path, monkeypatch):

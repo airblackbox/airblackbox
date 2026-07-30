@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Security**
+- MCP tenant isolation: the authenticated-subject → tenant-directory mapping is now injective (readable prefix + SHA-256 of the full subject). The previous fold-and-truncate mapping could collide two different subjects onto one tenant (e.g. `alice@corp.com` ≡ `alice_corp_com`, or any two subjects sharing a 64-char prefix), and could route an authenticated subject into the shared `_local` root or the `public-demo` chain. Fixes #56.
+
 **Added**
 - Add static dependency discovery for AI-BOM output from requirements.txt, pyproject.toml, package.json, and package-lock.json.
 - Add configurable AI-library dependency classification.
