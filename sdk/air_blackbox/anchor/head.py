@@ -13,6 +13,21 @@ import json
 import os
 
 
+def head_over_entries(entries) -> str:
+    """SHA-256 over the ordered (chain_seq, chain_hash) pairs - the key-free
+    chain head.
+
+    Shared by compute_head (which reads a runs directory) and the
+    evidence-bundle verifier (which has an in-memory record list), so the two
+    serializations can never drift apart. Returns "" for no entries.
+    """
+    if not entries:
+        return ""
+    ordered = sorted(entries, key=lambda e: (e[0], e[1]))
+    payload = json.dumps(ordered, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def compute_head(runs_dir: str, up_to_seq: int = None) -> str:
     """Return the hex SHA-256 chain head for a runs directory, or "" if there
     are no chained records.
@@ -40,10 +55,5 @@ def compute_head(runs_dir: str, up_to_seq: int = None) -> str:
             continue
         entries.append((seq, ch))
 
-    if not entries:
-        return ""
-
-    entries.sort(key=lambda e: (e[0], e[1]))
     # Canonical, key-free commitment over the ordered chain.
-    payload = json.dumps(entries, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return head_over_entries(entries)
