@@ -347,6 +347,13 @@ class Gate:
 
         Returns a verification report that a third party can use to
         confirm the receipt hasn't been tampered with.
+
+        NOTE: `overall` is a *cryptographic* verdict - the signatures are
+        valid and the receipt is internally consistent. It is NOT a statement
+        that the action was allowed: a correctly-signed receipt for a *denied*
+        action verifies as overall=True (the denial is a legitimate recorded
+        outcome). Read `authorized`/`decision` to know whether the action was
+        permitted.
         """
         auth_valid, seal_valid = self.signer.verify_full(receipt)
 
@@ -359,6 +366,10 @@ class Gate:
             "has_parent": receipt.parent_receipt_id is not None,
             "covenant_hash": receipt.covenant_hash,
             "chain_hash": receipt.chain_hash,
+            # The action's policy outcome, surfaced so callers don't mistake
+            # a valid signature on a denial for permission.
+            "authorized": receipt.authorized,
+            "decision": receipt.decision,
             "overall": auth_valid and (seal_valid or not receipt.seal_sig),
         }
 
@@ -370,11 +381,18 @@ class Gate:
         """
         chain = [receipt]
         current = receipt
+        seen = {receipt.receipt_id}
 
         while current.parent_receipt_id:
+            # Cycle guard: a self- or mutually-referential parent link (which
+            # nothing prevents when receipts are rebuilt from stored JSON)
+            # must not spin forever.
+            if current.parent_receipt_id in seen:
+                break
             parent = self._receipts.get(current.parent_receipt_id)
             if not parent:
                 break
+            seen.add(parent.receipt_id)
             chain.append(parent)
             current = parent
 
