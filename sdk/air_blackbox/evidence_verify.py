@@ -1,22 +1,27 @@
 """air-evidence: independent verifier for .air-evidence v1 bundles.
 
-    air-evidence verify bundle.air-evidence [--key HMAC_KEY]
+    air-evidence verify bundle.air-evidence [--key HMAC_KEY] [--tsa-cacert CA]
 
-Runs five checks in order, failing loudly with the exact record id on the
+Runs six checks in order, failing loudly with the exact record id on the
 first failure:
 
   1. ZIP integrity and required files present
   2. Manifest signature valid against the bundled public key (and the
      manifest's per-file digests match the actual bundle contents, so the
      one signature transitively covers every file)
-  3. Chain hashes consistent over records/actions.jsonl (full HMAC
-     recompute when --key is provided; structural consistency otherwise)
+  3. Chain hashes consistent over records/actions.jsonl, and the chain was
+     recorded intact at export (full HMAC recompute when --key is provided)
   4. Every record's receipt signature verifies with the public key
   5. Counts in the manifest match the actual records
+  6. External anchor: the key-free chain head re-derived over the records
+     matches the RFC 3161 timestamp countersigned by an external authority -
+     the check that makes an operator rewrite detectable. An unanchored
+     bundle is reported as such (no rewrite protection), never silently
+     passed as fully verified.
 
-No secrets are required for checks 1, 2, 4, and 5 - a client's lawyer,
-their enterprise customer, or a regulator can run this as-is. The --key
-option additionally recomputes the private HMAC chain.
+No secrets are required - a client's lawyer, their enterprise customer, or a
+regulator can run this as-is. The --key option additionally recomputes the
+private HMAC chain; --tsa-cacert lets check 6 run fully offline.
 """
 
 from __future__ import annotations
@@ -34,6 +39,28 @@ from air_blackbox.export.evidence_bundle import (
     canonical_manifest_bytes,
     categorize_record,
 )
+from air_blackbox.anchor.head import head_over_entries
+
+
+def _rederive_head(records: List[Dict[str, Any]], up_to_seq=None) -> str:
+    """Re-derive the key-free chain head over the bundle's own records.
+
+    Mirrors compute_head() but works on the in-memory record list from
+    actions.jsonl. Uses the shared head_over_entries() so the derivation can
+    never drift from the writer's. A single altered chain_hash changes this
+    head, which is what lets a no-secret verifier detect tampering by checking
+    the head against the external timestamp token.
+    """
+    entries = []
+    for r in records:
+        ch = r.get("chain_hash")
+        if not ch:
+            continue
+        seq = r.get("chain_seq") or 0
+        if up_to_seq is not None and seq > up_to_seq:
+            continue
+        entries.append((seq, ch))
+    return head_over_entries(entries)
 
 
 class VerificationFailure(Exception):
@@ -91,9 +118,17 @@ def _auth_payload(receipt: Dict[str, Any]) -> bytes:
 
 
 def verify_bundle(path: str, hmac_key: str | None = None,
+                  tsa_cacert: str | None = None,
                   out=sys.stdout) -> Dict[str, Any]:
-    """Run all five checks. Returns a summary dict; raises
-    VerificationFailure on the first failed check."""
+    """Run all six checks. Returns a summary dict; raises
+    VerificationFailure on the first failed check.
+
+    Check 6 (external anchor) is what defeats an operator rewrite: it
+    re-derives the key-free chain head over the records and checks it against
+    the RFC 3161 timestamp token embedded in the bundle. A timestamp is a
+    countersignature from a key the operator does NOT hold, so a rewritten -
+    even perfectly re-signed - history no longer matches it.
+    """
 
     # ---- Check 1: ZIP integrity and required files ------------------------
     try:
@@ -107,7 +142,7 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     missing = [n for n in V1_REQUIRED_FILES if n not in names]
     if missing:
         _fail(1, f"required files missing from bundle: {', '.join(missing)}")
-    print("[1/5] ZIP integrity and layout: OK", file=out)
+    print("[1/6] ZIP integrity and layout: OK", file=out)
 
     # ---- Check 2: manifest signature + per-file digests -------------------
     try:
@@ -151,7 +186,7 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         if got != want:
             _fail(2, f"file digest mismatch for {fname}: contents were "
                      "altered after the manifest was signed")
-    print(f"[2/5] Manifest signature ({alg}) and "
+    print(f"[2/6] Manifest signature ({alg}) and "
           f"{len(manifest.get('files') or {})} file digests: OK", file=out)
 
     # ---- Check 3: chain hashes over records/actions.jsonl -----------------
@@ -165,6 +200,11 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         except json.JSONDecodeError:
             _fail(3, f"records/actions.jsonl line {i + 1} is not valid JSON")
     chain_doc = json.loads(_read(zf, "verification/chain.json"))
+    stamped = chain_doc.get("verification_at_export") or {}
+    if stamped.get("intact") is False:
+        _fail(3, "the bundle's own chain verification recorded the chain as "
+                 "NOT intact at export time - a broken chain was exported "
+                 f"(first break at record {stamped.get('first_break_at')})")
     listed = chain_doc.get("records", [])
     if len(listed) != len(records):
         _fail(3, f"chain.json lists {len(listed)} records but "
@@ -189,10 +229,10 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                          f"(run_id={rec.get('run_id')}) - this record or an "
                          "earlier one was altered")
             prev = h.digest()
-        print(f"[3/5] Chain: full HMAC recompute over {len(records)} "
+        print(f"[3/6] Chain: full HMAC recompute over {len(records)} "
               f"records: OK", file=out)
     else:
-        print(f"[3/5] Chain: {len(records)} records structurally consistent "
+        print(f"[3/6] Chain: {len(records)} records structurally consistent "
               f"with chain.json (pass --key for full HMAC recompute)",
               file=out)
 
@@ -226,7 +266,7 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) has "
                      f"unsupported signing method '{method}'")
         checked += 1
-    print(f"[4/5] Receipts: {checked}/{len(records)} records carry a "
+    print(f"[4/6] Receipts: {checked}/{len(records)} records carry a "
           f"receipt, all signatures valid", file=out)
 
     # ---- Check 5: manifest counts match reality ---------------------------
@@ -246,7 +286,48 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         if k in declared and declared[k] != v:
             _fail(5, f"count mismatch for '{k}': manifest says "
                      f"{declared[k]}, records show {v}")
-    print("[5/5] Counts: manifest matches records", file=out)
+    print("[5/6] Counts: manifest matches records", file=out)
+
+    # ---- Check 6: external anchor (operator-rewrite detection) -------------
+    # The manifest carries the anchor (it is inside the signed manifest, so an
+    # honest manifest cannot lie about whether it was anchored). We re-derive
+    # the key-free head over the ACTUAL records and check it against the
+    # timestamp token - so a rewritten history whose anchor was not correctly
+    # re-issued no longer matches, and an unanchored bundle is reported as
+    # such rather than silently blessed.
+    anchor = manifest.get("anchor") or {}
+    anchor_state = "absent"
+    if anchor.get("anchored") and anchor.get("tsr_b64"):
+        import base64
+        from air_blackbox.anchor.tsa import verify_anchor_bytes
+        try:
+            tsr = base64.b64decode(anchor["tsr_b64"])
+        except Exception as e:
+            _fail(6, f"anchor token is not valid base64: {e}")
+        rederived = _rederive_head(records, up_to_seq=anchor.get("seq_max"))
+        ok, detail = verify_anchor_bytes(rederived, tsr, ca_pem=tsa_cacert)
+        if ok:
+            anchor_state = "verified"
+            print("[6/6] External anchor: VERIFIED - the timestamp authority's "
+                  "countersignature commits to the records' head (a rewrite "
+                  "would not match)", file=out)
+        elif "imprint mismatch" in (detail or ""):
+            _fail(6, "REWRITE DETECTED - the records' head does not match what "
+                     "the external timestamp countersigned. The history was "
+                     "rewritten after it was anchored.")
+        else:
+            # Could not complete cryptographic verification (no CA / offline).
+            # Not proof of tampering; report honestly rather than pass or fail.
+            anchor_state = "unverified"
+            print(f"[6/6] External anchor: present but NOT cryptographically "
+                  f"verified ({detail}). Supply --tsa-cacert (or run with "
+                  "network access) to check the timestamp.", file=out)
+    else:
+        gap = anchor.get("error") or anchor.get("status") or "no anchor recorded"
+        print("[6/6] External anchor: NONE - this bundle is not anchored "
+              f"({gap}), so an operator rewrite of the records cannot be "
+              "detected by this verifier. The signature and chain checks above "
+              "still hold. Not a failure.", file=out)
 
     pub_hex = (manifest.get("signature") or {}).get("public_key_hex", "")
     fingerprint = (
@@ -254,6 +335,7 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         if pub_hex else alg)
     return {"records": len(records), "alterations": 0,
             "fingerprint": fingerprint, "counts": actual,
+            "anchor": anchor_state,
             "bundle_id": manifest.get("bundle_id", "")}
 
 
@@ -267,14 +349,26 @@ def main(argv: List[str] | None = None) -> int:
     vp.add_argument("bundle", help="path to the .air-evidence file")
     vp.add_argument("--key", default=None,
                     help="HMAC signing key for full chain recompute")
+    vp.add_argument("--tsa-cacert", default=None,
+                    help="PEM CA chain of the timestamp authority, for offline "
+                         "anchor verification (else FreeTSA's CA is fetched)")
     args = ap.parse_args(argv)
 
     try:
-        summary = verify_bundle(args.bundle, hmac_key=args.key)
+        summary = verify_bundle(args.bundle, hmac_key=args.key,
+                                tsa_cacert=args.tsa_cacert)
     except VerificationFailure as e:
         print(f"FAILED at check {e.check}: {e.message}", file=sys.stderr)
         return 1
-    print(f"VERIFIED: {summary['records']} records, "
+    anchor = summary.get("anchor", "absent")
+    qualifier = {
+        "verified": "chain externally anchored & countersigned",
+        "unverified": "signature valid; anchor present but UNVERIFIED "
+                      "(pass --tsa-cacert or allow network)",
+        "absent": "signature valid; NOT anchored - an operator rewrite would "
+                  "not be detectable by this check",
+    }.get(anchor, anchor)
+    print(f"VERIFIED [{qualifier}]: {summary['records']} records, "
           f"{summary['alterations']} alterations, "
           f"signed by {summary['fingerprint']}")
     return 0

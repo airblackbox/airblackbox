@@ -227,3 +227,103 @@ def test_mcp_anchor_gap_is_reported_not_hidden(tmp_path, monkeypatch):
     out = srv.export_evidence()
     assert "Anchor: GAP" in out
     assert "NO ANCHOR" in srv.verify_anchor()
+
+
+# --- Evidence-bundle anchor wiring (issue #57): air-evidence verify must
+# consult the external anchor, so a rewrite is detected by the same command a
+# regulator runs, not only by the separate MCP verify_anchor tool. ----------
+
+def _bundle_records_with_seq(signer, n=3):
+    """n chained records (chain_seq + chain_hash + signed receipt), the shape
+    the MCP export writes into a bundle."""
+    import hashlib as _h, hmac as _hm, json as _j
+    from air_blackbox.gate.receipt import ActionReceipt, hash_payload
+    recs = []
+    prev = b"genesis"
+    for i in range(n):
+        r = ActionReceipt(agent_id="t", action_name=f"act_{i}",
+                          payload_hash=hash_payload(f"d{i}"),
+                          covenant_hash="cov", decision="permit", authorized=True)
+        signer.sign_authorization(r)
+        rec = {"run_id": f"run-{i}", "chain_seq": i,
+               "timestamp": f"2026-07-18T00:00:0{i}Z", "action": f"act_{i}",
+               "status": "success", "receipt": r.to_dict()}
+        body = {k: v for k, v in rec.items() if k != "chain_hash"}
+        h = _hm.new(b"k", prev + _j.dumps(body, sort_keys=True).encode(), _h.sha256)
+        rec["chain_hash"] = h.hexdigest()
+        prev = h.digest()
+        recs.append(rec)
+    return recs
+
+
+def _make_bundle(tmp_path, signer, records, anchor_manifest):
+    from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
+    path, _ = generate_evidence_bundle_v1(
+        chain_entries=records, tenant="t", signer=signer,
+        chain_verification={"intact": True, "verified_records": len(records)},
+        anchor_manifest=anchor_manifest, output_dir=str(tmp_path))
+    return path
+
+
+def test_evidence_verify_confirms_a_valid_anchor(tmp_path):
+    import base64, io
+    from air_blackbox.anchor.head import head_over_entries
+    from air_blackbox.gate.receipt import ReceiptSigner
+    from air_blackbox.evidence_verify import verify_bundle
+    tsa = LocalTSA(str(tmp_path / "tsa"))
+    signer = ReceiptSigner(private_key=os.urandom(32), hmac_key="k")
+    recs = _bundle_records_with_seq(signer)
+    head = head_over_entries([(r["chain_seq"], r["chain_hash"]) for r in recs])
+    anchor = {"anchored": True, "head": head, "seq_max": len(recs) - 1,
+              "tsr_b64": base64.b64encode(tsa.reply(head)).decode()}
+    path = _make_bundle(tmp_path, signer, recs, anchor)
+    summary = verify_bundle(path, tsa_cacert=tsa.ca_pem, out=io.StringIO())
+    assert summary["anchor"] == "verified"
+
+
+def test_evidence_verify_DETECTS_rewrite_via_anchor(tmp_path):
+    # THE test for #57: the bundle's records produce a different head than the
+    # one the timestamp countersigned (history was rewritten after anchoring).
+    # Checks 1-5 pass (manifest honestly re-signed over the new records); only
+    # the external anchor - a key the operator does not hold - catches it.
+    import base64, io
+    from air_blackbox.anchor.head import head_over_entries
+    from air_blackbox.gate.receipt import ReceiptSigner
+    from air_blackbox.evidence_verify import verify_bundle, VerificationFailure
+    tsa = LocalTSA(str(tmp_path / "tsa"))
+    signer = ReceiptSigner(private_key=os.urandom(32), hmac_key="k")
+
+    original = _bundle_records_with_seq(signer)
+    original_head = head_over_entries(
+        [(r["chain_seq"], r["chain_hash"]) for r in original])
+    # Anchor commits to the ORIGINAL head...
+    anchor = {"anchored": True, "head": original_head, "seq_max": len(original) - 1,
+              "tsr_b64": base64.b64encode(tsa.reply(original_head)).decode()}
+    # ...but the bundle ships a REWRITTEN history (re-chained, re-signed).
+    rewritten = _bundle_records_with_seq(signer)
+    rewritten[1]["action"] = "COVER_UP"
+    import hashlib as _h, hmac as _hm, json as _j
+    prev = b"genesis"
+    for rec in rewritten:
+        body = {k: v for k, v in rec.items() if k != "chain_hash"}
+        rec["chain_hash"] = _hm.new(
+            b"k", prev + _j.dumps(body, sort_keys=True).encode(), _h.sha256).hexdigest()
+        prev = _hm.new(b"k", prev + _j.dumps(body, sort_keys=True).encode(), _h.sha256).digest()
+    path = _make_bundle(tmp_path, signer, rewritten, anchor)
+
+    with pytest.raises(VerificationFailure) as exc:
+        verify_bundle(path, tsa_cacert=tsa.ca_pem, out=io.StringIO())
+    assert exc.value.check == 6
+    assert "REWRITE DETECTED" in exc.value.message
+
+
+def test_evidence_verify_reports_unanchored_bundle_honestly(tmp_path):
+    # An unanchored bundle must NOT be reported as fully verified.
+    import io
+    from air_blackbox.gate.receipt import ReceiptSigner
+    from air_blackbox.evidence_verify import verify_bundle
+    signer = ReceiptSigner(private_key=os.urandom(32), hmac_key="k")
+    recs = _bundle_records_with_seq(signer)
+    path = _make_bundle(tmp_path, signer, recs, anchor_manifest=None)
+    summary = verify_bundle(path, out=io.StringIO())
+    assert summary["anchor"] == "absent"

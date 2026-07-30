@@ -142,7 +142,12 @@ def test_clean_bundle_verifies(bundle, capsys):
     # CLI end-to-end, no secret
     assert verify_main(["verify", path]) == 0
     out = capsys.readouterr().out
-    assert "VERIFIED: 5 records, 0 alterations, signed by ed25519:" in out
+    # Unanchored fixture bundle: verified but reported honestly as not
+    # rewrite-protected, never a bare over-confident "VERIFIED".
+    assert "VERIFIED" in out and "5 records, 0 alterations" in out
+    assert "ed25519:" in out
+    assert "NOT anchored" in out
+    assert summary["anchor"] == "absent"
 
 
 def _rewrite_member(path, member, new_bytes):
