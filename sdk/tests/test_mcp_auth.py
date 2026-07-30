@@ -68,11 +68,50 @@ def test_build_auth_introspection_mode(monkeypatch):
 def test_build_auth_jwks_mode_takes_precedence(monkeypatch):
     pytest.importorskip("jwt")
     monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/.well-known/jwks.json")
+    monkeypatch.setenv("AIR_MCP_JWT_AUDIENCE", "https://mcp.airblackbox.ai")
     monkeypatch.setenv("AIR_MCP_INTROSPECTION_URL", "https://idp.example.com/introspect")
     monkeypatch.setenv("AIR_MCP_TOKENS", "k:tenant1")
     verifier, settings = build_auth()
     assert isinstance(verifier, JwtTokenVerifier)
     assert settings is not None
+
+
+def test_build_auth_jwks_without_audience_refuses_to_start(monkeypatch):
+    # Fail-safe: JWKS mode without a pinned audience must not silently accept
+    # tokens for any audience (confused-deputy replay).
+    pytest.importorskip("jwt")
+    monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/jwks.json")
+    monkeypatch.delenv("AIR_MCP_JWT_AUDIENCE", raising=False)
+    monkeypatch.delenv("AIR_MCP_JWT_ALLOW_ANY_AUDIENCE", raising=False)
+    with pytest.raises(RuntimeError, match="AIR_MCP_JWT_AUDIENCE"):
+        build_auth()
+
+
+def test_build_auth_jwks_allow_any_audience_is_explicit_optout(monkeypatch):
+    pytest.importorskip("jwt")
+    monkeypatch.setenv("AIR_MCP_JWKS_URL", "https://idp.example.com/jwks.json")
+    monkeypatch.delenv("AIR_MCP_JWT_AUDIENCE", raising=False)
+    monkeypatch.setenv("AIR_MCP_JWT_ALLOW_ANY_AUDIENCE", "1")
+    verifier, settings = build_auth()
+    assert isinstance(verifier, JwtTokenVerifier)
+
+
+def test_static_verifier_no_subject_uses_full_token_hash_not_prefix():
+    # Two tokens sharing a long prefix must NOT collapse onto one subject.
+    v = StaticTokenVerifier("aircompliance-tenantA-secret,aircompliance-tenantB-secret")
+    import asyncio
+    a = asyncio.run(_verify(v, "aircompliance-tenantA-secret"))
+    b = asyncio.run(_verify(v, "aircompliance-tenantB-secret"))
+    assert a is not None and b is not None
+    assert a.subject != b.subject
+
+
+def test_static_verifier_skips_empty_token_entries():
+    # ":sub" / "::" must not register an empty-string token that authenticates.
+    import asyncio
+    v = StaticTokenVerifier(":orphan,::,realtok:alice")
+    assert asyncio.run(_verify(v, "")) is None
+    assert asyncio.run(_verify(v, "realtok")).subject == "alice"
 
 
 # --- JWT / JWKS verification (the mode real IdPs use) ---
@@ -196,9 +235,40 @@ def test_current_tenant_hard_fails_without_subject_when_auth_enabled(monkeypatch
 
 def test_tenant_id_is_filesystem_safe():
     import air_blackbox.mcp_server as srv
-    assert srv._safe_tenant("../etc/passwd") == "___etc_passwd"
-    assert "/" not in srv._safe_tenant("a/b/c")
-    assert srv._safe_tenant("normal-id_1") == "normal-id_1"
+    # No path separators can survive into a tenant id (no RUNS_DIR escape).
+    for subject in ("../etc/passwd", "a/b/c", "..\\..\\x", "a/../../b"):
+        t = srv._safe_tenant(subject)
+        assert "/" not in t and "\\" not in t
+        assert ".." not in t
+
+
+def test_tenant_id_mapping_is_injective():
+    # The core isolation guarantee: distinct subjects -> distinct tenants.
+    # The previous fold-and-truncate mapping collided on all of these.
+    import air_blackbox.mcp_server as srv
+    collision_pairs = [
+        ("alice@corp.com", "alice_corp_com"),            # char folding
+        ("u" + "x" * 63 + "AAA", "u" + "x" * 63 + "BBB"),  # >64-char truncation
+        ("tenant/x", "tenant_x"),
+        ("a.b", "a_b"),
+    ]
+    for a, b in collision_pairs:
+        assert srv._safe_tenant(a) != srv._safe_tenant(b), f"{a!r} collides with {b!r}"
+    # Deterministic: same subject always maps to the same tenant.
+    assert srv._safe_tenant("alice@corp.com") == srv._safe_tenant("alice@corp.com")
+
+
+def test_authenticated_subject_cannot_reach_reserved_tenants():
+    # No authenticated subject may map to the shared unauthenticated root
+    # ("_local") or the public demo tenant, or it would read/write their chains.
+    import air_blackbox.mcp_server as srv
+    for subject in ("_local", ".local", "/local", "@local", "public-demo",
+                    "public/demo", "public.demo"):
+        t = srv._safe_tenant(subject)
+        assert t != "_local"
+        assert t != srv._DEMO_TENANT
+        # And it never resolves to the RUNS_DIR root that "_local" owns.
+        assert srv._tenant_runs_dir(t) != srv.RUNS_DIR
 
 
 def test_tenant_chains_are_isolated(tmp_path, monkeypatch):

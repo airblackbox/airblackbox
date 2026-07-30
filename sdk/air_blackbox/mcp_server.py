@@ -20,6 +20,7 @@ Claude Desktop config:
     "args": ["-m", "air_blackbox.mcp_server"]}}}
 """
 
+import hashlib
 import logging
 import os
 import uuid
@@ -245,8 +246,24 @@ _chains: dict = {}
 
 
 def _safe_tenant(subject: str) -> str:
-    # Keep tenant ids filesystem-safe; never let a subject escape RUNS_DIR.
-    return "".join(c if c.isalnum() or c in "-_" else "_" for c in subject)[:64]
+    """Map an authenticated subject to a filesystem-safe, INJECTIVE tenant id.
+
+    The mapping must be injective: two different subjects must never share a
+    tenant, or one tenant could read/write another's audit records. Folding
+    non-alphanumerics to '_' and truncating (the previous approach) is NOT
+    injective - 'alice@corp.com' and 'alice_corp_com' collide, and any two
+    subjects agreeing on their first N chars collide under truncation.
+
+    We take a readable-but-lossy prefix only for debuggability and append a
+    hash of the FULL subject; uniqueness comes entirely from the hash. The
+    hash suffix also guarantees the result can never equal a reserved tenant
+    name (_local, the demo tenant), so no authenticated subject can land in
+    the shared/unauthenticated stores.
+    """
+    digest = hashlib.sha256(subject.encode("utf-8")).hexdigest()[:16]
+    readable = "".join(c if c.isalnum() or c in "-" else "_" for c in subject)
+    readable = readable.strip("_")[:32].strip("_") or "t"
+    return f"{readable}-{digest}"
 
 
 def _current_tenant() -> str:
