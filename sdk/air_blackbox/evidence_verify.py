@@ -158,11 +158,13 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                  "was altered after signing")
     pem_text = _read(zf, "verification/public_key.pem").decode()
     alg = sig.get("alg", "")
+    manifest_pubkey_hex = None  # the bundle's signing key; anchors Check 4
     if alg == "ed25519":
         try:
             pub_raw = _pem_raw_key(pem_text)
         except Exception as e:
             _fail(2, f"cannot parse verification/public_key.pem: {e}")
+        manifest_pubkey_hex = pub_raw.hex()
         if sig.get("public_key_hex") and pub_raw.hex() != sig["public_key_hex"]:
             _fail(2, "public key mismatch: manifest signature key != "
                      "verification/public_key.pem")
@@ -249,6 +251,12 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             if not pub_hex or not sig_hex:
                 _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) "
                          "lacks a key or signature")
+            # Anchor authenticity to the bundle's signing key: a receipt must
+            # be signed by the SAME key that signed the manifest, otherwise
+            # "all signatures valid" would certify nothing about who signed.
+            if manifest_pubkey_hex and pub_hex.lower() != manifest_pubkey_hex:
+                _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) is "
+                         "signed by a key other than the bundle's signing key")
             if not _ed25519_verify(bytes.fromhex(pub_hex), sig_hex,
                                    _auth_payload(receipt)):
                 _fail(4, f"receipt signature INVALID at index {i} "

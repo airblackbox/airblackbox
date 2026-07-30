@@ -379,15 +379,25 @@ def _authorization_payload_from_dict(d: dict) -> bytes:
     return json.dumps(data, sort_keys=True).encode("utf-8")
 
 
-def verify_receipt(receipt_dict: dict) -> tuple[bool, str]:
+def verify_receipt(receipt_dict: dict,
+                   expected_public_key: str | None = None) -> tuple[bool, str]:
     """Verify a receipt's authorization signature from the receipt JSON alone.
 
-    Uses only the embedded signing_method, signing_public_key, and
+    Uses the embedded signing_method, signing_public_key, and
     authorization_sig. No signer object, no shared secret.
 
+    Authenticity vs. consistency: with no expected_public_key, this proves the
+    receipt is internally *consistent* (signature matches its own embedded
+    key) - NOT that it came from a trusted signer, since an attacker can embed
+    their own key. Pass expected_public_key (the hex of the key you trust -
+    e.g. the tenant's published key or the key that signed the evidence
+    bundle) to also verify *authenticity*: a receipt signed by any other key
+    is rejected.
+
     Returns:
-        (verified, detail) - verified is True only if the signature is valid
-        AND the method is asymmetric (independently verifiable).
+        (verified, detail) - verified is True only if the signature is valid,
+        the method is asymmetric (independently verifiable), and - when an
+        expected key is given - the signing key matches it.
     """
     method = receipt_dict.get("signing_method", "")
     pub_hex = receipt_dict.get("signing_public_key", "")
@@ -395,6 +405,12 @@ def verify_receipt(receipt_dict: dict) -> tuple[bool, str]:
 
     if not sig_hex:
         return False, "no authorization signature present"
+
+    if expected_public_key and method in ("ed25519", "ML-DSA-65"):
+        if not pub_hex or pub_hex.strip().lower() != expected_public_key.strip().lower():
+            return False, ("receipt is signed by a key that does not match the "
+                           "expected/trusted public key (authenticity check "
+                           "failed)")
 
     payload = _authorization_payload_from_dict(receipt_dict)
 

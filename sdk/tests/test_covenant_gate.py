@@ -83,3 +83,33 @@ def test_verify_surfaces_the_decision_not_just_signatures():
     assert "authorized" in v and "decision" in v
     assert v["authorized"] is r.authorized
     assert v["decision"] == r.decision
+
+
+# --- #57 residuals: authenticity anchoring for keys ------------------------
+
+def test_verify_receipt_rejects_untrusted_key():
+    # An attacker's self-signed receipt verifies for consistency, but must be
+    # rejected once we require a specific expected/trusted key.
+    from air_blackbox.gate.receipt import ActionReceipt, ReceiptSigner, verify_receipt
+    attacker = ReceiptSigner(private_key=os.urandom(32))
+    receipt = ActionReceipt(agent_id="evil", action_name="delete_all",
+                            authorized=True, decision="permit")
+    attacker.sign_authorization(receipt)   # mutates in place
+    d = receipt.to_dict()
+    # No expected key: passes (self-consistent).
+    assert verify_receipt(d)[0] is True
+    # Wrong expected key: rejected on authenticity.
+    ok, detail = verify_receipt(d, expected_public_key="00" * 32)
+    assert ok is False and "authenticity" in detail
+    # Correct expected key: passes.
+    assert verify_receipt(d, expected_public_key=d["signing_public_key"])[0] is True
+
+
+def test_verify_chain_reports_key_source(tmp_path, monkeypatch):
+    from air_blackbox.replay.engine import ReplayEngine
+    monkeypatch.delenv("TRUST_SIGNING_KEY", raising=False)
+    eng = ReplayEngine(runs_dir=str(tmp_path))
+    eng.load()
+    assert eng.verify_chain(signing_key="k").key_source == "argument"
+    monkeypatch.setenv("TRUST_SIGNING_KEY", "envk")
+    assert eng.verify_chain().key_source == "env"
