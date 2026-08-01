@@ -292,6 +292,8 @@ You probably already have logging. The problems logging doesn't solve:
 
 **Operator rewrite**: a hash chain alone has a blind spot — whoever holds the signing key could rewrite the *entire* history and re-sign it, and every self-check would still pass. AIR closes this by anchoring the chain head to an external timestamp authority on export: a countersignature from a key you don't control. A rewritten history no longer matches what the outside witness saw. You can still lie — but not invisibly. (Most "audit log" tools, including other HMAC hash-chain products, stop before this step.)
 
+Don't take our word for it — run the attacks yourself: `python bench/proof/prove.py` stands up a plain log, a bare hash chain, and AIR Blackbox side by side, executes five real attacks against each, and prints a scorecard. It's the operator-rewrite row where AIR stands alone. See [bench/proof/](bench/proof/).
+
 **Prompt reconstruction**: most logging captures responses but not the full prompt context, tool calls, and intermediate reasoning. AIR records the complete episode.
 
 **Compliance structure**: EU AI Act Article 12 requires tamper-evident logs with specific retention and audit access guarantees. Raw logs don't satisfy that. Evidence bundles do.
