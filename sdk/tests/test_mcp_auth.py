@@ -423,8 +423,9 @@ def test_human_approval_flow_is_recordable(tmp_path, monkeypatch):
     assert "CHAIN INTACT: all 2 records verified" in srv.verify_chain()
 
 
-def test_actions_carry_verifiable_ed25519_receipts(tmp_path, monkeypatch):
+def test_actions_carry_verifiable_asymmetric_receipts(tmp_path, monkeypatch):
     import air_blackbox.mcp_server as srv
+    from air_blackbox.gate.receipt import HAS_MLDSA65
     monkeypatch.setattr(srv, "_covenant", None)
     monkeypatch.setattr(srv, "RUNS_DIR", str(tmp_path))
     srv._chains.clear()
@@ -435,7 +436,9 @@ def test_actions_carry_verifiable_ed25519_receipts(tmp_path, monkeypatch):
 
     out = srv.verify_receipts()
     assert "ALL RECEIPTS VALID: 2/2" in out
-    assert "ed25519" in out
+    # New tenants sign post-quantum when the pqc extra is installed,
+    # classically otherwise - either way the method is stated in the output.
+    assert ("ML-DSA-65" if HAS_MLDSA65 else "ed25519") in out
     assert "Public key:" in out
 
 

@@ -150,8 +150,10 @@ def _pem_public_key(public_key_hex: str) -> str:
             serialization.PublicFormat.SubjectPublicKeyInfo,
         ).decode()
     except Exception:
-        # HMAC-fallback signers have no public key; ship the hex (possibly
-        # empty) with an explanatory header so the bundle stays well-formed.
+        # Non-Ed25519 keys land here: ML-DSA-65 keys (no standard PEM encoding
+        # in `cryptography` yet) ship as this hex block, which the verifier
+        # parses via _hex_block_key. HMAC-fallback signers have no public key
+        # at all, so the block is empty for them.
         return ("-----BEGIN AIR PUBLIC KEY HEX-----\n"
                 f"{public_key_hex}\n"
                 "-----END AIR PUBLIC KEY HEX-----\n")
@@ -314,7 +316,10 @@ def generate_evidence_bundle_v1(
     digest = hashlib.sha256(canonical_manifest_bytes(manifest)).hexdigest()
     manifest["signature"] = {
         "alg": signer.method,
-        "upgrade_path": "ML-DSA-65",
+        # Crypto-agility marker: where this signature is headed. Once the
+        # signer is already ML-DSA-65 there is nowhere further to point.
+        "upgrade_path": ("none - already post-quantum"
+                         if signer.method == "ML-DSA-65" else "ML-DSA-65"),
         "signed_digest": digest,
         "encoding": "hex",
         "value": signer.sign(bytes.fromhex(digest)),

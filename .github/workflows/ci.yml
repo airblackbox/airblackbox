@@ -45,6 +45,32 @@ jobs:
       - name: Test SDK
         run: PYTHONPATH=sdk python -m pytest tests/ sdk/tests/ -q
 
+  # The same suite with the pqc extra installed, so the ML-DSA-65 signing
+  # path (receipts, tenant key persistence, bundle verification) runs under
+  # real post-quantum crypto instead of silently falling back to Ed25519.
+  # pqcrypto ships prebuilt wheels, so this adds no native build time. (#63)
+  python-test-pqc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies (with post-quantum provider)
+        run: pip install -e ".[mcp,lake,pqc]" pytest
+      - name: Assert ML-DSA-65 is actually active
+        # Guard against the extra quietly failing to install: this job's whole
+        # point is exercising the PQ path, so refuse to run "green" without it.
+        run: |
+          PYTHONPATH=sdk python -c "
+          from air_blackbox.gate.receipt import HAS_MLDSA65, ReceiptSigner
+          assert HAS_MLDSA65, 'pqc extra installed but ML-DSA-65 unavailable'
+          assert ReceiptSigner().method == 'ML-DSA-65'
+          print('ML-DSA-65 active')
+          "
+      - name: Test SDK (post-quantum)
+        run: PYTHONPATH=sdk python -m pytest tests/ sdk/tests/ -q
+
   fuzz:
     runs-on: ubuntu-latest
     steps:
