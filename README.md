@@ -30,7 +30,7 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 **External anchoring (rewrite detection)**: on every evidence export, the chain head is countersigned by an RFC 3161 timestamp authority — a key the operator does *not* hold. A history that is rewritten and perfectly re-signed still fails `verify_anchor` with a message-imprint mismatch. Tamper-evident against outsiders, rewrite-detectable against the operator. See [ADR 0001](docs/decisions/0001-anchor-rail.md).
 
-**Quantum-safe signing**: the chain is signed with ML-DSA-65 (FIPS 204 / Dilithium3). Keys are generated locally and never leave your machine. Post-quantum secure today.
+**Signed, post-quantum-ready**: the audit chain is HMAC-SHA256 (alter one record and every record after it breaks); each Gate action carries an Ed25519 signature today, with a post-quantum ML-DSA-65 (FIPS 204 / Dilithium3) upgrade path. Keys are generated locally and never leave your machine. What is quantum-exposed, what is not, and the migration plan are written down in the [cryptographic posture](docs/security/cryptographic-posture.md).
 
 **Evidence bundle**: one command packages the records, chain/receipt verification results, the public key, and regulator mappings (Colorado SB 24-205) into a signed `.air-evidence` bundle (v1 format). `air-evidence verify` runs five ordered checks and needs **no secrets** — one public-key signature covers every file in the bundle. Bundles can also auto-export on a schedule (`AIR_AUTO_EXPORT_INTERVAL_HOURS`), so evidence never depends on a busy human remembering to ask for it.
 
@@ -270,7 +270,7 @@ AIR Gateway          <- swap base_url here
     |
     |-- PII + injection scan      (before prompt reaches model)
     |-- HMAC audit record         (async, zero latency impact)
-    |-- ML-DSA-65 signing         (keys never leave your machine)
+    |-- Ed25519 / ML-DSA-65 sign  (keys never leave your machine)
     |
     v
 LLM Provider         <- OpenAI / Anthropic / Azure / local
@@ -288,7 +288,7 @@ Works with any OpenAI-compatible API. Same format, same integration, regardless 
 
 You probably already have logging. The problems logging doesn't solve:
 
-**Tamper-evidence**: anyone with write access to your log store can alter a record. HMAC chains make alteration detectable. ML-DSA-65 signatures prove who signed and when.
+**Tamper-evidence**: anyone with write access to your log store can alter a record. HMAC chains make alteration detectable. Ed25519 signatures (with an ML-DSA-65 post-quantum path) prove who authorized each action.
 
 **Operator rewrite**: a hash chain alone has a blind spot — whoever holds the signing key could rewrite the *entire* history and re-sign it, and every self-check would still pass. AIR closes this by anchoring the chain head to an external timestamp authority on export: a countersignature from a key you don't control. A rewritten history no longer matches what the outside witness saw. You can still lie — but not invisibly. (Most "audit log" tools, including other HMAC hash-chain products, stop before this step.)
 
