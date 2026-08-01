@@ -23,6 +23,10 @@ primary_region = "iad"
   # The OAuth issuer claude.ai discovers during connector setup — points at
   # the IdP (WorkOS AuthKit), not at this server.
   AIR_MCP_ISSUER_URL = "https://active-midnight-15-staging.authkit.app"
+  # This server's own identity in the discovery document (RFC 9728
+  # "resource"). Must match AIR_MCP_JWT_AUDIENCE so tokens requested for
+  # this resource pass the audience pin.
+  AIR_MCP_RESOURCE_URL = "https://mcp.airblackbox.ai"
   # Hosts the server trusts (DNS-rebinding protection). Include the raw
   # fly.dev hostname so you can test before the custom domain is wired.
   AIR_MCP_ALLOWED_HOSTS = "air-mcp.fly.dev,mcp.airblackbox.ai"
