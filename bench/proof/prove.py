@@ -145,6 +145,16 @@ def build_genuine(root, tsa):
 # --------------------------------------------------------------------------
 # Scenarios. Each returns {system: outcome}.
 # --------------------------------------------------------------------------
+def _tamper_record(runs, index, field, value):
+    """Falsify one field of the index-th stored record, in place."""
+    p = os.path.join(runs, sorted(os.listdir(runs))[index])
+    with open(p) as f:
+        rec = json.load(f)
+    rec[field] = value
+    with open(p, "w") as f:
+        json.dump(rec, f)
+
+
 def scenario_edit(root, tsa, tsr):
     """Edit a past record's content in place."""
     out = {}
@@ -155,20 +165,12 @@ def scenario_edit(root, tsa, tsr):
 
     # hash chain: mutate a record on disk, re-verify with the key.
     runs, _ = build_genuine(os.path.join(root, "hc_edit"), None)
-    f = sorted(os.listdir(runs))[1]
-    p = os.path.join(runs, f)
-    rec = json.load(open(p))
-    rec["candidate"] = "TAMPERED"
-    json.dump(rec, open(p, "w"))
+    _tamper_record(runs, 1, "candidate", "TAMPERED")
     out["hash chain"] = DETECTED if not hash_chain_intact(runs) else MISSED
 
     # AIR: same tamper; verify_chain catches it (the anchor would too).
     runs2, _ = build_genuine(os.path.join(root, "air_edit"), None)
-    f2 = sorted(os.listdir(runs2))[1]
-    p2 = os.path.join(runs2, f2)
-    rec2 = json.load(open(p2))
-    rec2["candidate"] = "TAMPERED"
-    json.dump(rec2, open(p2, "w"))
+    _tamper_record(runs2, 1, "candidate", "TAMPERED")
     out["AIR Blackbox"] = DETECTED if not hash_chain_intact(runs2) else MISSED
     return out
 
