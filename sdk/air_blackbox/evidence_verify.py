@@ -27,6 +27,7 @@ private HMAC chain; --tsa-cacert lets check 6 run fully offline.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import hmac as hmac_mod
 import json
@@ -362,7 +363,6 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     anchor = manifest.get("anchor") or {}
     anchor_state = "absent"
     if anchor.get("anchored") and anchor.get("tsr_b64"):
-        import base64
         from air_blackbox.anchor.tsa import verify_anchor_bytes
         try:
             tsr = base64.b64decode(anchor["tsr_b64"])
@@ -392,6 +392,34 @@ def verify_bundle(path: str, hmac_key: str | None = None,
               f"({gap}), so an operator rewrite of the records cannot be "
               "detected by this verifier. The signature and chain checks above "
               "still hold. Not a failure.", file=out)
+
+    # ---- Check 6b: public transparency-log anchor (M2), if present --------
+    # The Rekor anchor is the second, stronger rail: the RFC 3161 timestamp
+    # can be re-obtained by an attacker for a rewritten head, but an entry in
+    # a public APPEND-ONLY log can never be removed - so old anchors remain
+    # discoverable forever (see audit_runs_against_log for the full sweep).
+    rekor = anchor.get("rekor") or {}
+    if rekor.get("uuid"):
+        from air_blackbox.anchor.rekor import verify_bundle_anchor
+        try:
+            logged = json.loads(
+                base64.b64decode(rekor["payload_b64"]).decode())
+            bound = int(logged.get("chain_seq_max", -1))
+        except Exception as e:
+            _fail(6, f"rekor anchor payload unparseable: {e}")
+        ok, detail = verify_bundle_anchor(
+            {bound: _rederive_head(records, up_to_seq=bound)}, rekor)
+        if not ok:
+            if "REWRITE DETECTED" in detail:
+                _fail(6, f"public-log anchor: {detail}")
+            _fail(6, f"public-log anchor invalid: {detail}")
+        anchor_state = ("verified+public-log" if anchor_state == "verified"
+                        else "public-log")
+        print(f"[6b ] Public-log anchor: {detail} "
+              f"(rekor uuid {rekor['uuid'][:16]}..., log index "
+              f"{rekor.get('log_index')}). The entry is permanent; "
+              "audit every anchor under this key with air-evidence audit-log.",
+              file=out)
 
     pub_hex = (manifest.get("signature") or {}).get("public_key_hex", "")
     fingerprint = (

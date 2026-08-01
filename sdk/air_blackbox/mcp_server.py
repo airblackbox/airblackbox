@@ -695,22 +695,82 @@ def _anchor_current_head(tenant: str):
                                  "error": result.error}) + "\n")
         note = (f"Anchor: GAP - no external timestamp obtained ({result.error}). "
                 f"Recorded as a gap; the head is not externally bound this export.")
-        return note, {"anchored": False, "head": head, "seq_max": seq_max,
-                      "error": result.error}
+        manifest = {"anchored": False, "head": head, "seq_max": seq_max,
+                    "error": result.error}
+    else:
+        manifest = {"anchored": True, "head": head, "seq_max": seq_max,
+                    "tsa_url": result.tsa_url, "timestamp": result.timestamp,
+                    "tsr_b64": base64.b64encode(result.tsr).decode()}
+        note = (f"Anchor: head bound to {result.tsa_url} at {result.timestamp}. "
+                f"A rewritten history cannot inherit this timestamp.")
 
-    manifest = {"anchored": True, "head": head, "seq_max": seq_max,
-                "tsa_url": result.tsa_url, "timestamp": result.timestamp,
-                "tsr_b64": base64.b64encode(result.tsr).decode()}
-    with open(os.path.join(_anchor_dir(tenant), f"anchor-{seq_max:012d}.json"), "w") as f:
-        _json.dump(manifest, f)
-    note = (f"Anchor: head bound to {result.tsa_url} at {result.timestamp}. "
-            f"A rewritten history cannot inherit this timestamp.")
+    # M2: also publish the head to the public transparency log (opt-in).
+    # The two rails fail independently: a TSA gap does not block the log
+    # anchor, and vice versa - each is recorded honestly on its own.
+    rekor_server = _rekor_server()
+    if rekor_server:
+        from air_blackbox.anchor.rekor import anchor_head_to_rekor
+        try:
+            rk = anchor_head_to_rekor(head, seq_max, _anchor_key(tenant),
+                                      server=rekor_server)
+            manifest["rekor"] = rk.to_dict()
+            note += (f" Public log: entry {rk.uuid[:16]}... at index "
+                     f"{rk.log_index} - permanent; a re-anchored rewrite is "
+                     f"still detectable against it.")
+        except Exception as e:  # unreachable log = a gap, never a crash
+            with open(os.path.join(_anchor_dir(tenant), "gaps.log"), "a") as f:
+                f.write(_json.dumps({"seq_max": seq_max, "head": head,
+                                     "rekor_error": str(e)}) + "\n")
+            manifest["rekor"] = {"anchored": False, "error": str(e)}
+            note += f" Public log: GAP ({e}); recorded, not hidden."
+
+    if manifest.get("anchored"):
+        with open(os.path.join(_anchor_dir(tenant),
+                               f"anchor-{seq_max:012d}.json"), "w") as f:
+            _json.dump(manifest, f)
     return note, manifest
 
 
 def _tsa_urls():
     urls = os.environ.get("AIR_TSA_URLS", "")
     return [u.strip() for u in urls.split(",") if u.strip()] or None
+
+
+def _rekor_server() -> Optional[str]:
+    """Public transparency-log anchoring is opt-in: AIR_REKOR_SERVER names a
+    server explicitly, or AIR_REKOR=1 uses the public Sigstore instance.
+    Returns None (off) otherwise - anchoring publishes the chain HEAD (a
+    hash, no record content) to a public log, so it is a deliberate choice."""
+    server = os.environ.get("AIR_REKOR_SERVER", "").strip()
+    if server:
+        return server
+    if os.environ.get("AIR_REKOR", "") == "1":
+        from air_blackbox.anchor.rekor import DEFAULT_REKOR_SERVER
+        return DEFAULT_REKOR_SERVER
+    return None
+
+
+def _anchor_key(tenant: str) -> bytes:
+    """Per-tenant Ed25519 anchoring seed (.air-anchor-key). Separate from the
+    receipt key: receipts may be ML-DSA-65, which public logs cannot verify
+    yet, and the anchor key is an index handle - the security property comes
+    from the log's append-onlyness, not from who holds this key."""
+    path = os.path.join(_tenant_runs_dir(tenant), ".air-anchor-key")
+    try:
+        with open(path) as f:
+            seed = bytes.fromhex(f.read().strip())
+            if len(seed) == 32:
+                return seed
+    except (OSError, ValueError):
+        pass
+    seed = os.urandom(32)
+    try:
+        with open(path, "w") as f:
+            f.write(seed.hex())
+        os.chmod(path, 0o600)
+    except OSError:
+        logger.warning("could not persist anchor key at %s", path)
+    return seed
 
 
 @app.tool()
@@ -754,6 +814,60 @@ def verify_anchor() -> str:
                 f"of ours required.")
     return (f"ANCHOR BROKEN: {detail}. The history covered by the timestamp from "
             f"{m['timestamp']} has been altered since it was anchored - tell the user.")
+
+
+@app.tool()
+def audit_public_log() -> str:
+    """Audit this tenant's history against EVERY anchor ever published to the
+    public transparency log (M2 - the strongest tamper check available).
+
+    verify_anchor checks the latest RFC 3161 timestamp, but an attacker who
+    rewrites history can obtain a FRESH timestamp for the new head. They
+    cannot, however, remove old entries from a public append-only log. This
+    fetches every anchor logged under this tenant's anchoring key and
+    recomputes the bounded chain head for each - a rewritten history fails
+    against the old entries, even if it was freshly re-anchored."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+    )
+
+    from air_blackbox.anchor.rekor import RekorClient, audit_runs_against_log
+
+    server = _rekor_server()
+    if not server:
+        return ("Public-log anchoring is not enabled. Set AIR_REKOR=1 (public "
+                "Sigstore Rekor) or AIR_REKOR_SERVER, then export_evidence to "
+                "publish anchors. Until then, only the RFC 3161 rail applies "
+                "- and its documented limit is the re-anchored rewrite.")
+    tenant = _current_tenant()
+    pub_raw = Ed25519PrivateKey.from_private_bytes(
+        _anchor_key(tenant)).public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    try:
+        audit = audit_runs_against_log(_tenant_runs_dir(tenant), pub_raw,
+                                       RekorClient(server))
+    except Exception as e:
+        return (f"Public log unreachable ({e}). No verdict - the audit needs "
+                f"the log. Try again with network access to {server}.")
+    if audit.anchors_checked == 0:
+        return ("No anchors found in the public log for this tenant's key. "
+                "Run export_evidence (with AIR_REKOR enabled) to publish the "
+                "first one.")
+    if audit.rewrite_detected:
+        worst = audit.mismatches[0]
+        return (f"REWRITE DETECTED: {len(audit.mismatches)} of "
+                f"{audit.anchors_checked} logged anchors do NOT match this "
+                f"history (first: entry {worst['uuid'][:16]}... committed to "
+                f"head {worst['logged_head'][:16]}... at seq "
+                f"{worst['logged_seq_max']}, but the records re-derive "
+                f"{str(worst['recomputed_head'])[:16]}...). The log entry is "
+                f"permanent - this history cannot be squared with what was "
+                f"published. Tell the user immediately.")
+    return (f"PUBLIC LOG CONSISTENT: all {audit.anchors_checked} anchors ever "
+            f"published for this tenant match the current history. Even an "
+            f"attacker with every local key could not have rewritten these "
+            f"records without breaking this check.")
 
 
 @app.tool()

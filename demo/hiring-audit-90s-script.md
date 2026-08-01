@@ -82,9 +82,11 @@ the storyboard. Total read time at a calm pace is ~90 seconds.
 - Keep "fictional candidates" legible for a beat. It signals you understand the
   exact risk your product addresses.
 - Be honest about the limit if asked on the call: this catches a rewrite that
-  wasn't re-anchored. A rewrite plus a *fresh* timestamp needs the public
-  transparency log (roadmap M2). It's written down in
-  `docs/security/cryptographic-posture.md` — that honesty is part of the pitch.
+  wasn't re-anchored. A rewrite plus a *fresh* timestamp is caught by the
+  public transparency log (M2 — opt-in with `AIR_REKOR=1`; old log entries
+  can never be removed, so `audit_public_log` catches even that). It's
+  written down in `docs/security/cryptographic-posture.md` — that honesty is
+  part of the pitch.
 
 ---
 
