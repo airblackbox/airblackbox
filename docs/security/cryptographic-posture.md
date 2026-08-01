@@ -20,8 +20,8 @@ more than one independent root of trust.
 |---|---|---|
 | HMAC-SHA256 | audit chain (`trust/chain.py`) | Tamper-evident links between records. Symmetric; key from `TRUST_SIGNING_KEY` or a per-tenant key file. |
 | SHA-256 | chain head (`anchor/head.py`), payload hashes, manifest digest | Key-free commitments over ordered records and over bundle contents. |
-| Ed25519 | Gate receipts (default), evidence-bundle manifest signature | Non-repudiable signatures verifiable with the public key alone. |
-| ML-DSA-65 (Dilithium3, FIPS 204) | Gate receipts (preferred **when available**) | Post-quantum signature. See "Not yet production-ready" below. |
+| Ed25519 | Gate receipts (classical default), evidence-bundle manifest signature | Non-repudiable signatures verifiable with the public key alone. |
+| ML-DSA-65 (Dilithium3, FIPS 204) | Gate receipts + manifest signature — **the default when the `pqc` extra is installed** | Post-quantum signature via `pqcrypto` (PQClean; prebuilt wheels), with liboqs honored as a fallback provider. Keypairs persist per tenant, so identities survive restarts. CI runs the full suite under this path. |
 | HMAC-SHA256 (fallback) | receipts, when no asymmetric library is present | Last-resort signing. Requires a shared secret; not third-party verifiable. |
 | RFC 3161 timestamp (external) | anchor (`anchor/tsa.py`) | A timestamp authority countersigns the chain head with the authority's own key. Key we do not hold. |
 
@@ -68,12 +68,15 @@ detect tampering. That layering is the actual defense.
 
 ## Not yet production-ready (stated plainly)
 
-- **ML-DSA-65 is available but not the default, and not yet production-hardened.**
-  Two blockers, both tracked in issue #63: (a) the signer regenerates its keypair
-  on every construction and ignores a provided key, so per-tenant keys would not
-  survive a restart; (b) the native `liboqs` library is not in CI, so the path
-  has no automated coverage. **The default signature today is Ed25519.** We will
-  not flip the default until persistence is fixed and the path is under test.
+- **ML-DSA-65 is production-ready and the default when installed** (issue #63,
+  resolved): keypairs persist per tenant and survive restarts; a provided key is
+  always honored, never silently replaced; and CI runs the entire suite under
+  the post-quantum path (`python-test-pqc`), made cheap by switching the
+  provider to `pqcrypto` (PQClean, prebuilt wheels — no native build).
+  Existing Ed25519 tenants keep their Ed25519 identity forever; rotating them
+  to ML-DSA would change their published public key, so migration is a
+  deliberate operator action, not an upgrade side effect. Installations
+  without the `pqc` extra still default to Ed25519.
 - **The HMAC fallback uses a well-known default key** (`air-blackbox-default`)
   when no signing key is configured. Any real deployment must set
   `TRUST_SIGNING_KEY`. This fallback is not third-party verifiable and should be
@@ -87,8 +90,9 @@ detect tampering. That layering is the actual defense.
 
 ## Migration plan
 
-1. Fix ML-DSA-65 key persistence (#63) and add `liboqs` to CI, then make
-   ML-DSA-65 the default signature for hosted and high-assurance deployments.
+1. ~~Fix ML-DSA-65 key persistence (#63) and put the path under CI, then make
+   ML-DSA-65 the default signature for hosted and high-assurance deployments.~~
+   **Done.** ML-DSA-65 is the default wherever the `pqc` extra is installed.
 2. Ship M2 public transparency-log anchoring, removing sole dependence on
    operator-held keys.
 3. Keep this document current as the cryptographic bill of materials for AIR

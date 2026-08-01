@@ -100,6 +100,23 @@ def _pem_raw_key(pem_text: str) -> bytes:
         serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
 
+def _hex_block_key(pem_text: str) -> str:
+    """Extract the lowercase hex key from an 'AIR PUBLIC KEY HEX' block - the
+    bundle format for keys with no standard PEM encoding (ML-DSA-65).
+    Returns "" if the text is not such a block."""
+    lines = [ln.strip() for ln in pem_text.strip().splitlines()]
+    if (len(lines) >= 3
+            and lines[0] == "-----BEGIN AIR PUBLIC KEY HEX-----"
+            and lines[-1] == "-----END AIR PUBLIC KEY HEX-----"):
+        body = "".join(lines[1:-1]).lower()
+        try:
+            bytes.fromhex(body)
+            return body
+        except ValueError:
+            return ""
+    return ""
+
+
 def _auth_payload(receipt: Dict[str, Any]) -> bytes:
     """Rebuild ActionReceipt.authorization_payload byte-for-byte."""
     data = {
@@ -171,6 +188,26 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         if not _ed25519_verify(pub_raw, sig.get("value", ""),
                                bytes.fromhex(digest)):
             _fail(2, "manifest signature INVALID for the bundled public key")
+    elif alg == "ML-DSA-65":
+        from air_blackbox.gate.receipt import HAS_MLDSA65, mldsa_verify
+        if not HAS_MLDSA65:
+            _fail(2, "manifest is ML-DSA-65-signed but no verifier is "
+                     "installed - pip install 'air-blackbox[pqc]'")
+        # ML-DSA keys are shipped as a hex block (they have no standard
+        # SubjectPublicKeyInfo PEM encoding in `cryptography` yet).
+        pub_hex = _hex_block_key(pem_text)
+        if not pub_hex:
+            _fail(2, "cannot parse verification/public_key.pem as an ML-DSA "
+                     "hex key block")
+        manifest_pubkey_hex = pub_hex
+        if sig.get("public_key_hex") and pub_hex != sig["public_key_hex"].lower():
+            _fail(2, "public key mismatch: manifest signature key != "
+                     "verification/public_key.pem")
+        if not mldsa_verify(bytes.fromhex(pub_hex),
+                            bytes.fromhex(digest),
+                            bytes.fromhex(sig.get("value", ""))):
+            _fail(2, "manifest ML-DSA-65 signature INVALID for the bundled "
+                     "public key")
     elif alg == "hmac-sha256":
         if not hmac_key:
             _fail(2, "manifest is HMAC-signed; pass --key to verify "
@@ -259,6 +296,25 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                          "signed by a key other than the bundle's signing key")
             if not _ed25519_verify(bytes.fromhex(pub_hex), sig_hex,
                                    _auth_payload(receipt)):
+                _fail(4, f"receipt signature INVALID at index {i} "
+                         f"(run_id={rec.get('run_id')})")
+        elif method == "ML-DSA-65":
+            from air_blackbox.gate.receipt import HAS_MLDSA65, mldsa_verify
+            if not HAS_MLDSA65:
+                _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) "
+                         "is ML-DSA-65-signed but no verifier is installed - "
+                         "pip install 'air-blackbox[pqc]'")
+            pub_hex = receipt.get("signing_public_key", "")
+            if not pub_hex or not sig_hex:
+                _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) "
+                         "lacks a key or signature")
+            # Same authenticity anchor as ed25519: the receipt key must be
+            # the bundle's signing key.
+            if manifest_pubkey_hex and pub_hex.lower() != manifest_pubkey_hex:
+                _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) is "
+                         "signed by a key other than the bundle's signing key")
+            if not mldsa_verify(bytes.fromhex(pub_hex), _auth_payload(receipt),
+                                bytes.fromhex(sig_hex)):
                 _fail(4, f"receipt signature INVALID at index {i} "
                          f"(run_id={rec.get('run_id')})")
         elif method == "hmac-sha256":

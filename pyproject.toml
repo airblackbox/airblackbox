@@ -51,7 +51,12 @@ pdf = ["reportlab>=4.0"]
 gate = ["cryptography>=42.0"]
 lake = ["pyarrow>=14.0"]  # Parquet lake sink + in-lake chain verification
 mcp = ["mcp>=1.0,<2", "pyjwt>=2.8"]  # governance MCP server for Claude (record/enforce/prove); <2: mcp 2.0 removed mcp.server.fastmcp (see #59 follow-up)
-pqc = ["oqs>=0.10.0"]  # post-quantum ML-DSA-65 signing (opt-in)
+# Post-quantum ML-DSA-65 signing (opt-in). pqcrypto wraps PQClean and ships
+# prebuilt wheels, so this installs (and is CI-testable) without a native
+# toolchain. NOTE: the previous pin here ("oqs") was the WRONG PyPI package -
+# an unrelated project; liboqs-python is still honored as a fallback provider
+# if already installed. See #63.
+pqc = ["pqcrypto>=0.4.0"]
 all = [
     "air-blackbox[langchain]",
     "air-blackbox[crewai]",

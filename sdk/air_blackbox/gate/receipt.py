@@ -30,15 +30,74 @@ from typing import Optional, Any
 
 # ML-DSA-65 (FIPS 204) post-quantum signing - preferred when available.
 # Falls back to Ed25519 if ML-DSA-65 is not available, then to HMAC-SHA256.
+#
+# Two providers, tried in order:
+#   1. pqcrypto (PQClean): ships prebuilt wheels, so it is installable in CI
+#      and ordinary dev environments with no native toolchain. This is what
+#      the `pqc` extra installs and what CI tests.
+#   2. liboqs-python (import name `oqs`): kept as a fallback for
+#      environments that already have liboqs built.
+# Both implement FIPS 204, so signatures interoperate: a receipt carries its
+# public key and either provider (or any FIPS 204 verifier) can check it.
 HAS_MLDSA65 = False
 HAS_ED25519 = False
+_MLDSA_PROVIDER = None
 
 try:
-    # ML-DSA-65 via oqs-python (Open Quantum Safe)
-    import oqs
+    from pqcrypto.sign import ml_dsa_65 as _pqclean_mldsa65
     HAS_MLDSA65 = True
+    _MLDSA_PROVIDER = "pqcrypto"
 except ImportError:
-    pass
+    try:
+        # liboqs-python. NOTE: the PyPI package is `liboqs-python`; the
+        # package named plain `oqs` on PyPI is an unrelated project.
+        import oqs as _oqs
+        HAS_MLDSA65 = True
+        _MLDSA_PROVIDER = "liboqs"
+    except ImportError:
+        pass
+
+
+def _oqs_mechanism():
+    """liboqs mechanism name: current releases use ML-DSA-65; older ones
+    only know the pre-standardization name Dilithium3."""
+    enabled = getattr(_oqs, "get_enabled_sig_mechanisms", lambda: [])()
+    return "ML-DSA-65" if "ML-DSA-65" in enabled else "Dilithium3"
+
+
+def mldsa_generate_keypair() -> tuple[bytes, bytes]:
+    """Generate an ML-DSA-65 keypair. Returns (public_key, secret_key)."""
+    if _MLDSA_PROVIDER == "pqcrypto":
+        pk, sk = _pqclean_mldsa65.generate_keypair()
+        return bytes(pk), bytes(sk)
+    if _MLDSA_PROVIDER == "liboqs":
+        sig = _oqs.Signature(_oqs_mechanism())
+        pk = sig.generate_keypair()
+        return bytes(pk), bytes(sig.export_secret_key())
+    raise RuntimeError("no ML-DSA-65 provider installed (pip install 'air-blackbox[pqc]')")
+
+
+def mldsa_sign(secret_key: bytes, data: bytes) -> bytes:
+    """Sign data with an ML-DSA-65 secret key (raw FIPS 204 key bytes)."""
+    if _MLDSA_PROVIDER == "pqcrypto":
+        return bytes(_pqclean_mldsa65.sign(secret_key, data))
+    if _MLDSA_PROVIDER == "liboqs":
+        sig = _oqs.Signature(_oqs_mechanism(), secret_key=secret_key)
+        return bytes(sig.sign(data))
+    raise RuntimeError("no ML-DSA-65 provider installed (pip install 'air-blackbox[pqc]')")
+
+
+def mldsa_verify(public_key: bytes, data: bytes, signature: bytes) -> bool:
+    """Verify an ML-DSA-65 signature. Never raises; returns False on failure."""
+    try:
+        if _MLDSA_PROVIDER == "pqcrypto":
+            return bool(_pqclean_mldsa65.verify(public_key, data, signature))
+        if _MLDSA_PROVIDER == "liboqs":
+            return bool(_oqs.Signature(_oqs_mechanism()).verify(
+                data, signature, public_key))
+    except Exception:
+        return False
+    return False
 
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -223,44 +282,71 @@ class ReceiptSigner:
     using only the public key. HMAC requires the shared secret.
     """
 
-    def __init__(self, private_key: Optional[bytes] = None, hmac_key: Optional[str] = None):
+    def __init__(self, private_key: Optional[bytes] = None,
+                 hmac_key: Optional[str] = None,
+                 mldsa_keypair: Optional[tuple[bytes, bytes]] = None):
         """Initialize the signer.
+
+        Key persistence contract (#63): a provided key is ALWAYS honored, so a
+        signer reconstructed from persisted key material keeps the same public
+        key across restarts - previously issued receipts keep verifying.
 
         Args:
             private_key: Ed25519 private key bytes (32 bytes). If provided,
-                         Ed25519 signing is used. If None, generates a new key.
+                         Ed25519 signing is used with exactly this key - even
+                         when ML-DSA-65 is available - because switching
+                         algorithms would change the caller's persisted
+                         identity out from under it.
             hmac_key: HMAC-SHA256 key string. Used as fallback if neither
                       ML-DSA-65 nor Ed25519 is available.
+            mldsa_keypair: (public_key, secret_key) raw ML-DSA-65 bytes from a
+                         previous signer's `mldsa_keypair` property. If
+                         provided (and the pqc extra is installed), ML-DSA-65
+                         signing resumes under the same keypair.
+
+        With no key material provided, the strongest available algorithm is
+        used with a freshly generated key: ML-DSA-65, then Ed25519, then HMAC.
         """
         self._hmac_key = (hmac_key or "air-blackbox-default").encode("utf-8")
-        self._oqs_signer = None
-        self._oqs_pub = None
+        self._mldsa_pub: Optional[bytes] = None
+        self._mldsa_secret: Optional[bytes] = None
+        self._private_key = None
+        self._public_key = None
 
-        if HAS_MLDSA65:
-            # ML-DSA-65 (FIPS 204) - post-quantum, preferred
-            sig = oqs.Signature("Dilithium3")
-            self._oqs_pub = sig.generate_keypair()
-            self._oqs_signer = sig
-            self._private_key = None
-            self._public_key = None
+        if HAS_MLDSA65 and mldsa_keypair is not None:
+            # Resume a persisted ML-DSA-65 identity.
+            self._mldsa_pub, self._mldsa_secret = mldsa_keypair
+            self.method = "ML-DSA-65"
+        elif HAS_ED25519 and private_key:
+            # An explicit Ed25519 key is a persisted identity - honor it.
+            self._private_key = Ed25519PrivateKey.from_private_bytes(private_key)
+            self._public_key = self._private_key.public_key()
+            self.method = "ed25519"
+        elif HAS_MLDSA65:
+            # Fresh signer: post-quantum preferred.
+            self._mldsa_pub, self._mldsa_secret = mldsa_generate_keypair()
             self.method = "ML-DSA-65"
         elif HAS_ED25519:
-            if private_key:
-                self._private_key = Ed25519PrivateKey.from_private_bytes(private_key)
-            else:
-                self._private_key = Ed25519PrivateKey.generate()
+            self._private_key = Ed25519PrivateKey.generate()
             self._public_key = self._private_key.public_key()
             self.method = "ed25519"
         else:
-            self._private_key = None
-            self._public_key = None
             self.method = "hmac-sha256"
+
+    @property
+    def mldsa_keypair(self) -> Optional[tuple[bytes, bytes]]:
+        """The (public_key, secret_key) raw bytes of an ML-DSA-65 signer, for
+        persistence. Pass back via the mldsa_keypair constructor arg to resume
+        the same signing identity. None for non-ML-DSA signers."""
+        if self._mldsa_pub is not None and self._mldsa_secret is not None:
+            return (self._mldsa_pub, self._mldsa_secret)
+        return None
 
     @property
     def public_key_bytes(self) -> Optional[bytes]:
         """Export the public key for third-party verification."""
-        if HAS_MLDSA65 and self._oqs_pub:
-            return self._oqs_pub
+        if self._mldsa_pub is not None:
+            return self._mldsa_pub
         if self._public_key and HAS_ED25519:
             return self._public_key.public_bytes(
                 serialization.Encoding.Raw,
@@ -282,9 +368,8 @@ class ReceiptSigner:
           2. Ed25519 (classical)
           3. HMAC-SHA256 (shared-secret fallback)
         """
-        if HAS_MLDSA65 and self._oqs_signer:
-            sig = self._oqs_signer.sign(data)
-            return sig.hex()
+        if self._mldsa_secret is not None:
+            return mldsa_sign(self._mldsa_secret, data).hex()
         elif HAS_ED25519 and self._private_key:
             sig = self._private_key.sign(data)
             return sig.hex()
@@ -302,9 +387,8 @@ class ReceiptSigner:
         """
         try:
             sig_bytes = bytes.fromhex(signature_hex)
-            if HAS_MLDSA65 and self._oqs_pub:
-                verifier = oqs.Signature("Dilithium3")
-                return verifier.verify(data, sig_bytes, self._oqs_pub)
+            if self._mldsa_pub is not None:
+                return mldsa_verify(self._mldsa_pub, data, sig_bytes)
             elif HAS_ED25519 and self._public_key:
                 self._public_key.verify(sig_bytes, data)
                 return True
@@ -432,8 +516,8 @@ def verify_receipt(receipt_dict: dict,
         if not pub_hex:
             return False, "ML-DSA-65 receipt missing public key"
         try:
-            verifier = oqs.Signature("Dilithium3")
-            ok = verifier.verify(payload, bytes.fromhex(sig_hex), bytes.fromhex(pub_hex))
+            ok = mldsa_verify(bytes.fromhex(pub_hex), payload,
+                              bytes.fromhex(sig_hex))
             return (True, "verified (ML-DSA-65, post-quantum, third-party verifiable)") if ok \
                 else (False, "ML-DSA-65 signature INVALID (tampered or wrong key)")
         except Exception as e:
