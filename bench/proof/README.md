@@ -44,9 +44,13 @@ invisibly" guarantee, made runnable.
   rather than fake a pass.
 - The `rewrite` detection shown here is for a rewrite that was not
   re-anchored. An attacker who rewrites **and** obtains a fresh timestamp for
-  the new head produces a self-consistent bundle; defeating that requires the
-  public append-only log (roadmap M2). See
-  [docs/security/cryptographic-posture.md](../../docs/security/cryptographic-posture.md).
+  the new head produces a self-consistent bundle; defeating that is what the
+  public append-only log (M2, shipped, opt-in via `AIR_REKOR=1`) is for - old
+  log entries can never be removed, so `audit_public_log` catches even a
+  freshly re-anchored rewrite. The harness doesn't run that row because it
+  would need a live network log; the regression lives in
+  `sdk/tests/test_rekor_anchor.py::test_reanchored_rewrite_is_detected_by_log_audit`.
+  See [docs/security/cryptographic-posture.md](../../docs/security/cryptographic-posture.md).
 
 ## Exit code
 

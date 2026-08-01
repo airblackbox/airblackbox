@@ -51,8 +51,10 @@ AIR does not rest on one primitive or one key. It has independent roots of trust
 2. **Receipts** are asymmetric (Ed25519, migrating to ML-DSA-65).
 3. **The external anchor** is a timestamp authority's signature over the head, a
    key the operator does not hold.
-4. **A public transparency log** (roadmap M2) will add a fourth root that no
-   single party controls.
+4. **A public transparency log** (M2, shipped, opt-in): the chain head is
+   published to Rekor, a public append-only log no single party controls.
+   Old anchors can never be removed, so even a rewritten-and-freshly-
+   re-anchored history fails the log audit (`audit_public_log`).
 
 If Ed25519 fell tomorrow, the HMAC chain and the external anchor would still
 detect tampering. That layering is the actual defense.
@@ -81,20 +83,27 @@ detect tampering. That layering is the actual defense.
   when no signing key is configured. Any real deployment must set
   `TRUST_SIGNING_KEY`. This fallback is not third-party verifiable and should be
   treated as development-only.
-- **Public transparency-log anchoring (M2) is roadmap, not shipped.** External
-  RFC 3161 anchoring (M1) is shipped and is now enforced by the evidence verifier
-  (`air-evidence verify`), which fails on a rewritten history whose anchor does
-  not match. Its documented limitation: an attacker who rewrites history *and*
-  obtains a fresh timestamp for the new head produces a self-consistent bundle.
-  Closing that gap is exactly what the public append-only log (M2) is for.
+- **Public transparency-log anchoring (M2) is shipped but opt-in and
+  network-dependent.** Enable it with `AIR_REKOR=1` (public Sigstore Rekor) or
+  `AIR_REKOR_SERVER`; exports then publish the chain head to the log, and
+  `audit_public_log` re-derives the bounded head against *every* anchor ever
+  published under the tenant's key - the check that closes M1's re-anchored-
+  rewrite limit (an attacker cannot remove old log entries). Remaining
+  honest limits: it is off by default (publishing even a hash to a public log
+  is a deliberate choice); an unreachable log is recorded as a gap, not
+  hidden; and full Merkle inclusion-proof verification against the log's
+  signed tree head is future work (v1 verifies entry presence, payload
+  commitment, and the cross-anchor sweep). Entry format: ADR 0002.
 
 ## Migration plan
 
 1. ~~Fix ML-DSA-65 key persistence (#63) and put the path under CI, then make
    ML-DSA-65 the default signature for hosted and high-assurance deployments.~~
    **Done.** ML-DSA-65 is the default wherever the `pqc` extra is installed.
-2. Ship M2 public transparency-log anchoring, removing sole dependence on
-   operator-held keys.
+2. ~~Ship M2 public transparency-log anchoring, removing sole dependence on
+   operator-held keys.~~ **Done** (opt-in; see above). Next: Merkle
+   inclusion-proof verification, and anchoring on by default for hosted
+   deployments.
 3. Keep this document current as the cryptographic bill of materials for AIR
    itself. If a primitive's exposure changes, it is recorded here first.
 
