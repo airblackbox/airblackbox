@@ -5,7 +5,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY sdk/ sdk/
-RUN pip install --no-cache-dir ".[mcp,gate]"
+RUN pip install --no-cache-dir ".[mcp,gate,monitor]"
 
 # Records persist here; mount a volume in production.
 ENV AIR_RUNS_DIR=/data/runs \

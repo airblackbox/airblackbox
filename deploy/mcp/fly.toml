@@ -62,3 +62,13 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = false
   min_machines_running = 1
+
+  # /health write-probes the runs volume, so a failing check means "cannot
+  # record evidence" (full/unmounted/read-only volume, wedged process) and
+  # Fly restarts the machine instead of routing traffic into a black hole.
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"

@@ -136,9 +136,13 @@ class JwtTokenVerifier(TokenVerifier):
             # PyJWKClient does blocking I/O on a JWKS cache miss; keep it off
             # the event loop.
             return await anyio.to_thread.run_sync(self._verify, token)
-        except Exception:
+        except Exception as exc:
             # Malformed token, bad signature, expired, wrong iss/aud, JWKS
-            # unreachable - all are "not authenticated", never a crash.
+            # unreachable - all are "not authenticated", never a crash. But
+            # the REASON must be visible to the operator (never the token
+            # itself): a fleet of silent 401s from an audience or issuer
+            # mismatch is otherwise undiagnosable from the logs.
+            logger.info("token rejected: %s: %s", type(exc).__name__, exc)
             return None
 
 
@@ -157,12 +161,15 @@ class IntrospectionTokenVerifier(TokenVerifier):
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.post(self._url, data={"token": token},
                                          headers=headers)
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            logger.info("introspection unreachable: %s", exc)
             return None
         if resp.status_code != 200:
+            logger.info("introspection returned HTTP %d", resp.status_code)
             return None
         data = resp.json()
         if not data.get("active"):
+            logger.info("token rejected: introspection reports inactive")
             return None
         exp = data.get("exp")
         if exp and exp < time.time():
