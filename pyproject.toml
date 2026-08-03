@@ -51,6 +51,7 @@ pdf = ["reportlab>=4.0"]
 gate = ["cryptography>=42.0"]
 lake = ["pyarrow>=14.0"]  # Parquet lake sink + in-lake chain verification
 mcp = ["mcp>=1.0,<2", "pyjwt>=2.8"]  # governance MCP server for Claude (record/enforce/prove); <2: mcp 2.0 removed mcp.server.fastmcp (see #59 follow-up)
+monitor = ["sentry-sdk>=2.0"]  # optional error tracking for hosted deployments; engaged only when SENTRY_DSN is set
 # Post-quantum ML-DSA-65 signing (opt-in). pqcrypto wraps PQClean and ships
 # prebuilt wheels, so this installs (and is CI-testable) without a native
 # toolchain. NOTE: the previous pin here ("oqs") was the WRONG PyPI package -

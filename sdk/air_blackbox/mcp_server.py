@@ -140,8 +140,26 @@ app = FastMCP("air-blackbox", instructions=_INSTRUCTIONS,
 
 @app.custom_route("/health", methods=["GET"])
 async def _health(request):
-    """Unauthenticated liveness probe for load balancers / Fly health checks."""
+    """Unauthenticated health probe for load balancers / Fly health checks.
+
+    "ok" means the server can actually do its job - record evidence - not
+    merely that the process exists, so the probe write-tests the runs root
+    (the volume in production). 503 turns an invisible full/unmounted/
+    read-only volume into a failing check the platform acts on.
+    """
     from starlette.responses import JSONResponse
+    try:
+        os.makedirs(RUNS_DIR, exist_ok=True)
+        probe = os.path.join(RUNS_DIR, ".health-probe")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+    except OSError as exc:
+        logger.error("health probe cannot write runs dir %s: %s", RUNS_DIR, exc)
+        return JSONResponse(
+            {"status": "degraded", "service": "air-blackbox-mcp",
+             "detail": "runs storage not writable"},
+            status_code=503)
     return JSONResponse({"status": "ok", "service": "air-blackbox-mcp"})
 
 
@@ -1034,6 +1052,30 @@ def _start_auto_export():
     return t
 
 
+def _init_error_tracking():
+    """Optional Sentry error tracking, engaged only when SENTRY_DSN is set.
+
+    A no-op for self-hosters (no DSN, no dependency needed). For the hosted
+    deployment it is the "know before the customer does" layer: unhandled
+    exceptions are reported with stack traces instead of dying silently in
+    ephemeral platform logs. Records/prompts are never attached - Sentry
+    sees exceptions, not tenant data.
+    """
+    dsn = os.environ.get("SENTRY_DSN", "")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+    except ImportError:
+        logger.warning(
+            "SENTRY_DSN is set but sentry-sdk is not installed; "
+            "pip install 'air-blackbox[monitor]'. Continuing without it.")
+        return
+    sentry_sdk.init(dsn=dsn, traces_sample_rate=0.0,
+                    send_default_pii=False)
+    logger.info("sentry error tracking enabled")
+
+
 def main():
     """Run over stdio (Claude Desktop) or HTTP (claude.ai custom connector).
 
@@ -1042,6 +1084,7 @@ def main():
     https://mcp.airblackbox.ai/mcp and add it in claude.ai as a custom
     connector. Default is stdio for local Claude Desktop use.
     """
+    _init_error_tracking()
     _start_auto_export()
     if os.environ.get("AIR_MCP_TRANSPORT", "stdio") == "http":
         app.settings.host = os.environ.get("AIR_MCP_HOST", "0.0.0.0")
