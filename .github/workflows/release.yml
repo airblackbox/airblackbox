@@ -1,0 +1,146 @@
+name: Release
+
+# Publishing is gated on the built artifact actually working.
+#
+# Two failures in the sibling air-blackbox-mcp repo motivated this:
+#   1. 0.2.3 shipped to PyPI unable to import at all - nothing between
+#      "build" and "upload" ever installed the artifact and ran it.
+#   2. A stale local checkout built an old version while a newer one was
+#      intended; only a human noticing the version string stopped it.
+#
+# Both are mechanical checks, so they belong here rather than in someone's
+# memory at 2am.
+#
+# Note on import resolution: the package source lives in sdk/, so running
+# from the repo root WITHOUT PYTHONPATH=sdk resolves `air_blackbox` to the
+# installed wheel while repo-relative fixtures (bench/proof, demo/) still
+# work. Setting PYTHONPATH=sdk here would silently test the source tree
+# instead of the artifact - exactly the blind spot this workflow exists to
+# close.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:      # build + verify with no publish, for a dry run
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - name: Built version must match the release tag
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          BUILT=$(ls dist/*.tar.gz | sed -E 's/.*-([0-9][^-]*)\.tar\.gz/\1/')
+          echo "tag=$TAG built=$BUILT"
+          [ "$TAG" = "$BUILT" ] || { echo "::error::tag $TAG != built $BUILT"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  verify-base:
+    # A bare `pip install air-blackbox` must give a working CLI. The extras
+    # are optional; the base experience is not.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Install the built wheel, no extras
+        run: |
+          python -m venv "$RUNNER_TEMP/v"
+          "$RUNNER_TEMP/v/bin/pip" install dist/*.whl
+      - name: Base CLI must actually run
+        working-directory: ${{ runner.temp }}   # neutral dir: no source tree
+        run: |
+          "$RUNNER_TEMP/v/bin/air-blackbox" --help > /dev/null
+          "$RUNNER_TEMP/v/bin/python" -c "import air_blackbox.cli; print('cli OK')"
+          "$RUNNER_TEMP/v/bin/python" -c "import air_blackbox.precommit; print('precommit OK')"
+
+  verify-full:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4          # for the test suite + fixtures
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install the built wheel with extras
+        run: |
+          python -m venv "$RUNNER_TEMP/v"
+          "$RUNNER_TEMP/v/bin/pip" install --upgrade pip
+          "$RUNNER_TEMP/v/bin/pip" install "$(ls dist/*.whl)[mcp,gate,lake]" pytest
+
+      - name: Every declared console script must exist and import
+        # air-blackbox-mcp and air-evidence were absent from the published
+        # 1.13.2 while the repo declared them; a shipped script that does not
+        # exist is indistinguishable from a broken install to a user.
+        run: |
+          for s in air-blackbox air-blackbox-comply-strict air-blackbox-mcp air-evidence; do
+            test -x "$RUNNER_TEMP/v/bin/$s" || { echo "::error::console script $s missing from wheel"; exit 1; }
+            echo "  found $s"
+          done
+          cd "$RUNNER_TEMP"
+          for m in air_blackbox.cli air_blackbox.precommit air_blackbox.mcp_server air_blackbox.evidence_verify; do
+            "$RUNNER_TEMP/v/bin/python" -c "import $m" || { echo "::error::$m failed to import"; exit 1; }
+            echo "  imported $m"
+          done
+
+      - name: Artifact must contain the headline modules
+        # Guards the "published version is silently years behind" failure:
+        # anchoring and evidence verification are the product's core claims.
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/v/bin/python" - <<'PY'
+          import importlib
+          for m in ("air_blackbox.anchor.head",
+                    "air_blackbox.anchor.tsa",
+                    "air_blackbox.evidence_verify",
+                    "air_blackbox.mcp_auth",
+                    "air_blackbox.gate.covenant"):
+              importlib.import_module(m)
+              print("  present", m)
+          PY
+
+      - name: Test suite against the installed wheel
+        # Deliberately NO PYTHONPATH=sdk - see the note at the top of this file.
+        run: |
+          "$RUNNER_TEMP/v/bin/python" -m pytest tests/ sdk/tests/ -q
+
+  publish:
+    needs: [verify-base, verify-full]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write        # PyPI Trusted Publishing - no API token stored
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
