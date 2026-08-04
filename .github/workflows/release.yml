@@ -69,8 +69,15 @@ jobs:
         working-directory: ${{ runner.temp }}   # neutral dir: no source tree
         run: |
           "$RUNNER_TEMP/v/bin/air-blackbox" --help > /dev/null
-          "$RUNNER_TEMP/v/bin/python" -c "import air_blackbox.cli; print('cli OK')"
-          "$RUNNER_TEMP/v/bin/python" -c "import air_blackbox.precommit; print('precommit OK')"
+          "$RUNNER_TEMP/v/bin/air-blackbox-comply-strict" --help > /dev/null
+          "$RUNNER_TEMP/v/bin/python" - <<'PY'
+          from importlib.metadata import entry_points
+          # Base install: only the extras-free scripts must resolve here.
+          for name in ("air-blackbox", "air-blackbox-comply-strict"):
+              e = next(e for e in entry_points(group="console_scripts") if e.name == name)
+              e.load()
+              print(f"  OK {name} -> {e.value}")
+          PY
 
   verify-full:
     needs: build
@@ -95,20 +102,42 @@ jobs:
           "$RUNNER_TEMP/v/bin/pip" install --upgrade pip
           "$RUNNER_TEMP/v/bin/pip" install "$(ls dist/*.whl)[mcp,gate,lake]" pytest
 
-      - name: Every declared console script must exist and import
-        # air-blackbox-mcp and air-evidence were absent from the published
-        # 1.13.2 while the repo declared them; a shipped script that does not
-        # exist is indistinguishable from a broken install to a user.
+      - name: Every declared console script must exist and RESOLVE
+        # Two distinct failures, both seen in this package:
+        #   - the script is absent from the wheel (air-blackbox-mcp and
+        #     air-evidence were missing from the published 1.13.2);
+        #   - the script exists but its target does not. `air-blackbox-comply-
+        #     strict` pointed at air_blackbox.precommit:main, which was never
+        #     defined, so every invocation raised ImportError.
+        # Importing the module is NOT sufficient to catch the second case -
+        # air_blackbox.precommit imported fine. entry_point.load() resolves the
+        # module AND the attribute, which is what the console script does.
+        # Enumerated from metadata rather than hardcoded, so a newly declared
+        # script is covered automatically.
+        working-directory: ${{ runner.temp }}   # neutral dir: no source tree
         run: |
-          for s in air-blackbox air-blackbox-comply-strict air-blackbox-mcp air-evidence; do
-            test -x "$RUNNER_TEMP/v/bin/$s" || { echo "::error::console script $s missing from wheel"; exit 1; }
-            echo "  found $s"
-          done
-          cd "$RUNNER_TEMP"
-          for m in air_blackbox.cli air_blackbox.precommit air_blackbox.mcp_server air_blackbox.evidence_verify; do
-            "$RUNNER_TEMP/v/bin/python" -c "import $m" || { echo "::error::$m failed to import"; exit 1; }
-            echo "  imported $m"
-          done
+          "$RUNNER_TEMP/v/bin/python" - <<'PY'
+          import os, sys
+          from importlib.metadata import entry_points
+          # Scripts live beside this interpreter; the venv is not on PATH
+          # because the workflow invokes its python by absolute path.
+          bindir = os.path.dirname(sys.executable)
+          eps = [e for e in entry_points(group="console_scripts")
+                 if e.value.startswith("air_blackbox")]
+          assert eps, "wheel declares no air_blackbox console scripts"
+          bad = []
+          for e in eps:
+              if not os.path.exists(os.path.join(bindir, e.name)):
+                  bad.append(f"{e.name}: script not installed in {bindir}"); continue
+              try:
+                  e.load()          # module AND attribute
+                  print(f"  OK {e.name} -> {e.value}")
+              except Exception as ex:
+                  bad.append(f"{e.name} -> {e.value}: {type(ex).__name__}: {ex}")
+          for b in bad:
+              print(f"::error::console script broken: {b}")
+          sys.exit(1 if bad else 0)
+          PY
 
       - name: Artifact must contain the headline modules
         # Guards the "published version is silently years behind" failure:
