@@ -6,6 +6,7 @@ issues before code is committed.
 
 import logging
 import subprocess
+import sys
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
@@ -132,3 +133,22 @@ def execute_precommit_hook(file_paths: Optional[List[str]] = None) -> int:
     except (ValueError, subprocess.TimeoutExpired) as e:
         logger.error(f"precommit_hook_error: {e}")
         return 1
+
+
+def main() -> int:
+    """Console-script entry point for `air-blackbox-comply-strict`.
+
+    Declared in pyproject as `air_blackbox.precommit:main`, but never defined -
+    so the installed command raised ImportError on every invocation. pre-commit
+    passes the staged filenames as positional arguments; with none given,
+    execute_precommit_hook falls back to its own discovery.
+    """
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print("usage: air-blackbox-comply-strict [FILE ...]\n\n"
+              "Strict pre-commit compliance gate. Scans the given files (or the\n"
+              "staged files when none are given) and exits non-zero if the commit\n"
+              "should be blocked. Intended to be run by pre-commit, which passes\n"
+              "the staged filenames as arguments.")
+        return 0
+    return execute_precommit_hook(args or None)
