@@ -5,21 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AIR Blackbox Gateway — Test Suite Demo</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Archivo:wght@400;600;700;800&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    background: #0d1117;
-    color: #c9d1d9;
-    font-family: 'Inter', sans-serif;
+    background: #f3f2f2;
+    color: #201e1d;
+    font-family: 'Archivo', system-ui, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
   }
 
   .header {
-    background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
-    border-bottom: 1px solid #30363d;
+    background: #f3f2f2;
+    border-bottom: 2px solid rgba(32,30,29,0.4);
     padding: 32px 48px;
     display: flex;
     align-items: center;
@@ -28,47 +28,47 @@
 
   .logo {
     width: 48px; height: 48px;
-    background: linear-gradient(135deg, #58a6ff, #bc8cff);
-    border-radius: 12px;
+    background: #201e1d;
+    border-radius: 0;
     display: flex; align-items: center; justify-content: center;
     font-size: 24px; font-weight: 700; color: #fff;
   }
 
   .header-text h1 {
-    font-size: 24px; font-weight: 700; color: #f0f6fc;
+    font-size: 24px; font-weight: 800; color: #201e1d; letter-spacing: -0.015em;
   }
   .header-text p {
-    font-size: 14px; color: #8b949e; margin-top: 4px;
+    font-size: 14px; color: #7d7979; margin-top: 4px;
   }
 
   .stats-bar {
     display: flex; gap: 24px; padding: 20px 48px;
-    background: #161b22; border-bottom: 1px solid #30363d;
+    background: #eae9e9; border-bottom: 2px solid rgba(32,30,29,0.4);
   }
 
   .stat {
     display: flex; align-items: center; gap: 8px;
-    font-size: 14px; color: #8b949e;
+    font-size: 14px; color: #605d5d;
   }
-  .stat .value { font-weight: 700; font-size: 20px; }
-  .stat.pass .value { color: #3fb950; }
-  .stat.pkgs .value { color: #58a6ff; }
-  .stat.time .value { color: #d2a8ff; }
-  .stat.providers .value { color: #f0883e; }
+  .stat .value { font-weight: 800; font-size: 20px; font-family: 'Archivo', sans-serif; }
+  .stat.pass .value { color: #1a7f37; }
+  .stat.pkgs .value { color: #ec3013; }
+  .stat.time .value { color: #201e1d; }
+  .stat.providers .value { color: #ae1800; }
 
   .terminal {
     margin: 32px 48px;
-    background: #0d1117;
-    border: 1px solid #30363d;
-    border-radius: 12px;
+    background: #201e1d;
+    border: 2px solid rgba(32,30,29,0.4);
+    border-radius: 0;
     overflow: hidden;
   }
 
   .terminal-bar {
-    background: #161b22;
+    background: #2d2b2b;
     padding: 12px 16px;
     display: flex; align-items: center; gap: 8px;
-    border-bottom: 1px solid #30363d;
+    border-bottom: 1px solid #444141;
   }
   .dot { width: 12px; height: 12px; border-radius: 50%; }
   .dot.red { background: #ff5f57; }
@@ -86,18 +86,19 @@
     line-height: 1.7;
     max-height: 600px;
     overflow-y: auto;
+    color: #d7d3d3; /* plain terminal text must not inherit the light page's ink */
   }
 
-  .cmd { color: #58a6ff; }
+  .cmd { color: #ff9783; }
   .prompt { color: #3fb950; }
   .pass { color: #3fb950; }
   .fail { color: #f85149; }
   .skip { color: #8b949e; }
-  .pkg { color: #d2a8ff; }
+  .pkg { color: #ffc4b8; }
   .run { color: #8b949e; }
   .log { color: #6e7681; }
   .model { color: #f0883e; }
-  .time-val { color: #79c0ff; }
+  .time-val { color: #e15b47; }
   .dim { color: #484f58; }
 
   .line {
@@ -114,7 +115,7 @@
   }
 
   .section h2 {
-    font-size: 18px; color: #f0f6fc; margin-bottom: 16px;
+    font-size: 18px; color: #201e1d; font-weight: 800; margin-bottom: 16px;
     display: flex; align-items: center; gap: 8px;
   }
 
@@ -125,61 +126,61 @@
   }
 
   .test-card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
+    background: #eae9e9;
+    border: 1px solid rgba(32,30,29,0.4);
+    border-radius: 0;
     padding: 16px;
     transition: border-color 0.2s;
   }
-  .test-card:hover { border-color: #58a6ff; }
+  .test-card:hover { border-color: #ec3013; }
 
   .test-card .name {
-    font-size: 13px; font-weight: 600; color: #f0f6fc;
+    font-size: 13px; font-weight: 600; color: #201e1d;
     margin-bottom: 6px;
     display: flex; align-items: center; gap: 6px;
   }
   .test-card .detail {
-    font-size: 12px; color: #8b949e; line-height: 1.5;
+    font-size: 12px; color: #605d5d; line-height: 1.5;
   }
   .test-card .badge {
     display: inline-block;
     padding: 2px 8px;
-    border-radius: 12px;
+    border-radius: 0;
     font-size: 11px;
     font-weight: 600;
   }
-  .badge.pass-badge { background: #1a3a2a; color: #3fb950; }
-  .badge.provider-badge { background: #2a1f0e; color: #f0883e; }
+  .badge.pass-badge { background: #d9f2e1; color: #1a7f37; }
+  .badge.provider-badge { background: #ffe0d9; color: #ae1800; }
 
   .footer {
     padding: 32px 48px;
-    border-top: 1px solid #30363d;
+    border-top: 2px solid rgba(32,30,29,0.4);
     text-align: center;
-    color: #484f58;
+    color: #7d7979;
     font-size: 13px;
   }
-  .footer a { color: #58a6ff; text-decoration: none; }
+  .footer a { color: #ec3013; text-decoration: none; }
   .footer a:hover { text-decoration: underline; }
 
   .top-nav {
-    background: #010409;
-    border-bottom: 1px solid #30363d;
+    background: #f3f2f2;
+    border-bottom: 2px solid rgba(32,30,29,0.4);
     padding: 10px 48px;
     display: flex; justify-content: space-between; align-items: center;
     font-size: 14px;
   }
   .top-nav a {
-    color: #58a6ff; text-decoration: none;
+    color: #201e1d; text-decoration: none;
     transition: color 0.2s;
   }
-  .top-nav a:hover { color: #79c0ff; }
+  .top-nav a:hover { color: #ae1800; }
   .top-nav .nav-links { display: flex; gap: 20px; align-items: center; }
   .btn-gh {
-    background: #238636; color: #fff; padding: 5px 16px;
-    border-radius: 6px; font-weight: 600; font-size: 13px;
+    background: #201e1d; color: #f3f2f2; padding: 6px 20px;
+    border-radius: 0; font-weight: 600; font-size: 13px;
     text-decoration: none; transition: background 0.2s;
   }
-  .btn-gh:hover { background: #2ea043; }
+  .btn-gh:hover { background: #000; }
 
   .test-card { cursor: default; }
 </style>

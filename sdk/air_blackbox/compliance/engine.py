@@ -177,7 +177,7 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
                 if co_checks:
                     results.append({
                         "number": "CO",
-                        "title": "Colorado SB 24-205 (AI Act)",
+                        "title": "Colorado SB 26-189 (AI consumer protections)",
                         "checks": co_checks,
                     })
                 if il_checks:
@@ -189,7 +189,7 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
                 if ca_checks:
                     results.append({
                         "number": "CA",
-                        "title": "California AI Laws (SB 942 + ADMT)",
+                        "title": "California AI Laws (FEHA ADS + SB 942 + ADMT)",
                         "checks": ca_checks,
                     })
                 if tx_checks:

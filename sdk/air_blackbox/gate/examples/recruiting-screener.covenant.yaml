@@ -3,7 +3,7 @@
 # Addresses automated decision-making (ADM) exposure: GDPR Article 22
 # (no solely automated significant decisions), EU AI Act Annex III
 # (employment = high-risk: Articles 9, 12, 14 apply), NYC Local Law 144,
-# Colorado SB 24-205.
+# Illinois HB 3773, California FEHA ADS rules, Colorado SB 26-189.
 #
 # The pattern: the agent may READ and SUMMARIZE freely, but every action
 # that affects a candidate's outcome requires human approval. Run under

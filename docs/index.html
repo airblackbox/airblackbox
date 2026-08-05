@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AIR Blackbox — Open-Source EU AI Act Compliance Scanner for Python AI Agents</title>
-<meta name="description" content="AIR Blackbox is an open-source compliance scanner that checks Python AI agent code against EU AI Act Articles 9-15. Supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK. pip install air-blackbox. Free. Local-first. August 2026 deadline ready.">
+<meta name="description" content="AIR Blackbox is an open-source compliance scanner that checks Python AI agent code against EU AI Act Articles 9-15. Supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK. pip install air-blackbox. Free. Local-first. Ready for the December 2027 high-risk deadline.">
 <meta name="keywords" content="EU AI Act, AI compliance, AI governance, Python, LangChain, CrewAI, AutoGen, OpenAI, compliance scanner, audit trail, HMAC, open source">
 <meta name="author" content="Jason Shotwell">
 <link rel="canonical" href="https://airblackbox.ai/">
@@ -112,7 +112,7 @@
       "name": "When is the EU AI Act compliance deadline?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "The key deadline for high-risk AI systems is August 2, 2026. Penalties for non-compliance can reach up to 35 million euros or 7% of global annual turnover, whichever is higher. Prohibited AI practices enforcement began February 2, 2025, and GPAI model obligations apply from August 2, 2025."
+        "text": "The key deadline for high-risk AI systems is December 2027, pushed back from the original August 2, 2026 date. Penalties for non-compliance can reach up to 35 million euros or 7% of global annual turnover, whichever is higher. Prohibited AI practices enforcement began February 2, 2025, and GPAI model obligations apply from August 2, 2025."
       }
     },
     {
@@ -193,776 +193,317 @@
 }
 </script>
 
-<style>
-  :root {
-    --bg: #0a0a0a;
-    --surface: #111111;
-    --surface2: #1a1a1a;
-    --border: #222222;
-    --text: #e0e0e0;
-    --text-dim: #888888;
-    --accent: #00d4aa;
-    --accent-dim: #00a080;
-    --accent-glow: rgba(0, 212, 170, 0.15);
-    --red: #ff4d4d;
-    --orange: #ff9933;
-    --blue: #4d9fff;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.7;
-    -webkit-font-smoothing: antialiased;
-  }
-  /* ── CLI DEMO ── */
-  .cli-demo { border-top: 1px solid var(--border); }
-  .demo-gif-wrap {
-    border-radius: 12px; overflow: hidden;
-    border: 1px solid var(--border);
-    background: #000;
-    margin-bottom: 3rem;
-    box-shadow: 0 0 60px rgba(0,212,170,0.08);
-  }
-  .demo-gif {
-    width: 100%; display: block;
-    border-radius: 12px;
-  }
-  .demo-steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1.5rem;
-  }
-  .demo-step {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; padding: 1.5rem;
-    transition: border-color 0.3s;
-  }
-  .demo-step:hover { border-color: var(--accent); }
-  .demo-step-cmd {
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 0.85rem; color: var(--accent);
-    margin-bottom: 0.75rem; font-weight: 600;
-  }
-  .demo-step-desc { color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; }
-
-  /* ── NAV ── */
-  nav {
-    position: fixed; top: 0; width: 100%; z-index: 100;
-    background: rgba(10,10,10,0.9);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border);
-    padding: 1rem 2rem;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  nav .logo {
-    font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em;
-    display: flex; align-items: center; gap: 0.5rem;
-  }
-  nav .logo .icon { color: var(--accent); font-size: 1.3rem; }
-  nav .links { display: flex; gap: 1.5rem; align-items: center; }
-  nav .links a {
-    color: var(--text-dim); text-decoration: none; font-size: 0.9rem;
-    transition: color 0.2s;
-  }
-  nav .links a:hover { color: var(--text); }
-  .btn-nav {
-    background: var(--accent); color: #000; padding: 0.5rem 1.2rem;
-    border-radius: 6px; font-weight: 600; font-size: 0.85rem;
-    text-decoration: none; transition: all 0.2s;
-  }
-  .btn-nav:hover { background: #00eabb; transform: translateY(-1px); }
-  /* ── HERO ── */
-  .hero {
-    min-height: 100vh;
-    display: flex; flex-direction: column;
-    justify-content: center; align-items: center;
-    text-align: center;
-    padding: 8rem 2rem 4rem;
-    position: relative;
-    overflow: hidden;
-  }
-  .hero::before {
-    content: '';
-    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    background:
-      radial-gradient(ellipse at 30% 20%, var(--accent-glow) 0%, transparent 60%),
-      radial-gradient(ellipse at 70% 80%, rgba(77,159,255,0.08) 0%, transparent 60%);
-    pointer-events: none;
-  }
-  .hero-badge {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 100px; padding: 0.4rem 1rem;
-    font-size: 0.8rem; color: var(--text-dim);
-    margin-bottom: 2rem;
-  }
-  .hero-badge .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-  }  .hero h1 {
-    font-size: clamp(2.5rem, 6vw, 4.5rem);
-    font-weight: 800; letter-spacing: -0.03em;
-    line-height: 1.1; max-width: 800px;
-    margin-bottom: 1.5rem;
-  }
-  .hero h1 .highlight { color: var(--accent); }
-  .hero .subhead {
-    font-size: clamp(1.1rem, 2vw, 1.3rem);
-    color: var(--text-dim); max-width: 600px;
-    margin-bottom: 2.5rem; line-height: 1.6;
-  }
-  .hero-ctas {
-    display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
-  }
-  .btn-primary {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    background: var(--accent); color: #000; padding: 0.9rem 2rem;
-    border-radius: 8px; font-weight: 700; font-size: 1rem;
-    text-decoration: none; transition: all 0.2s;
-    box-shadow: 0 0 30px var(--accent-glow);
-  }
-  .btn-primary:hover { background: #00eabb; transform: translateY(-2px); }
-  .btn-secondary {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    background: var(--surface2); color: var(--text);
-    border: 1px solid var(--border);
-    padding: 0.9rem 2rem; border-radius: 8px;
-    font-weight: 600; font-size: 1rem;
-    text-decoration: none; transition: all 0.2s;
-  }
-  .btn-secondary:hover { border-color: var(--text-dim); transform: translateY(-2px); }
-  /* ── INSTALL BLOCK ── */
-  .install {
-    text-align: center; padding: 0 2rem 4rem;
-  }
-  .install-box {
-    display: inline-flex; align-items: center; gap: 0.75rem;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0.8rem 1.5rem;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.9rem; color: var(--accent);
-    cursor: pointer; transition: all 0.2s;
-    position: relative;
-  }
-  .install-box:hover { border-color: var(--accent); }
-  .install-box .prefix { color: var(--text-dim); }
-  .install-box .copy-hint {
-    font-family: -apple-system, sans-serif;
-    font-size: 0.75rem; color: var(--text-dim);
-  }
-
-  /* ── SECTIONS ── */
-  section { padding: 6rem 2rem; max-width: 1100px; margin: 0 auto; }
-
-  .section-label {
-    font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.1em; color: var(--accent); margin-bottom: 1rem;
-  }
-  .section-title {
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
-    font-weight: 800; letter-spacing: -0.02em;
-    line-height: 1.2; margin-bottom: 1.5rem;
-  }  .section-subtitle {
-    font-size: 1.1rem; color: var(--text-dim);
-    max-width: 650px; margin-bottom: 3rem;
-  }
-
-  /* ── PROBLEM ── */
-  .problem { border-top: 1px solid var(--border); }
-  .problem-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem; margin-top: 2rem;
-  }
-  .problem-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; padding: 2rem;
-    transition: border-color 0.3s;
-  }
-  .problem-card:hover { border-color: var(--red); }
-  .problem-card .icon { font-size: 1.5rem; margin-bottom: 1rem; }
-  .problem-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
-  .problem-card p { color: var(--text-dim); font-size: 0.95rem; }
-
-  /* ── HOW IT WORKS ── */
-  .how-it-works { border-top: 1px solid var(--border); }
-  .flow {
-    display: flex; flex-direction: column; gap: 0;
-    position: relative; margin-top: 2rem;
-  }
-  .flow::before {
-    content: '';
-    position: absolute; left: 24px; top: 24px; bottom: 24px;
-    width: 2px; background: var(--border);
-  }  .flow-step {
-    display: flex; gap: 1.5rem; align-items: flex-start;
-    padding: 1.5rem 0; position: relative;
-  }
-  .flow-step .number {
-    width: 48px; height: 48px; min-width: 48px;
-    border-radius: 50%; display: flex;
-    align-items: center; justify-content: center;
-    font-weight: 800; font-size: 1.1rem;
-    background: var(--surface2); border: 2px solid var(--accent);
-    color: var(--accent); z-index: 1;
-  }
-  .flow-step h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.4rem; }
-  .flow-step p { color: var(--text-dim); font-size: 0.95rem; }
-  .flow-step code {
-    display: inline-block; margin-top: 0.5rem;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: 0.3rem 0.7rem;
-    font-family: 'SF Mono', monospace; font-size: 0.85rem;
-    color: var(--accent);
-  }
-
-  /* ── FEATURES ── */
-  .features { border-top: 1px solid var(--border); }
-  .feature-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-  }
-  .feature-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; padding: 2rem;
-    transition: all 0.3s;
-  }  .feature-card:hover {
-    border-color: var(--accent);
-    box-shadow: 0 0 30px var(--accent-glow);
-  }
-  .feature-card .tag {
-    display: inline-block;
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.08em; padding: 0.2rem 0.6rem;
-    border-radius: 4px; margin-bottom: 1rem;
-  }
-  .tag-security { background: rgba(255,77,77,0.15); color: var(--red); }
-  .tag-performance { background: rgba(0,212,170,0.15); color: var(--accent); }
-  .tag-compliance { background: rgba(255,153,51,0.15); color: var(--orange); }
-  .tag-devex { background: rgba(77,159,255,0.15); color: var(--blue); }
-  .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
-  .feature-card p { color: var(--text-dim); font-size: 0.95rem; }
-
-  /* ── COMPLIANCE ── */
-  .compliance { border-top: 1px solid var(--border); }
-  .compliance-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem; margin-top: 2rem;
-  }
-  .compliance-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px; padding: 1.5rem;
-    text-align: center;
-  }
-  .compliance-item .emoji { font-size: 2rem; margin-bottom: 0.75rem; }
-  .compliance-item h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.3rem; }
-  .compliance-item p { color: var(--text-dim); font-size: 0.85rem; }
-  /* ── CODE PREVIEW ── */
-  .code-preview { border-top: 1px solid var(--border); }
-  .code-block {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; padding: 2rem;
-    overflow-x: auto; margin-top: 2rem;
-  }
-  .code-block pre {
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.85rem; line-height: 1.8;
-    color: var(--text-dim);
-  }
-  .code-block .comment { color: #555; }
-  .code-block .key { color: var(--accent); }
-  .code-block .str { color: var(--orange); }
-  .code-block .url { color: var(--blue); }
-
-  /* ── USE CASES ── */
-  .use-cases { border-top: 1px solid var(--border); }
-  .use-case-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem; margin-top: 2rem;
-  }
-  .use-case {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; padding: 2rem;
-  }
-  .use-case .industry {
-    font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.75rem;
-  }
-  .use-case h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
-  .use-case p { color: var(--text-dim); font-size: 0.95rem; }
-  /* ── ARCHITECTURE ── */
-  .arch { border-top: 1px solid var(--border); text-align: center; }
-  .arch-diagram {
-    display: flex; align-items: center; justify-content: center;
-    gap: 0; flex-wrap: wrap;
-    margin: 3rem auto; max-width: 900px;
-  }
-  .arch-node {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px; padding: 1.2rem 1.8rem;
-    text-align: center; min-width: 160px;
-  }
-  .arch-node.gateway {
-    border-color: var(--accent);
-    box-shadow: 0 0 30px var(--accent-glow);
-  }
-  .arch-node h4 { font-size: 0.9rem; font-weight: 700; }
-  .arch-node p { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.2rem; }
-  .arch-arrow {
-    font-size: 1.5rem; color: var(--text-dim);
-    padding: 0 0.8rem;
-  }
-
-  /* ── NUMBERS ── */
-  .numbers {
-    border-top: 1px solid var(--border);
-    text-align: center;
-  }
-  .numbers-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 2rem; margin-top: 2rem;
-  }  .stat h3 {
-    font-size: clamp(2rem, 5vw, 3rem);
-    font-weight: 800; color: var(--accent);
-  }
-  .stat p { color: var(--text-dim); font-size: 0.9rem; margin-top: 0.3rem; }
-
-  /* ── FINAL CTA ── */
-  .final-cta {
-    text-align: center; padding: 6rem 2rem 8rem;
-    max-width: 700px; margin: 0 auto;
-    border-top: 1px solid var(--border);
-  }
-  .final-cta h2 {
-    font-size: clamp(2rem, 4vw, 3rem);
-    font-weight: 800; letter-spacing: -0.02em;
-    margin-bottom: 1rem;
-  }
-  .final-cta p {
-    color: var(--text-dim); font-size: 1.1rem;
-    margin-bottom: 2.5rem;
-  }
-
-  /* ── FOOTER ── */
-  footer {
-    border-top: 1px solid var(--border);
-    text-align: center; padding: 3rem 2rem;
-    color: var(--text-dim); font-size: 0.85rem;
-  }
-  footer a { color: var(--text-dim); text-decoration: none; }
-  footer a:hover { color: var(--text); }
-  /* ── FAQ ── */
-  .faq { border-top: 1px solid var(--border); }
-  .faq-list { max-width: 800px; margin-top: 2rem; }
-  .faq-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px; padding: 0;
-    margin-bottom: 1rem;
-    transition: border-color 0.3s;
-  }
-  .faq-item:hover { border-color: var(--accent); }
-  .faq-item summary {
-    cursor: pointer; padding: 1.5rem 2rem;
-    list-style: none; display: flex; align-items: center;
-    justify-content: space-between;
-  }
-  .faq-item summary::-webkit-details-marker { display: none; }
-  .faq-item summary::after {
-    content: '+'; font-size: 1.3rem; font-weight: 300;
-    color: var(--accent); min-width: 24px; text-align: center;
-    transition: transform 0.2s;
-  }
-  .faq-item[open] summary::after { content: '−'; }
-  .faq-item summary h3 {
-    font-size: 1.05rem; font-weight: 600; margin: 0;
-  }
-  .faq-item p {
-    padding: 0 2rem 1.5rem;
-    color: var(--text-dim); font-size: 0.95rem; line-height: 1.7;
-  }
-  .faq-item code {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 4px; padding: 0.15rem 0.5rem;
-    font-family: 'SF Mono', monospace; font-size: 0.85rem;
-    color: var(--accent);
-  }
-
-  /* ── RESPONSIVE ── */
-  @media (max-width: 640px) {
-    nav { padding: 0.8rem 1rem; }
-    nav .links a:not(.btn-nav) { display: none; }
-    section { padding: 4rem 1.2rem; }
-    .arch-diagram { flex-direction: column; }
-    .arch-arrow { transform: rotate(90deg); padding: 0.5rem; }
-  }
-</style>
+<link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
+<div class="frame">
 
 <!-- NAV -->
-<nav>
-  <div class="logo">
-    <span class="icon">&#9632;</span> AIR Blackbox
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="26" height="26" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+      <path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#201e1d" stroke-width="8"></path>
+      <circle cx="48" cy="48" r="10" fill="#201e1d">
+        <animate attributeName="opacity" values="1;1;0.1;1;1" keyTimes="0;0.55;0.7;0.85;1" dur="1.8s" repeatCount="indefinite"></animate>
+      </circle>
+    </svg>
+    <span>airblackbox</span>
+  </a>
+  <div class="nav-links">
+    <a href="#how">how it works</a>
+    <a href="#features">features</a>
+    <a href="#faq">faq</a>
+    <a href="quickstart.html">quickstart</a>
+    <a href="blog/">blog</a>
+    <a href="https://github.com/airblackbox/airblackbox">github</a>
   </div>
-  <div class="links">
-    <a href="#how">How It Works</a>
-    <a href="#features">Features</a>
-    <a href="#faq">FAQ</a>
-    <a href="quickstart.html">Quickstart</a>
-    <a href="https://pypi.org/project/air-blackbox/">PyPI</a>
-    <a href="https://github.com/airblackbox/airblackbox" class="btn-nav">&#9733; Star on GitHub</a>
-  </div>
+  <a class="btn-ink btn-sm" href="https://pypi.org/project/air-blackbox/">pip install air-blackbox</a>
 </nav>
 
 <!-- HERO -->
-<div class="hero">
-  <div class="hero-badge">
-    <span class="dot"></span>
-    Open Source &middot; Apache 2.0
-  </div>  <h1>
-    EU AI Act Compliance Scanner<br>
-    <span class="highlight">for Python AI Agents</span>
-  </h1>
-  <p class="subhead">
-    Open-source scanner that checks your Python AI code against 39 EU AI Act requirements across Articles 9–15.
-    Supports LangChain, CrewAI, AutoGen, and OpenAI. Runs locally — your code never leaves your machine.
-    August 2026 deadline ready.
-  </p>
-  <div class="hero-ctas">
-    <a href="https://github.com/airblackbox/airblackbox" class="btn-primary">
-      &#9733; Star on GitHub
-    </a>
-    <a href="#how" class="btn-secondary">
-      See How It Works &darr;
-    </a>
+<div class="row row-hero">
+  <div class="cell" style="padding: 72px 40px; display: flex; flex-direction: column; gap: 28px;">
+    <div class="kicker">EU AI Act &middot; Regulation 2024/1689</div>
+    <h1 style="font-size: 58px; line-height: 1.02; letter-spacing: -0.02em; margin: 0; text-wrap: pretty;">The flight recorder for your AI stack.</h1>
+    <p style="font-size: 17px; line-height: 1.6; color: var(--color-neutral-700); margin: 0; max-width: 460px;">Open-source scanners that log, check, and prove EU AI Act compliance — before December 2027 makes it mandatory.</p>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      <a class="btn-ink" href="quickstart.html">Get started</a>
+      <a class="btn-outline" href="https://github.com/airblackbox/airblackbox">Read the spec</a>
+    </div>
+  </div>
+  <div class="terminal" style="display: flex; flex-direction: column; justify-content: center; gap: 8px;">
+    <div class="dim">$ air scan ./pipeline</div>
+    <div class="ok">&#10003; art. 12 — logging &amp; traceability</div>
+    <div class="ok">&#10003; art. 14 — human oversight</div>
+    <div class="ok">&#10003; art. 15 — accuracy &amp; robustness</div>
+    <div class="err">&#10007; art. 10 — data governance (2 findings)</div>
+    <div class="dim">audit chain signed &middot; HMAC-SHA256</div>
+    <div class="rec"><span class="rec-dot"></span><span class="rec-label">recording</span></div>
   </div>
 </div>
 
-<!-- INSTALL -->
-<div class="install">
-  <div class="install-box" onclick="navigator.clipboard.writeText('pip install air-blackbox && air-blackbox comply --scan . -v')">
-    <span class="prefix">$</span> pip install air-blackbox &amp;&amp; air-blackbox comply --scan . -v
-    <span class="copy-hint">click to copy</span>
+<!-- STAT ROW -->
+<div class="row row-3">
+  <div class="cell" style="padding: 28px 40px;">
+    <div class="stat-num">8</div>
+    <div class="stat-label">packages on PyPI</div>
+  </div>
+  <div class="cell" style="padding: 28px 40px;">
+    <div class="stat-num">Dec 2027</div>
+    <div class="stat-label">high-risk obligations apply</div>
+  </div>
+  <div class="cell" style="padding: 28px 40px;">
+    <div class="stat-num">100% open</div>
+    <div class="stat-label">Apache-2.0, no telemetry</div>
   </div>
 </div>
+
+<!-- SCAN / RECORD / PROVE -->
+<div class="row row-3">
+  <div class="cell" style="display: flex; flex-direction: column; gap: 12px;">
+    <svg width="28" height="28" viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#201e1d" stroke-width="7"></path><circle cx="48" cy="48" r="9" fill="#201e1d"></circle></svg>
+    <h3>Scan</h3>
+    <p>Point it at a repo, a pipeline, or an agent framework. Every check maps to an article, not a vibe.</p>
+  </div>
+  <div class="cell" style="display: flex; flex-direction: column; gap: 12px;">
+    <svg width="28" height="28" viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#201e1d" stroke-width="7"></path><path d="M48 48 L48 8 M48 48 L13.4 68 M48 48 L82.6 68" stroke="#201e1d" stroke-width="7"></path></svg>
+    <h3>Record</h3>
+    <p>A tamper-evident audit chain logs what your system did and when. Signed, verifiable, boring — the way evidence should be.</p>
+  </div>
+  <div class="cell" style="display: flex; flex-direction: column; gap: 12px;">
+    <svg width="28" height="28" viewBox="0 0 96 96" aria-hidden="true"><rect x="12" y="12" width="72" height="72" fill="none" stroke="#201e1d" stroke-width="7"></rect><path d="M32 48 L44 60 L66 36" stroke="#201e1d" stroke-width="7" fill="none"></path></svg>
+    <h3>Prove</h3>
+    <p>Export evidence bundles an auditor can actually read — mapped to ISO 42001 and NIST AI RMF.</p>
+  </div>
+</div>
+
 <!-- PROBLEM -->
-<section class="problem">
-  <div class="section-label">The Problem</div>
-  <h2 class="section-title">Your AI is making decisions.<br>Can you prove what it said?</h2>
-  <p class="section-subtitle">
-    Every company using LLM APIs has the same blind spot. Calls go out. Responses come back. Nothing in between is recorded, verifiable, or auditable.
-  </p>
-  <div class="problem-grid">
-    <div class="problem-card">
-      <div class="icon">&#128683;</div>
-      <h3>No Audit Trail</h3>
+<section id="problem">
+  <div class="section-head">
+    <div class="kicker kicker-accent">The Problem</div>
+    <h2>Your AI is making decisions.<br>Can you prove what it said?</h2>
+    <p class="section-sub">Every company using LLM APIs has the same blind spot. Calls go out. Responses come back. Nothing in between is recorded, verifiable, or auditable.</p>
+  </div>
+  <div class="row row-3">
+    <div class="cell">
+      <h3>No audit trail</h3>
       <p>When a regulator asks "what did your AI tell that customer?", you're digging through logs that don't exist. OpenAI doesn't store your prompts for you.</p>
     </div>
-    <div class="problem-card">
-      <div class="icon">&#128274;</div>
-      <h3>Plaintext API Keys in Transit</h3>
+    <div class="cell">
+      <h3>Plaintext API keys in transit</h3>
       <p>Every developer on your team has the API key. Every request carries it in cleartext. One leaked key = unlimited spend on your dime.</p>
     </div>
-    <div class="problem-card">
-      <div class="icon">&#9888;</div>
-      <h3>Zero Replay Capability</h3>
+    <div class="cell">
+      <h3>Zero replay capability</h3>
       <p>Model got updated? Output changed? Good luck proving what the old version said. Without recorded request/response pairs, you can't reproduce anything.</p>
     </div>
   </div>
 </section>
+
 <!-- HOW IT WORKS -->
-<section class="how-it-works" id="how">
-  <div class="section-label">How It Works</div>
-  <h2 class="section-title">One line change. Complete coverage.</h2>
-  <p class="section-subtitle">
-    Point your app at the gateway instead of the provider. That's it. Everything else is automatic.
-  </p>
-  <div class="flow">
-    <div class="flow-step">
-      <div class="number">1</div>
-      <div>
-        <h3>Your App Sends a Request</h3>
-        <p>Change your base URL from <code>api.openai.com</code> to <code>localhost:8080</code>. Same SDK. Same code. Same everything.</p>
-      </div>
+<section id="how">
+  <div class="section-head">
+    <div class="kicker kicker-accent">How It Works</div>
+    <h2>One line change. Complete coverage.</h2>
+    <p class="section-sub">Point your app at the gateway instead of the provider. That's it. Everything else is automatic.</p>
+  </div>
+  <div class="row row-4">
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 10px;">01</div>
+      <h3>Your app sends a request</h3>
+      <p>Change your base URL from <code>api.openai.com</code> to <code>localhost:8080</code>. Same SDK. Same code. Same everything.</p>
     </div>
-    <div class="flow-step">
-      <div class="number">2</div>
-      <div>
-        <h3>Gateway Authenticates &amp; Proxies</h3>
-        <p>The gateway checks your gateway key, forwards the request to the upstream provider, and streams the response back in real-time. Sub-millisecond overhead.</p>
-      </div>
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 10px;">02</div>
+      <h3>Gateway authenticates &amp; proxies</h3>
+      <p>The gateway checks your gateway key, forwards the request upstream, and streams the response back in real time. Sub-millisecond overhead.</p>
     </div>
-    <div class="flow-step">
-      <div class="number">3</div>
-      <div>
-        <h3>AIR Record Created (Background)</h3>
-        <p>A tamper-evident <strong>.air.json</strong> record is written asynchronously. Contains: request, response, model, tokens, timestamp, run ID. Never blocks your response.</p>
-      </div>
-    </div>    <div class="flow-step">
-      <div class="number">4</div>
-      <div>
-        <h3>Secrets Vault-Encrypted</h3>
-        <p>API keys and auth headers are stripped from the AIR record and encrypted separately. Even if someone gets the audit file, they can't extract credentials.</p>
-      </div>
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 10px;">03</div>
+      <h3>AIR record created</h3>
+      <p>A tamper-evident <strong>.air.json</strong> record is written asynchronously: request, response, model, tokens, timestamp, run ID. Never blocks your response.</p>
+    </div>
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 10px;">04</div>
+      <h3>Secrets vault-encrypted</h3>
+      <p>API keys and auth headers are stripped from the AIR record and encrypted separately. Even with the audit file, credentials can't be extracted.</p>
     </div>
   </div>
 </section>
 
-<!-- FEATURES -->
-<section class="features" id="features">
-  <div class="section-label">Features</div>
-  <h2 class="section-title">Built for production. Not a weekend hack.</h2>
-  <div class="feature-grid">
-    <div class="feature-card">
-      <div class="tag tag-security">Security</div>
-      <h3>Gateway-Level Auth</h3>
-      <p>X-Gateway-Key header authentication. Your upstream API keys never leave the server. Developers hit the gateway, not the provider.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-security">Security</div>
-      <h3>Encrypted Vault</h3>
-      <p>Secrets are AES-encrypted and stored in a separate vault (local or S3-compatible). AIR records contain zero plaintext credentials.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-performance">Performance</div>
-      <h3>Non-Blocking Writes</h3>
-      <p>Audit records write in background goroutines. Vault writes are async. Your response latency is the provider's latency. Period.</p>
-    </div>    <div class="feature-card">
-      <div class="tag tag-performance">Performance</div>
-      <h3>SSE Streaming</h3>
-      <p>Full support for streaming responses (Server-Sent Events). Tokens stream to your app in real-time while the gateway records the complete response.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-compliance">Compliance</div>
-      <h3>Tamper-Evident Records</h3>
-      <p>Each AIR record includes cryptographic hashes. If anyone modifies a record after the fact, the hash breaks. Provable integrity.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-compliance">Compliance</div>
-      <h3>Replay &amp; Diff</h3>
-      <p>Replay recorded requests against current models. Compare outputs. Detect when a model update changed behavior. Regression testing for AI.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-compliance">Trust Layer</div>
-      <h3>Cryptographic Audit Chain</h3>
-      <p>Every AIR record is linked via HMAC-SHA256 into a tamper-proof chain. Modify any record and the chain breaks. Blockchain-grade integrity without the blockchain.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-compliance">Trust Layer</div>
-      <h3>SOC 2 &amp; ISO 27001 Mapping</h3>
-      <p>Automatic compliance evaluation against 22 controls across SOC 2 Trust Service Criteria and ISO 27001 Annex A. Pass/fail status based on your live configuration.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-compliance">Trust Layer</div>
-      <h3>Evidence Export for Regulators</h3>
-      <p>One API call generates a signed evidence package: audit chain, compliance report, and HMAC attestation. Hand it to your auditor as-is.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-devex">Developer Experience</div>
-      <h3>Docker Compose Ready</h3>
-      <p>One command to run. No MinIO dependency required. Works with local filesystem or S3-compatible storage. Your choice.</p>
-    </div>
-    <div class="feature-card">
-      <div class="tag tag-devex">Developer Experience</div>
-      <h3>Provider Agnostic</h3>
-      <p>Works with any OpenAI-compatible API. OpenAI, Anthropic (via proxy), Azure OpenAI, local models, custom endpoints. Same format.</p>
-    </div>
+<!-- INTEGRATION -->
+<section id="integration">
+  <div class="section-head">
+    <div class="kicker kicker-accent">Integration</div>
+    <h2>Change one line. That's the integration.</h2>
   </div>
-</section>
-<!-- ARCHITECTURE -->
-<section class="arch">
-  <div class="section-label">Architecture</div>
-  <h2 class="section-title">Simple by design</h2>
-  <div class="arch-diagram">
-    <div class="arch-node">
-      <h4>Your App</h4>
-      <p>SDK / HTTP client</p>
-    </div>
-    <div class="arch-arrow">&rarr;</div>
-    <div class="arch-node gateway">
-      <h4>AIR Gateway</h4>
-      <p>Auth + Record + Proxy</p>
-    </div>
-    <div class="arch-arrow">&rarr;</div>
-    <div class="arch-node">
-      <h4>LLM Provider</h4>
-      <p>OpenAI / Anthropic / etc</p>
-    </div>
-  </div>
-  <div class="arch-diagram" style="margin-top: 0;">
-    <div class="arch-node" style="border-color: var(--orange);">
-      <h4>AIR Records</h4>
-      <p>Tamper-evident JSON</p>
-    </div>
-    <div style="padding: 0 1.5rem; color: var(--text-dim);">+</div>
-    <div class="arch-node" style="border-color: var(--red);">
-      <h4>Secret Vault</h4>
-      <p>AES-encrypted keys</p>
-    </div>
-    <div style="padding: 0 1.5rem; color: var(--text-dim);">+</div>
-    <div class="arch-node" style="border-color: var(--accent);">
-      <h4>Trust Layer</h4>
-      <p>HMAC chain + compliance</p>
-    </div>
-  </div>
-</section>
-<!-- USE CASES -->
-<section class="use-cases" id="use-cases">
-  <div class="section-label">Who It's For</div>
-  <h2 class="section-title">If you're calling an LLM API,<br>you probably need this.</h2>
-  <div class="use-case-grid">
-    <div class="use-case">
-      <div class="industry">Healthcare</div>
-      <h3>AI-Assisted Clinical Decisions</h3>
-      <p>When your AI suggests a diagnosis or treatment path, regulators will want to see exactly what was asked and what was returned. AIR gives you that record, encrypted and timestamped.</p>
-    </div>
-    <div class="use-case">
-      <div class="industry">Financial Services</div>
-      <h3>Algorithmic Compliance</h3>
-      <p>Trading desks and advisory platforms using LLMs for research or recommendations need audit trails that prove what the model said — not what someone remembers it said.</p>
-    </div>
-    <div class="use-case">
-      <div class="industry">Legal</div>
-      <h3>AI-Generated Documents</h3>
-      <p>Law firms using AI for contract review, brief drafting, or legal research need to prove the provenance of AI-assisted work. AIR records create that chain of custody.</p>
-    </div>
-    <div class="use-case">
-      <div class="industry">Enterprise / SaaS</div>
-      <h3>Customer-Facing AI Features</h3>
-      <p>Building a chatbot? An AI assistant? When a customer disputes what your AI told them, you need receipts. Every conversation, every token, every timestamp.</p>
-    </div>
-  </div>
-</section>
-<!-- CODE PREVIEW -->
-<section class="code-preview">
-  <div class="section-label">Integration</div>
-  <h2 class="section-title">Change one line. That's the integration.</h2>
-  <div class="code-block">
-<pre><span class="comment"># Before (direct to OpenAI)</span>
+  <div class="row"><div class="cell" style="padding: 0 40px 48px;">
+    <div class="codeblock"><pre><span class="comment"># Before (direct to OpenAI)</span>
 client = OpenAI(
     <span class="key">api_key</span>=<span class="str">"sk-..."</span>,
-    <span class="key">base_url</span>=<span class="url">"https://api.openai.com/v1"</span>
+    <span class="key">base_url</span>=<span class="str">"https://api.openai.com/v1"</span>
 )
 
 <span class="comment"># After (through AIR Gateway)</span>
 client = OpenAI(
     <span class="key">api_key</span>=<span class="str">"sk-..."</span>,
-    <span class="key">base_url</span>=<span class="url">"http://localhost:8080/v1"</span>,
+    <span class="key">base_url</span>=<span class="str">"http://localhost:8080/v1"</span>,
     <span class="key">default_headers</span>={<span class="str">"X-Gateway-Key"</span>: <span class="str">"your-gateway-key"</span>}
-)</pre>
+)</pre></div>
+  </div></div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-head">
+    <div class="kicker kicker-accent">Features</div>
+    <h2>Built for production. Not a weekend hack.</h2>
+  </div>
+  <div class="row row-3">
+    <div class="cell"><div class="tag">Security</div><h3>Gateway-level auth</h3><p>X-Gateway-Key header authentication. Your upstream API keys never leave the server. Developers hit the gateway, not the provider.</p></div>
+    <div class="cell"><div class="tag">Security</div><h3>Encrypted vault</h3><p>Secrets are AES-encrypted and stored in a separate vault (local or S3-compatible). AIR records contain zero plaintext credentials.</p></div>
+    <div class="cell"><div class="tag tag-neutral">Performance</div><h3>Non-blocking writes</h3><p>Audit records write in background goroutines. Vault writes are async. Your response latency is the provider's latency. Period.</p></div>
+  </div>
+  <div class="row row-3">
+    <div class="cell"><div class="tag tag-neutral">Performance</div><h3>SSE streaming</h3><p>Full support for streaming responses. Tokens stream to your app in real time while the gateway records the complete response.</p></div>
+    <div class="cell"><div class="tag">Compliance</div><h3>Tamper-evident records</h3><p>Each AIR record includes cryptographic hashes. If anyone modifies a record after the fact, the hash breaks. Provable integrity.</p></div>
+    <div class="cell"><div class="tag">Compliance</div><h3>Replay &amp; diff</h3><p>Replay recorded requests against current models. Compare outputs. Detect when a model update changed behavior. Regression testing for AI.</p></div>
+  </div>
+  <div class="row row-3">
+    <div class="cell"><div class="tag">Trust Layer</div><h3>Cryptographic audit chain</h3><p>Every AIR record is linked via HMAC-SHA256 into a tamper-proof chain. Modify any record and the chain breaks. Blockchain-grade integrity without the blockchain.</p></div>
+    <div class="cell"><div class="tag">Trust Layer</div><h3>SOC 2 &amp; ISO 27001 mapping</h3><p>Automatic compliance evaluation against 22 controls across SOC 2 Trust Service Criteria and ISO 27001 Annex A, from your live configuration.</p></div>
+    <div class="cell"><div class="tag">Trust Layer</div><h3>Evidence export for regulators</h3><p>One API call generates a signed evidence package: audit chain, compliance report, and HMAC attestation. Hand it to your auditor as-is.</p></div>
+  </div>
+  <div class="row row-3">
+    <div class="cell"><div class="tag tag-neutral">Developer Experience</div><h3>Docker Compose ready</h3><p>One command to run. No MinIO dependency required. Works with local filesystem or S3-compatible storage. Your choice.</p></div>
+    <div class="cell"><div class="tag tag-neutral">Developer Experience</div><h3>Provider agnostic</h3><p>Works with any OpenAI-compatible API. OpenAI, Anthropic (via proxy), Azure OpenAI, local models, custom endpoints. Same format.</p></div>
+    <div class="cell"><div class="tag tag-neutral">Developer Experience</div><h3>MCP server included</h3><p><code>pip install air-blackbox-mcp</code> puts the scanner inside Claude Desktop, Claude Code, and Cursor — scan and remediate from your editor.</p></div>
   </div>
 </section>
+
+<!-- USE CASES -->
+<section id="use-cases">
+  <div class="section-head">
+    <div class="kicker kicker-accent">Who It's For</div>
+    <h2>If you're calling an LLM API,<br>you probably need this.</h2>
+  </div>
+  <div class="row row-2">
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 8px;">Healthcare</div>
+      <h3>AI-assisted clinical decisions</h3>
+      <p>When your AI suggests a diagnosis or treatment path, regulators will want to see exactly what was asked and what was returned. AIR gives you that record, encrypted and timestamped.</p>
+    </div>
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 8px;">Financial Services</div>
+      <h3>Algorithmic compliance</h3>
+      <p>Trading desks and advisory platforms using LLMs for research or recommendations need audit trails that prove what the model said — not what someone remembers it said.</p>
+    </div>
+  </div>
+  <div class="row row-2">
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 8px;">Legal</div>
+      <h3>AI-generated documents</h3>
+      <p>Law firms using AI for contract review, brief drafting, or legal research need to prove the provenance of AI-assisted work. AIR records create that chain of custody.</p>
+    </div>
+    <div class="cell">
+      <div class="kicker" style="margin-bottom: 8px;">Enterprise / SaaS</div>
+      <h3>Customer-facing AI features</h3>
+      <p>Building a chatbot? An AI assistant? When a customer disputes what your AI told them, you need receipts. Every conversation, every token, every timestamp.</p>
+    </div>
+  </div>
+</section>
+
 <!-- NUMBERS -->
-<section class="numbers">
-  <div class="section-label">By The Numbers</div>
-  <h2 class="section-title">Lightweight. Auditable. Open.</h2>
-  <div class="numbers-grid">
-    <div class="stat">
-      <h3>39</h3>
-      <p>Automated compliance checks (26 static + 13 runtime)</p>
+<section id="numbers">
+  <div class="section-head">
+    <div class="kicker kicker-accent">By The Numbers</div>
+    <h2>Lightweight. Auditable. Open.</h2>
+  </div>
+  <div class="row row-4">
+    <div class="cell" style="padding: 28px 40px;"><div class="stat-num">39</div><div class="stat-label">automated compliance checks (26 static + 13 runtime)</div></div>
+    <div class="cell" style="padding: 28px 40px;"><div class="stat-num">6</div><div class="stat-label">EU AI Act articles covered (9, 10, 11, 12, 14, 15)</div></div>
+    <div class="cell" style="padding: 28px 40px;"><div class="stat-num">8</div><div class="stat-label">PyPI packages in the ecosystem</div></div>
+    <div class="cell" style="padding: 28px 40px;"><div class="stat-num">5</div><div class="stat-label">framework trust layers (LangChain, CrewAI, AutoGen, OpenAI, RAG)</div></div>
+  </div>
+</section>
+
+<!-- CLI DEMO -->
+<section id="demo">
+  <div class="section-head">
+    <div class="kicker kicker-accent">See It In Action</div>
+    <h2>Four commands. Full coverage.</h2>
+    <p class="section-sub">Run this on any Python AI project and get a compliance report, shadow AI scan, replayable audit trail, and signed evidence package — in under 60 seconds.</p>
+  </div>
+  <div class="row"><div class="cell" style="padding: 0 40px 40px;">
+    <img src="airblackbox_demo.gif" alt="AIR Blackbox CLI demo" style="border: 2px solid var(--color-divider);" />
+  </div></div>
+  <div class="row row-4">
+    <div class="cell">
+      <div style="font-family: var(--font-mono); font-size: 14px; font-weight: 600; margin-bottom: 8px;">air-blackbox comply</div>
+      <p>Scans your project against 6 EU AI Act articles. Flags HIGH and MEDIUM severity gaps with exact file references.</p>
     </div>
-    <div class="stat">
-      <h3>6</h3>
-      <p>EU AI Act articles covered (9, 10, 11, 12, 14, 15)</p>
+    <div class="cell">
+      <div style="font-family: var(--font-mono); font-size: 14px; font-weight: 600; margin-bottom: 8px;">air-blackbox discover</div>
+      <p>Finds undeclared model calls hiding in utility functions and helpers — your shadow AI inventory.</p>
     </div>
-    <div class="stat">
-      <h3>8</h3>
-      <p>PyPI packages in the ecosystem</p>
+    <div class="cell">
+      <div style="font-family: var(--font-mono); font-size: 14px; font-weight: 600; margin-bottom: 8px;">air-blackbox replay</div>
+      <p>Loads any past episode from the audit chain, verifies the HMAC-SHA256 signature, and replays every step with timestamps.</p>
     </div>
-    <div class="stat">
-      <h3>5</h3>
-      <p>Framework trust layers (LangChain, CrewAI, AutoGen, OpenAI, RAG)</p>
+    <div class="cell">
+      <div style="font-family: var(--font-mono); font-size: 14px; font-weight: 600; margin-bottom: 8px;">air-blackbox export</div>
+      <p>Generates a cryptographically signed evidence package with AI-BOM, compliance report, and audit chain — ready for regulators.</p>
     </div>
   </div>
 </section>
 
-<!-- CLI DEMO SECTION -->
-<section class="cli-demo" id="demo">
-  <div class="section-label">See It In Action</div>
-  <h2 class="section-title">Four commands. Full coverage.</h2>
-  <p class="section-subtitle">
-    Run this on any Python AI project and get a compliance report, shadow AI scan,
-    replayable audit trail, and signed evidence package — in under 60 seconds.
-  </p>
-  <div class="demo-gif-wrap">
-    <img src="airblackbox_demo.gif" alt="AIR Blackbox CLI demo" class="demo-gif" />
-  </div>
-  <div class="demo-steps">
-    <div class="demo-step">
-      <div class="demo-step-cmd">air-blackbox comply</div>
-      <div class="demo-step-desc">Scans your project against 6 EU AI Act articles. Flags HIGH and MEDIUM severity gaps with exact file references.</div>
-    </div>
-    <div class="demo-step">
-      <div class="demo-step-cmd">air-blackbox discover</div>
-      <div class="demo-step-desc">Finds undeclared model calls hiding in utility functions and helpers — your shadow AI inventory.</div>
-    </div>
-    <div class="demo-step">
-      <div class="demo-step-cmd">air-blackbox replay</div>
-      <div class="demo-step-desc">Loads any past episode from the audit chain, verifies the HMAC-SHA256 signature, and replays every step with timestamps.</div>
-    </div>
-    <div class="demo-step">
-      <div class="demo-step-cmd">air-blackbox export</div>
-      <div class="demo-step-desc">Generates a cryptographically signed evidence package with AI-BOM, compliance report, and audit chain — ready for regulators.</div>
-    </div>
-  </div>
-  <div style="text-align:center; margin-top: 3rem;">
-    <a href="https://github.com/airblackbox/airblackbox" class="btn-primary">Try It Yourself &rarr;</a>
-  </div>
-</section>
+<!-- POSTER STATEMENT -->
+<div class="panel-ink" style="padding: 88px 40px; border-bottom: 2px solid var(--color-divider); display: flex; flex-direction: column; gap: 24px;">
+  <svg width="56" height="56" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+    <path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#f3f2f2" stroke-width="6"></path>
+    <circle cx="48" cy="48" r="8" fill="#f3f2f2">
+      <animate attributeName="opacity" values="1;1;0.1;1;1" keyTimes="0;0.55;0.7;0.85;1" dur="1.8s" repeatCount="indefinite"></animate>
+    </circle>
+  </svg>
+  <div style="font-family: var(--font-heading); font-weight: 800; font-size: 46px; line-height: 1.05; letter-spacing: -0.02em; color: #f3f2f2; max-width: 720px; text-wrap: pretty;">Still on when everything else is dark.</div>
+  <div class="muted" style="font-size: 15px; max-width: 520px; line-height: 1.6;">When the auditor calls, the question isn't whether your AI worked. It's whether you can prove what it did.</div>
+</div>
 
-<!-- FAQ (AEO-critical — this is what LLMs extract) -->
-<section class="faq" id="faq">
-  <div class="section-label">Frequently Asked Questions</div>
-  <h2 class="section-title">Everything you need to know about AIR Blackbox</h2>
-
-  <div class="faq-list">
+<!-- FAQ -->
+<section id="faq">
+  <div class="section-head">
+    <div class="kicker kicker-accent">Frequently Asked Questions</div>
+    <h2>Everything you need to know about AIR Blackbox</h2>
+  </div>
+  <div style="padding: 8px 40px 56px; border-bottom: 2px solid var(--color-divider);">
     <details class="faq-item" open>
       <summary><h3>What is AIR Blackbox?</h3></summary>
       <p>AIR Blackbox is an open-source EU AI Act compliance scanner for Python AI agents. It runs 39 automated checks across 6 EU AI Act articles (9, 10, 11, 12, 14, 15) against your source code and runtime configuration. It supports LangChain, CrewAI, AutoGen, OpenAI Agents SDK, and RAG pipelines. Install with <code>pip install air-blackbox</code> and scan with <code>air-blackbox comply --scan . -v</code>. The entire tool runs locally — your code never leaves your machine.</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>What EU AI Act articles does it check?</h3></summary>
       <p>AIR Blackbox checks 6 articles: <strong>Article 9</strong> (Risk Management — error handling, fallbacks, risk assessment), <strong>Article 10</strong> (Data Governance — input validation, PII handling, data quality), <strong>Article 11</strong> (Technical Documentation — docstrings, type hints, README, model cards), <strong>Article 12</strong> (Record-Keeping — logging, tracing, audit trails, observability), <strong>Article 14</strong> (Human Oversight — HITL gates, kill switches, rate limits, identity binding), and <strong>Article 15</strong> (Accuracy &amp; Security — injection defense, output validation, retry logic). Each check is classified as static (verifiable from source code) or runtime (requires gateway/trust layer).</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>How does two-tier scoring work?</h3></summary>
       <p>Two-tier scoring separates the 39 checks into two categories: <strong>26 Static checks</strong> analyze code patterns, documentation, and configuration that can be verified from source code alone. <strong>13 Runtime checks</strong> require a running gateway or trust layer to verify (PII detection in live prompts, tamper-evident audit chains, kill switches). This gives teams a realistic compliance score even without the full gateway deployed — you can pass all static checks immediately and work toward runtime compliance incrementally.</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>When is the EU AI Act deadline?</h3></summary>
-      <p>The key deadline for high-risk AI systems is <strong>August 2, 2026</strong>. Penalties for non-compliance can reach up to <strong>&euro;35 million or 7% of global annual turnover</strong>, whichever is higher. Prohibited AI practices enforcement began February 2, 2025. GPAI model obligations apply from August 2, 2025. Full enforcement begins August 2, 2027.</p>
+      <p>The key deadline for high-risk AI systems is <strong>December 2027</strong>, pushed back from the original August 2, 2026 date. Penalties for non-compliance can reach up to <strong>&euro;35 million or 7% of global annual turnover</strong>, whichever is higher. Prohibited AI practices enforcement began February 2, 2025. GPAI model obligations apply from August 2, 2025. The delay moves the audit date, not the evidence problem: records have to exist from the day your system runs, not from the day enforcement starts.</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>What frameworks does AIR Blackbox support?</h3></summary>
       <p>AIR Blackbox has trust layer integrations for <strong>LangChain</strong> (<code>pip install air-langchain-trust</code>), <strong>CrewAI</strong> (<code>pip install air-crewai-trust</code>), <strong>AutoGen</strong> (<code>pip install air-autogen-trust</code>), <strong>OpenAI Agents SDK</strong> (<code>pip install air-openai-trust</code>), and <strong>RAG pipelines</strong> (<code>pip install air-rag-trust</code>). The compliance scanner works on any Python AI code regardless of framework. There's also an MCP server (<code>pip install air-blackbox-mcp</code>) for Claude Desktop and Cursor integration.</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>How does it compare to Credo AI, Holistic AI, or OneTrust?</h3></summary>
       <p>Enterprise AI governance platforms (Credo AI, Holistic AI, Vanta, OneTrust) typically cost $50,000+/year and require sending code to their cloud. AIR Blackbox is <strong>free, open source (Apache 2.0), and runs 100% locally</strong>. It focuses specifically on EU AI Act technical requirements for Python AI agents. The developer experience is fundamentally different: <code>pip install</code> and scan in 10 seconds, versus weeks of procurement and enterprise deployment. AIR Blackbox is a linter for AI governance — lightweight, fast, and integrated into developer workflows via CLI, pre-commit hooks, and GitHub Actions.</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>Is AIR Blackbox free?</h3></summary>
       <p>Yes, AIR Blackbox is 100% free and open source under the Apache 2.0 license. All 8 PyPI packages (scanner, 5 trust layers, MCP server, GitHub Action) are free. There is no paid tier, no freemium model, and no telemetry. The project runs entirely locally by design.</p>
     </details>
-
     <details class="faq-item">
       <summary><h3>What is the HMAC-SHA256 audit chain?</h3></summary>
       <p>Every AI action logged through the AIR gateway or trust layers is written as a tamper-evident <code>.air.json</code> record. Each record is linked to the previous one via HMAC-SHA256 cryptographic hashes — creating a blockchain-style chain without the blockchain. If anyone modifies a record after the fact, the hash chain breaks and the tampering is detectable. This provides auditor-grade evidence that AI decisions were recorded accurately and haven't been altered.</p>
@@ -971,37 +512,30 @@ client = OpenAI(
 </section>
 
 <!-- FINAL CTA -->
-<div class="final-cta">
-  <h2>EU AI Act deadline is <span style="color: var(--accent);">August 2026</span>.</h2>
-  <p>
-    39 checks. 6 articles. 5 frameworks. One pip install.<br>
-    Start scanning your Python AI agents today.
-  </p>
-  <div style="margin-bottom: 2rem;">
+<div style="padding: 72px 40px; border-bottom: 2px solid var(--color-divider); display: flex; flex-direction: column; gap: 20px;">
+  <h2 style="font-size: 40px; letter-spacing: -0.02em; margin: 0; text-wrap: pretty;">EU AI Act high-risk deadline is <span style="color: var(--color-accent);">December 2027</span>.</h2>
+  <p style="font-size: 16px; color: var(--color-neutral-700); margin: 0;">39 checks. 6 articles. 5 frameworks. One pip install.</p>
+  <div>
     <div class="install-box" onclick="navigator.clipboard.writeText('pip install air-blackbox')">
       <span class="prefix">$</span> pip install air-blackbox
       <span class="copy-hint">click to copy</span>
     </div>
   </div>
-  <div class="hero-ctas">
-    <a href="https://github.com/airblackbox/airblackbox" class="btn-primary">
-      &#9733; Star on GitHub
-    </a>
-    <a href="https://pypi.org/project/air-blackbox/" class="btn-secondary">
-      View on PyPI
-    </a>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+    <a class="btn-ink" href="https://github.com/airblackbox/airblackbox">&#9733; Star on GitHub</a>
+    <a class="btn-outline" href="https://pypi.org/project/air-blackbox/">View on PyPI</a>
   </div>
 </div>
 
 <!-- FOOTER -->
-<footer>
-  <p>
-    AIR Blackbox Gateway &middot; Built by
-    <a href="https://github.com/airblackbox">@airblackbox</a>
-    &middot; Apache 2.0 License &middot;
-    <a href="https://pypi.org/project/air-blackbox/">PyPI</a>
-  </p>
+<footer class="footer">
+  <div class="brand">
+    <svg width="18" height="18" viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#201e1d" stroke-width="10"></path><circle cx="48" cy="48" r="12" fill="#201e1d"></circle></svg>
+    <span>airblackbox</span>
+  </div>
+  <span class="right">Apache-2.0 &middot; <a href="https://github.com/airblackbox">github.com/airblackbox</a> &middot; <a href="https://pypi.org/project/air-blackbox/">PyPI</a></span>
 </footer>
 
+</div>
 </body>
 </html>

@@ -23,7 +23,7 @@ Your AI agent makes a call. The gateway records it. The compliance engine maps i
 
 One reverse proxy. One Python package. 90% of compliance checks automated.
 
-The EU AI Act high-risk deadline is August 2, 2026. Penalties up to €35M or 7% of global turnover.
+The EU AI Act high-risk deadline is December 2027 (pushed back from August 2, 2026). Penalties up to €35M or 7% of global turnover.
 
 Most companies have no idea how to comply. Enterprise tools cost $50K+/year. We're open-source and free.
 
@@ -52,7 +52,7 @@ PyPI: https://pypi.org/project/air-blackbox/
 
 ---
 
-The EU AI Act enforcement deadline for high-risk AI systems is August 2, 2026. If you're building AI agents with LangChain, CrewAI, OpenAI, or any Python framework — and you're selling into EU markets — you'll need to prove compliance.
+The EU AI Act enforcement deadline for high-risk AI systems is December 2027 (pushed back from August 2, 2026). If you're building AI agents with LangChain, CrewAI, OpenAI, or any Python framework — and you're selling into EU markets — you'll need to prove compliance.
 
 I built AIR Blackbox to make that as simple as `pip install air-blackbox`.
 
@@ -197,7 +197,7 @@ Open source. Apache 2.0. Feedback welcome.
 
 **Title:** I built a CLI that checks your AI agent for EU AI Act compliance — 20 checks, 90% automated, CycloneDX AI-BOM included
 
-The EU AI Act high-risk deadline is August 2, 2026 and most teams building with LangChain, CrewAI, or the OpenAI SDK haven't started thinking about compliance.
+The EU AI Act high-risk deadline is December 2027 and most teams building with LangChain, CrewAI, or the OpenAI SDK haven't started thinking about compliance.
 
 I built `air-blackbox` — a Python CLI that runs 20 compliance checks against EU AI Act Articles 9-15, generates CycloneDX AI-BOMs from observed traffic, detects shadow AI (unapproved models), and produces signed evidence bundles for auditors.
 

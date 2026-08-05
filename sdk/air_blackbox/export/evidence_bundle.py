@@ -30,8 +30,13 @@ V1_REQUIRED_FILES = (
     "verification/chain.json",
     "verification/receipts.json",
     "verification/public_key.pem",
-    "mapping/sb24-205.json",
 )
+
+#: A bundle must carry at least one regulator mapping. The member NAME is not
+#: pinned: bundles generated before Colorado repealed SB 24-205 contain
+#: mapping/sb24-205.json, current ones mapping/sb26-189.json, and both must
+#: keep verifying - evidence outlives the statutes it was mapped to.
+V1_MAPPING_PREFIX = "mapping/"
 
 
 def generate_evidence_zip(
@@ -105,11 +110,11 @@ def generate_evidence_zip(
 # Evidence Bundle v1 (.air-evidence) - structured, signed, regulator-mappable.
 # Layout per the AIR Evidence Bundle v1 spec:
 #   manifest.json  records/actions.jsonl  verification/{chain,receipts}.json
-#   verification/public_key.pem  mapping/sb24-205.json  attachments/*
+#   verification/public_key.pem  mapping/sb26-189.json  attachments/*
 # ---------------------------------------------------------------------------
 
 #: Screening actions: records with these action names (or an explicit
-#: "screening" object) evidence consequential decisions under SB 24-205.
+#: "screening" object) evidence consequential decisions under SB 26-189.
 _SCREENING_ACTIONS = frozenset(
     {"advance_candidate", "reject_candidate", "score_candidate",
      "rank_candidates", "schedule_interview"})
@@ -159,8 +164,14 @@ def _pem_public_key(public_key_hex: str) -> str:
                 "-----END AIR PUBLIC KEY HEX-----\n")
 
 
-def _retention_until(created: datetime, years: int = 3) -> str:
-    """SB 24-205 retention floor: created + 3 years (Feb 29 clamps to 28)."""
+def _retention_until(created: datetime, years: int = 4) -> str:
+    """Retention floor: created + 4 years (Feb 29 clamps to 28).
+
+    Was 3 years under SB 24-205; that statute was repealed before taking
+    effect and SB 26-189 carries no explicit retention scheme, so the floor
+    now follows California's FEHA automated-decision-system rules (4-year
+    record retention), the strictest surviving requirement for hiring AI.
+    """
     try:
         return created.replace(year=created.year + years).date().isoformat()
     except ValueError:
@@ -257,7 +268,7 @@ def generate_evidence_bundle_v1(
     }, indent=2, default=str)
 
     public_key_pem = _pem_public_key(signer.public_key_hex or "")
-    mapping_doc = _load_framework_mapping("sb24-205")
+    mapping_doc = _load_framework_mapping("sb26-189")
 
     # --- attachments (deployer-supplied documents ride along, digested and
     # therefore covered by the manifest signature).
@@ -280,7 +291,7 @@ def generate_evidence_bundle_v1(
             receipts_doc.encode()).hexdigest(),
         "verification/public_key.pem": hashlib.sha256(
             public_key_pem.encode()).hexdigest(),
-        "mapping/sb24-205.json": hashlib.sha256(
+        "mapping/sb26-189.json": hashlib.sha256(
             mapping_doc.encode()).hexdigest(),
     }
     for name, blob in attachments.items():
@@ -304,10 +315,12 @@ def generate_evidence_bundle_v1(
         },
         "counts": counts,
         "retention_until": _retention_until(now),
-        "retention_note": ("SB 24-205 requires retention for 3 years after "
-                           "the system is discontinued; this date assumes "
-                           "discontinuation no earlier than export."),
-        "frameworks": ["CO-SB24-205"],
+        "retention_note": ("4-year floor per California FEHA "
+                           "automated-decision-system record-keeping rules "
+                           "(SB 26-189, which replaced the repealed "
+                           "SB 24-205, sets no explicit retention period); "
+                           "computed from export time."),
+        "frameworks": ["CO-SB26-189"],
         "outcome_monitoring": "deployer-supplied",
         "anchor": anchor_manifest or {"status": "absent"},
         "files": files,
@@ -337,7 +350,7 @@ def generate_evidence_bundle_v1(
         zf.writestr("verification/chain.json", chain_doc)
         zf.writestr("verification/receipts.json", receipts_doc)
         zf.writestr("verification/public_key.pem", public_key_pem)
-        zf.writestr("mapping/sb24-205.json", mapping_doc)
+        zf.writestr("mapping/sb26-189.json", mapping_doc)
         for name, blob in attachments.items():
             zf.writestr(name, blob)
 

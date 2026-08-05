@@ -150,7 +150,7 @@ FAIL: Chain broken at record 847 of 1250.
 
 ## Why this matters
 
-The EU AI Act deadline is August 2026. Five months from now. Most AI teams I've talked to are in one of two camps:
+The EU AI Act's high-risk deadline now lands in December 2027 (pushed back from the original August 2026 date). Most AI teams I've talked to are in one of two camps:
 
 1. "We'll figure it out later." (Dangerous.)
 2. "We need to buy an enterprise compliance platform." (Expensive and unnecessary for most.)

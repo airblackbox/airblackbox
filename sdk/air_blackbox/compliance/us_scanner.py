@@ -6,8 +6,10 @@ for ANY AI system (not just hiring-specific), unlike the existing hiring-context
 checks in code_scanner.py which only activate for employment AI.
 
 Laws covered:
-  - Colorado SB 24-205 (Colorado AI Act) - effective Feb 1, 2026
+  - Colorado SB 26-189 (AI consumer protections) - effective Jan 1, 2027;
+    replaced SB 24-205, which was repealed before it ever took effect
   - Illinois HB 3773 (AI Video Interview Act extension) - effective Jan 1, 2026
+  - California FEHA ADS regulations (employment automated-decision systems) - effective Oct 1, 2025
   - California SB 942 (AI Transparency Act) - effective Jan 1, 2026
   - California ADMT Regulations (Automated Decision-Making Technology) - effective Jan 1, 2027
   - Texas RAIGA (Responsible AI Governance Act) - HB 1709, effective Sep 1, 2025
@@ -24,8 +26,8 @@ from typing import List
 @dataclass
 class USFinding:
     """A single US state law compliance finding."""
-    law: str           # e.g., "Colorado SB 24-205"
-    section: str       # e.g., "Sec. 6-1-1703"
+    law: str           # e.g., "Colorado SB 26-189"
+    section: str       # statutory cite where stable, duty label otherwise
     name: str
     status: str        # "pass", "warn", "fail"
     evidence: str
@@ -36,18 +38,21 @@ class USFinding:
 
 
 # ─────────────────────────────────────────────
-# Colorado SB 24-205 (Colorado AI Act)
-# Effective: Feb 1, 2026
-# Applies to: "high-risk AI systems" used in
-# consequential decisions (employment, finance,
-# housing, education, healthcare, insurance, legal)
+# Colorado SB 26-189 (AI consumer protections)
+# Effective: Jan 1, 2027
+# Replaced SB 24-205 (repealed before taking
+# effect). Surviving duties: pre-use consumer
+# notice, adverse-outcome explanation within 30
+# days, correction rights, meaningful human
+# review. The duty-of-care, impact-assessment,
+# and risk-management-program duties are gone.
 # ─────────────────────────────────────────────
 
 def check_colorado_disclosure(file_contents: dict, scan_path: str) -> USFinding:
-    """Colorado SB 24-205 Sec. 6-1-1703: Consumer disclosure requirement.
+    """Colorado SB 26-189: pre-use consumer notice.
 
-    Deployers must disclose to consumers that an AI system is being used
-    to make or substantially support a consequential decision.
+    Deployers must tell consumers, before use, that an AI system is being
+    used to make or substantially support a consequential decision.
     """
     disclosure_patterns = [
         r"ai_disclosure", r"ai_notice", r"automated_decision.*notice",
@@ -64,95 +69,79 @@ def check_colorado_disclosure(file_contents: dict, scan_path: str) -> USFinding:
 
     if hits:
         return USFinding(
-            law="Colorado SB 24-205", section="Sec. 6-1-1703",
+            law="Colorado SB 26-189", section="Pre-use consumer notice",
             name="CO: Consumer AI disclosure",
             status="pass",
             evidence=f"AI disclosure mechanism detected in {len(hits)} file(s)",
-            deadline="2026-02-01",
+            deadline="2027-01-01",
             files=hits[:3],
         )
 
     return USFinding(
-        law="Colorado SB 24-205", section="Sec. 6-1-1703",
+        law="Colorado SB 26-189", section="Pre-use consumer notice",
         name="CO: Consumer AI disclosure",
         status="fail",
-        evidence="No consumer AI disclosure mechanism found. Colorado requires notifying consumers when AI makes or supports consequential decisions.",
-        fix_hint="Add ai_disclosure() or transparency_notice() that informs users an AI system is involved in the decision",
-        deadline="2026-02-01",
+        evidence="No consumer AI disclosure mechanism found. Colorado SB 26-189 requires notifying consumers before an AI system makes or substantially supports a consequential decision.",
+        fix_hint="Add ai_disclosure() or transparency_notice() that informs users an AI system is involved in the decision, delivered before the decision is made",
+        deadline="2027-01-01",
     )
 
 
-def check_colorado_impact_assessment(file_contents: dict, scan_path: str) -> USFinding:
-    """Colorado SB 24-205 Sec. 6-1-1702: Impact assessment requirement.
+def check_colorado_adverse_explanation(file_contents: dict, scan_path: str) -> USFinding:
+    """Colorado SB 26-189: adverse-outcome explanation.
 
-    Deployers must complete an impact assessment before deploying a
-    high-risk AI system, and annually thereafter.
+    On request, deployers must explain an adverse consequential decision
+    within 30 days - which in practice requires decision records with a
+    rationale captured at decision time, not reconstructed later.
     """
-    # Check for impact assessment documentation
-    doc_files = [
-        "IMPACT_ASSESSMENT.md", "impact_assessment.md",
-        "AI_IMPACT_ASSESSMENT.md", "ai_impact_assessment.md",
-        "ALGORITHMIC_IMPACT.md", "algorithmic_impact_assessment.md",
-        "AIA.md",  # Algorithmic Impact Assessment
+    explain_patterns = [
+        r"adverse_(?:action|outcome|decision)",
+        r"decision_(?:rationale|reason|explanation|log)",
+        r"explanation.*(?:decision|outcome|adverse)",
+        r"(?:decision|outcome).*explanation",
+        r"reason.*(?:rejection|denial|adverse)",
+        r"(?:rejection|denial).*reason",
+        r"audit_(?:trail|chain|log)", r"decision_record",
+        r"rationale", r"why_(?:rejected|denied|decided)",
     ]
-    has_doc = any(os.path.exists(os.path.join(scan_path, f)) for f in doc_files)
+    combined = "|".join(explain_patterns)
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)]
 
-    # Also check code for impact assessment patterns
-    ia_patterns = [
-        r"impact_assessment", r"algorithmic_impact",
-        r"risk_assessment.*(?:ai|model|algorithm)",
-        r"(?:ai|model|algorithm).*risk_assessment",
-        r"bias_impact", r"disparity_analysis",
-        r"fairness_assessment", r"equity_assessment",
-    ]
-    combined = "|".join(ia_patterns)
-    code_hits = [fp for fp, content in file_contents.items()
-                 if re.search(combined, content, re.IGNORECASE)]
-
-    if has_doc:
+    if hits:
         return USFinding(
-            law="Colorado SB 24-205", section="Sec. 6-1-1702",
-            name="CO: Impact assessment",
+            law="Colorado SB 26-189", section="Adverse-outcome explanation (30 days)",
+            name="CO: Adverse-decision explanation",
             status="pass",
-            evidence="Impact assessment document found",
-            deadline="2026-02-01",
-        )
-
-    if code_hits:
-        return USFinding(
-            law="Colorado SB 24-205", section="Sec. 6-1-1702",
-            name="CO: Impact assessment",
-            status="warn",
-            evidence=f"Impact assessment code patterns found in {len(code_hits)} file(s) but no standalone IMPACT_ASSESSMENT.md document",
-            fix_hint="Create IMPACT_ASSESSMENT.md documenting: purpose, data sources, performance metrics, risk mitigations, affected populations",
-            deadline="2026-02-01",
-            files=code_hits[:3],
+            evidence=f"Decision-rationale/explanation records detected in {len(hits)} file(s)",
+            deadline="2027-01-01",
+            files=hits[:3],
         )
 
     return USFinding(
-        law="Colorado SB 24-205", section="Sec. 6-1-1702",
-        name="CO: Impact assessment",
+        law="Colorado SB 26-189", section="Adverse-outcome explanation (30 days)",
+        name="CO: Adverse-decision explanation",
         status="fail",
-        evidence="No impact assessment found. Colorado requires a documented impact assessment before deploying high-risk AI systems, updated annually.",
-        fix_hint="Create IMPACT_ASSESSMENT.md: purpose, intended benefits, known limitations, data sources, performance across demographics, risk mitigations",
-        deadline="2026-02-01",
+        evidence="No decision-rationale records found. Colorado SB 26-189 gives consumers a right to an explanation of an adverse AI-supported decision within 30 days - impossible to honor without a rationale recorded at decision time.",
+        fix_hint="Record each consequential decision with its rationale in a tamper-evident log (e.g. AuditChain) so a 30-day explanation request can be answered from contemporaneous records",
+        deadline="2027-01-01",
     )
 
 
-def check_colorado_discrimination_reporting(file_contents: dict, scan_path: str) -> USFinding:
-    """Colorado SB 24-205 Sec. 6-1-1704: Discrimination reporting mechanism.
+def check_colorado_correction_rights(file_contents: dict, scan_path: str) -> USFinding:
+    """Colorado SB 26-189: correction rights and meaningful human review.
 
-    Deployers must provide a process for consumers to report
-    suspected algorithmic discrimination.
+    Consumers can correct inaccurate personal data behind an adverse
+    decision and get meaningful human review of it.
     """
     report_patterns = [
-        r"report.*discrimination", r"discrimination.*report",
-        r"report.*bias", r"bias.*report",
-        r"complaint.*(?:ai|algorithm|bias|discrimination)",
-        r"grievance.*(?:ai|algorithm)", r"appeal.*(?:ai|algorithm|decision)",
-        r"feedback.*(?:ai|algorithm|decision)",
+        r"correct.*(?:data|record|information)",
+        r"(?:data|record).*correction",
+        r"appeal.*(?:ai|algorithm|decision)",
+        r"grievance.*(?:ai|algorithm)",
         r"dispute.*(?:ai|automated|algorithm)",
         r"human_review.*request", r"request.*human_review",
+        r"human_in_the_loop", r"human_oversight", r"human_approval",
         r"opt.?out.*(?:ai|automated)", r"(?:ai|automated).*opt.?out",
     ]
     combined = "|".join(report_patterns)
@@ -161,21 +150,21 @@ def check_colorado_discrimination_reporting(file_contents: dict, scan_path: str)
 
     if hits:
         return USFinding(
-            law="Colorado SB 24-205", section="Sec. 6-1-1704",
-            name="CO: Discrimination reporting",
+            law="Colorado SB 26-189", section="Correction rights + human review",
+            name="CO: Correction rights + human review",
             status="pass",
-            evidence=f"Discrimination/bias reporting mechanism detected in {len(hits)} file(s)",
-            deadline="2026-02-01",
+            evidence=f"Correction/appeal/human-review mechanism detected in {len(hits)} file(s)",
+            deadline="2027-01-01",
             files=hits[:3],
         )
 
     return USFinding(
-        law="Colorado SB 24-205", section="Sec. 6-1-1704",
-        name="CO: Discrimination reporting",
+        law="Colorado SB 26-189", section="Correction rights + human review",
+        name="CO: Correction rights + human review",
         status="fail",
-        evidence="No discrimination reporting mechanism found. Colorado requires a process for consumers to report suspected algorithmic discrimination.",
-        fix_hint="Add a report_discrimination() or complaint/appeal mechanism for AI-driven decisions with routing to human review",
-        deadline="2026-02-01",
+        evidence="No correction or human-review mechanism found. Colorado SB 26-189 requires letting consumers correct inaccurate data behind an adverse decision and obtain meaningful human review of it.",
+        fix_hint="Add a correction/appeal path for AI-driven decisions that routes to a named human reviewer, and record the review in the audit trail",
+        deadline="2027-01-01",
     )
 
 
@@ -223,6 +212,55 @@ def check_illinois_employee_notification(file_contents: dict, scan_path: str) ->
         evidence="No employee AI notification mechanism found. Illinois requires notifying employees/applicants when AI is used in employment decisions, including the AI's purpose and data collected.",
         fix_hint="Add employee_ai_notice() that discloses: AI is being used, what data it analyzes, the purpose of the AI analysis, and how to request human review",
         deadline="2026-01-01",
+    )
+
+
+# ─────────────────────────────────────────────
+# California FEHA ADS regulations
+# Cal. Code Regs. tit. 2 (CRD), eff. Oct 1, 2025
+# Applies to: employers using automated-decision
+# systems in employment decisions. Requires
+# anti-bias testing evidence and 4-year retention
+# of ADS records (inputs, outputs, criteria).
+# ─────────────────────────────────────────────
+
+def check_california_feha_ads(file_contents: dict, scan_path: str) -> USFinding:
+    """California FEHA ADS: bias testing + 4-year record retention.
+
+    Using an ADS in employment decisions can itself be evidence of
+    discrimination unless the employer can show anti-bias testing; ADS
+    records must be retained for four years.
+    """
+    feha_patterns = [
+        r"bias_(?:test|audit|check|analysis)",
+        r"(?:test|audit|check).*bias",
+        r"adverse_impact", r"disparate_impact", r"four_fifths",
+        r"selection_(?:rate|criteria)",
+        r"retention.*(?:polic|period|year)",
+        r"(?:record|data)_retention",
+        r"fairness_(?:test|metric|audit)",
+    ]
+    combined = "|".join(feha_patterns)
+    hits = [fp for fp, content in file_contents.items()
+            if re.search(combined, content, re.IGNORECASE)]
+
+    if hits:
+        return USFinding(
+            law="California FEHA ADS", section="Cal. Code Regs. tit. 2 (ADS rules)",
+            name="CA: FEHA ADS bias testing + retention",
+            status="pass",
+            evidence=f"Bias-testing and/or record-retention patterns detected in {len(hits)} file(s)",
+            deadline="2025-10-01",
+            files=hits[:3],
+        )
+
+    return USFinding(
+        law="California FEHA ADS", section="Cal. Code Regs. tit. 2 (ADS rules)",
+        name="CA: FEHA ADS bias testing + retention",
+        status="fail",
+        evidence="No bias-testing or ADS record-retention evidence found. California FEHA regulations treat untested automated-decision systems in employment as discrimination exposure and require 4-year retention of ADS records.",
+        fix_hint="Add bias/adverse-impact testing for employment ADS outputs and retain ADS records (inputs, outputs, selection criteria) for 4 years - the evidence bundle's retention floor matches this",
+        deadline="2025-10-01",
     )
 
 
@@ -424,7 +462,8 @@ def scan_us_laws(scan_path: str) -> List[USFinding]:
     """Run all US state law checks against a codebase.
 
     Returns a list of USFinding objects, one per check.
-    Always returns all 9 checks regardless of codebase content.
+    Always returns all 9 checks (3 CO, 1 IL, 3 CA, 2 TX) regardless of
+    codebase content.
     """
     # Read Python files
     file_contents = {}
@@ -458,12 +497,14 @@ def scan_us_laws(scan_path: str) -> List[USFinding]:
         doc_path = os.path.dirname(os.path.abspath(scan_path)) or "."
 
     findings = [
-        # Colorado SB 24-205 (3 checks)
+        # Colorado SB 26-189 (3 checks)
         check_colorado_disclosure(file_contents, doc_path),
-        check_colorado_impact_assessment(file_contents, doc_path),
-        check_colorado_discrimination_reporting(file_contents, doc_path),
+        check_colorado_adverse_explanation(file_contents, doc_path),
+        check_colorado_correction_rights(file_contents, doc_path),
         # Illinois HB 3773 (1 check)
         check_illinois_employee_notification(file_contents, doc_path),
+        # California FEHA ADS (1 check)
+        check_california_feha_ads(file_contents, doc_path),
         # California SB 942 (1 check)
         check_california_sb942_transparency(file_contents, doc_path),
         # California ADMT (1 check)

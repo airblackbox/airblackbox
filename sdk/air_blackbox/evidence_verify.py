@@ -36,6 +36,7 @@ import zipfile
 from typing import Any, Dict, List
 
 from air_blackbox.export.evidence_bundle import (
+    V1_MAPPING_PREFIX,
     V1_REQUIRED_FILES,
     canonical_manifest_bytes,
     categorize_record,
@@ -160,6 +161,14 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     missing = [n for n in V1_REQUIRED_FILES if n not in names]
     if missing:
         _fail(1, f"required files missing from bundle: {', '.join(missing)}")
+    # The mapping member is required but its name is not pinned: bundles from
+    # before Colorado repealed SB 24-205 carry mapping/sb24-205.json, current
+    # ones mapping/sb26-189.json. Evidence must keep verifying after the
+    # statute it was mapped to is gone - the records are the invariant.
+    if not any(n.startswith(V1_MAPPING_PREFIX) and n.endswith(".json")
+               for n in names):
+        _fail(1, "required files missing from bundle: mapping/*.json "
+                 "(no regulator mapping present)")
     print("[1/6] ZIP integrity and layout: OK", file=out)
 
     # ---- Check 2: manifest signature + per-file digests -------------------

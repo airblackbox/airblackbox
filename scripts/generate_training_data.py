@@ -854,7 +854,7 @@ SYSTEM_PROMPTS = [
 
 CONTEXTS = [
     "Our company processes over 10,000 transactions daily.",
-    "The EU AI Act requires compliance by August 2026.",
+    "The EU AI Act requires high-risk system compliance by December 2027.",
     "Healthcare AI systems are classified as high-risk.",
     "Financial services must implement risk management frameworks.",
     "Customer data must be handled per GDPR requirements.",
