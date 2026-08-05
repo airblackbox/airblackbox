@@ -121,7 +121,7 @@ def test_manifest_shape_and_counts(bundle):
     assert manifest["counts"] == {
         "actions": 5, "screening_decisions": 2, "blocked_actions": 1,
         "human_approvals": 1, "screening_decisions_missing_reviewer": 1}
-    assert manifest["frameworks"] == ["CO-SB24-205"]
+    assert manifest["frameworks"] == ["CO-SB26-189"]
     assert manifest["outcome_monitoring"] == "deployer-supplied"
     assert manifest["system"]["deployer"] == "Test LLC"
     assert manifest["retention_until"] > manifest["created_at"][:10]

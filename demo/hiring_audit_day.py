@@ -85,7 +85,7 @@ def main():
     print("=" * 72)
     print("  AIR BLACKBOX — AUDIT DAY   (real engine, fictional candidates)")
     print("  Role: Senior Backend Engineer, Meridian Logistics (fictional)")
-    print("  Setting: NYC LL144 / Colorado SB 24-205 keep hiring AI on the record")
+    print("  Setting: NYC LL144 / IL HB 3773 / CO SB 26-189 keep hiring AI on the record")
     print("=" * 72)
 
     with tempfile.TemporaryDirectory() as root:

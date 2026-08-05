@@ -32,11 +32,11 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 **Signed, post-quantum-ready**: the audit chain is HMAC-SHA256 (alter one record and every record after it breaks); each Gate action carries a public-key signature — ML-DSA-65 (FIPS 204, post-quantum) when the `pqc` extra is installed (`pip install "air-blackbox[pqc]"`), Ed25519 otherwise. Keys are generated locally, persisted per tenant, and never leave your machine. What is quantum-exposed, what is not, and the migration plan are written down in the [cryptographic posture](docs/security/cryptographic-posture.md).
 
-**Evidence bundle**: one command packages the records, chain/receipt verification results, the public key, and regulator mappings (Colorado SB 24-205) into a signed `.air-evidence` bundle (v1 format). `air-evidence verify` runs five ordered checks and needs **no secrets** — one public-key signature covers every file in the bundle. Bundles can also auto-export on a schedule (`AIR_AUTO_EXPORT_INTERVAL_HOURS`), so evidence never depends on a busy human remembering to ask for it.
+**Evidence bundle**: one command packages the records, chain/receipt verification results, the public key, and regulator mappings (Colorado SB 26-189) into a signed `.air-evidence` bundle (v1 format). `air-evidence verify` runs five ordered checks and needs **no secrets** — one public-key signature covers every file in the bundle. Bundles can also auto-export on a schedule (`AIR_AUTO_EXPORT_INTERVAL_HOURS`), so evidence never depends on a busy human remembering to ask for it.
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
-**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 13, 14, 15. Maps to ISO 42001, NIST AI RMF, and Colorado SB 24-205. One scan, four frameworks, one report.
+**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 13, 14, 15. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report.
 
 **Replay**: load any past episode from the audit chain, verify the HMAC signature, and replay every step with timestamps. Incident reconstruction without guesswork.
 

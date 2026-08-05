@@ -36,7 +36,7 @@ Rank findings using this matrix:
 
 When explaining findings, reference these key deadlines and penalties:
 
-- **Enforcement date for high-risk systems**: August 2, 2026
+- **Enforcement date for high-risk systems**: December 2027 (pushed back from August 2, 2026)
 - **Penalties**: Up to 35M EUR or 7% of global annual turnover
 - **High-risk categories (Annex III)**: Healthcare, credit scoring, hiring, insurance, education, law enforcement, immigration, critical infrastructure
 

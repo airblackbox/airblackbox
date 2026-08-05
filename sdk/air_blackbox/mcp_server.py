@@ -609,7 +609,7 @@ def _receipt_from_dict(d: dict) -> ActionReceipt:
 def export_evidence() -> str:
     """Package all recorded actions into a signed .air-evidence bundle
     (v1 layout: manifest.json, records/, verification/, mapping/,
-    attachments/) aligned to SB 24-205 deployer documentation duties.
+    attachments/) aligned to SB 26-189 deployer documentation duties.
     The bundle supports an impact assessment and is audit-ready; it is
     not a legal compliance determination."""
     return _export_tenant(_current_tenant())
@@ -904,7 +904,7 @@ def log_screening_decision(candidate: str, decision: str,
     Art 22 / EU AI Act Art 14: if this returns REQUIRES HUMAN APPROVAL, stop
     and get the user's explicit yes before finalizing anything.
 
-    Human-review-protocol fields (SB 24-205 deployer documentation - fill
+    Human-review-protocol fields (SB 26-189 deployer documentation - fill
     whenever a human was involved; decisions recorded without a
     human_reviewer are flagged as gaps in the exported evidence bundle):
       decision_type      - advance | reject | rank | recommend
@@ -921,7 +921,7 @@ def log_screening_decision(candidate: str, decision: str,
     d = decision.strip().lower()
     action = action_map.get(d, "score_candidate")
     if not decision_type:
-        # Derive the SB 24-205 decision_type from the decision verb so every
+        # Derive the SB 26-189 decision_type from the decision verb so every
         # screening record is categorizable even when the caller omits it.
         decision_type = {"advance": "advance", "reject": "reject",
                          "rank": "rank", "shortlist": "rank"}.get(d, "recommend")

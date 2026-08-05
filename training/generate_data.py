@@ -1511,7 +1511,7 @@ DIVERSE_INSTRUCTIONS = [
     "Act as an AI compliance auditor. Review this code against Articles 9, 10, 11, 12, 14, and 15.",
     # Specific role prompts
     "You are a regulatory compliance officer reviewing AI code for EU AI Act readiness. Analyze this code.",
-    "As a CTO preparing for EU AI Act enforcement in August 2026, evaluate this code.",
+    "As a CTO preparing for EU AI Act high-risk enforcement in December 2027, evaluate this code.",
     "You are a security engineer. What EU AI Act compliance gaps exist in this AI code?",
     "Review this code as if preparing it for an EU AI Act conformity assessment.",
     # Recommendation-focused
