@@ -11,45 +11,32 @@
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://airblackbox.ai/blog/oauth-ai-agents-delegation-scan">
 <link rel="canonical" href="https://airblackbox.ai/blog/oauth-ai-agents-delegation-scan">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.7; color: #1a1a1a; background: #fff; }
-  .container { max-width: 720px; margin: 0 auto; padding: 40px 20px; }
-  nav { padding: 16px 20px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; max-width: 720px; margin: 0 auto; }
-  nav a { color: #1a1a1a; text-decoration: none; font-weight: 600; }
-  nav .links a { color: #666; font-weight: 400; margin-left: 20px; font-size: 14px; }
-  nav .links a:hover { color: #1a1a1a; }
-  h1 { font-size: 2.2em; line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
-  h2 { font-size: 1.4em; margin-top: 48px; margin-bottom: 16px; }
-  p { margin-bottom: 20px; color: #333; }
-  .meta { color: #888; font-size: 14px; margin-bottom: 40px; }
-  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
-  pre { background: #1a1a1a; color: #e5e5e5; padding: 20px; border-radius: 8px; overflow-x: auto; margin: 20px 0; font-size: 14px; line-height: 1.6; }
-  pre code { background: none; padding: 0; color: inherit; }
-  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
-  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e5e5; }
-  th { font-weight: 600; background: #f8f8f8; }
-  blockquote { border-left: 3px solid #1a1a1a; padding-left: 16px; margin: 24px 0; font-style: italic; color: #555; }
-  .cta { background: #1a1a1a; color: #fff; padding: 24px; border-radius: 8px; margin: 40px 0; text-align: center; }
-  .cta code { background: #333; color: #fff; }
-  .cta a { color: #4da6ff; }
-  footer { border-top: 1px solid #e5e5e5; padding-top: 20px; margin-top: 60px; color: #888; font-size: 13px; }
-</style>
+<link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
-<nav>
-  <a href="/">AIR Blackbox</a>
-  <span class="links">
-    <a href="/blog/">Blog</a>
-    <a href="https://github.com/airblackbox/airblackbox">GitHub</a>
-    <a href="https://pypi.org/project/air-blackbox/">PyPI</a>
-  </span>
+<div class="frame">
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="26" height="26" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+      <path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#201e1d" stroke-width="8"></path>
+      <circle cx="48" cy="48" r="10" fill="#201e1d">
+        <animate attributeName="opacity" values="1;1;0.1;1;1" keyTimes="0;0.55;0.7;0.85;1" dur="1.8s" repeatCount="indefinite"></animate>
+      </circle>
+    </svg>
+    <span>airblackbox</span>
+  </a>
+  <div class="nav-links">
+    <a href="/">home</a>
+    <a href="/blog/" aria-current="page">blog</a>
+    <a href="https://github.com/airblackbox/airblackbox">github</a>
+    <a href="https://pypi.org/project/air-blackbox/">pypi</a>
+  </div>
 </nav>
 
-<div class="container">
+<div class="prose">
 
 <h1>OAuth Isn't Enough for AI Agents — We Scanned 7 Frameworks to Prove It</h1>
-<p class="meta">March 12, 2026 · Jason Shotwell · 6 min read</p>
+<p class="text-muted" style="font-size: 13px; margin-bottom: 32px;">March 12, 2026 &middot; Jason Shotwell &middot; 6 min read</p>
 
 <p>OAuth was built for humans clicking login buttons. AI agents are a completely different trust model.</p>
 
@@ -117,16 +104,21 @@ air-blackbox comply --scan . -v</code></pre>
 
 <p>18 code-level checks. 5 OAuth delegation checks. Runs entirely on your machine. Apache 2.0.</p>
 
-<div class="cta">
-  <p><strong>The EU AI Act deadline is 5 months away.</strong></p>
-  <p><code>pip install air-blackbox</code></p>
-  <p><a href="https://github.com/airblackbox/airblackbox">GitHub</a> · <a href="https://pypi.org/project/air-blackbox/">PyPI</a></p>
+<div class="panel-ink" style="padding: 32px; margin: 40px 0;">
+  <p style="color: #f3f2f2; font-family: var(--font-heading); font-weight: 800; font-size: 20px; margin-bottom: 10px;">The audit date moved. The evidence problem didn't.</p>
+  <p style="color: #8a8785; margin-bottom: 14px;">Records have to exist from the day your agent runs, not from the day enforcement starts.</p>
+  <p style="margin: 0;"><code style="background: #444141; color: #f3f2f2; padding: 4px 10px;">pip install air-blackbox</code>&nbsp;&nbsp;<a href="https://github.com/airblackbox/airblackbox" style="color: #ffc4b8;">GitHub</a> &middot; <a href="https://pypi.org/project/air-blackbox/" style="color: #ffc4b8;">PyPI</a></p>
 </div>
 
 
-<footer>
-  <p>AIR Blackbox — The flight recorder for AI agents. Open source. Apache 2.0.</p>
-  <p><a href="/">Home</a> · <a href="/blog/">Blog</a> · <a href="https://github.com/airblackbox/airblackbox">GitHub</a></p>
+</div>
+
+<footer class="footer">
+  <div class="brand">
+    <svg width="18" height="18" viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="M48 8 L82.6 28 L82.6 68 L48 88 L13.4 68 L13.4 28 Z" stroke="#201e1d" stroke-width="10"></path><circle cx="48" cy="48" r="12" fill="#201e1d"></circle></svg>
+    <span>airblackbox</span>
+  </div>
+  <span class="right">The flight recorder for your AI stack &middot; Apache-2.0 &middot; <a href="/">Home</a> &middot; <a href="/blog/">Blog</a> &middot; <a href="https://github.com/airblackbox/airblackbox">GitHub</a></span>
 </footer>
 
 </div>
