@@ -20,13 +20,22 @@ Claude Desktop config:
     "args": ["-m", "air_blackbox.mcp_server"]}}}
 """
 
+import contextlib
+import glob
 import hashlib
+import hmac
 import json
 import logging
 import os
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+try:                      # POSIX only; the server ships in a Linux container.
+    import fcntl
+except ImportError:       # pragma: no cover - Windows dev boxes
+    fcntl = None
 
 logger = logging.getLogger("air_blackbox.mcp")
 
@@ -256,6 +265,293 @@ async def _demo_status(request):
     """Current public-demo chain state (records + integrity verdict)."""
     from starlette.responses import JSONResponse
     return JSONResponse(_demo_chain_state(), headers=_DEMO_CORS)
+
+
+# ---------------------------------------------------------------------------
+# Ingest - server-to-server intake for apps that cannot own the chain.
+#
+# AuditChain is a single-writer design: its lock is a threading.Lock and
+# resume() replays the whole history to recover prev_hash. A serverless app
+# (Vercel functions, Lambda) violates both assumptions - the filesystem is
+# ephemeral, and concurrent invocations would each resume from the same
+# prev_hash and claim the same chain_seq, forking the chain into something
+# that can never verify. That failure is silent, which makes it worse than a
+# crash.
+#
+# So the app keeps a durable outbox and POSTs batches here, and THIS process
+# is the single writer. Two properties make that safe:
+#
+#   Idempotency - an outbox retries (timeouts, cold starts mid-flush), so the
+#   same event_id will arrive more than once. A redelivered duplicate would
+#   append a phantom record and still verify clean. Every event therefore
+#   carries a client-generated event_id; a repeat returns the original
+#   receipt_id and writes nothing.
+#
+#   Exclusivity - a second writer process (extra worker, second machine on a
+#   shared volume) is refused with 409 rather than allowed to fork the chain.
+#   A client outbox retries a 409 cleanly; a forked chain is unrecoverable.
+# ---------------------------------------------------------------------------
+
+#: Cap on one flush so a runaway outbox cannot hold the writer lock forever.
+_INGEST_MAX_EVENTS = 100
+
+_ingest_locks: dict = {}          # tenant -> threading.Lock
+_ingest_locks_guard = threading.Lock()
+_ingest_index_cache: dict = {}    # tenant -> {event_id: receipt_id}
+
+
+class _ChainBusy(Exception):
+    """Another process holds this tenant's write lock."""
+
+
+def _ingest_tokens() -> dict:
+    """Parse AIR_INGEST_TOKENS ("token:tenant,token2:tenant2") -> {token: tenant}.
+
+    Tokens are bound to a tenant here rather than trusting the tenant in the
+    request body, so a leaked token cannot write into another tenant's chain.
+    """
+    out = {}
+    for pair in os.environ.get("AIR_INGEST_TOKENS", "").split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
+            continue
+        token, tenant = pair.split(":", 1)
+        if token.strip() and tenant.strip():
+            out[token.strip()] = tenant.strip()
+    return out
+
+
+def _ingest_auth(request):
+    """-> (tenant, None) on success, or (None, (status, message))."""
+    header = request.headers.get("authorization", "")
+    if not header.lower().startswith("bearer "):
+        return None, (401, "missing bearer token")
+    presented = header[7:].strip()
+    tokens = _ingest_tokens()
+    if not tokens:
+        # Unconfigured is a deployment state, not a bad credential: say so
+        # plainly instead of making the caller debug their token.
+        return None, (503, "ingest is not configured on this server")
+    matched = None
+    for token, tenant in tokens.items():
+        # compare_digest on every candidate: no early exit, so response time
+        # does not leak which prefix was right.
+        if hmac.compare_digest(token, presented):
+            matched = tenant
+    if matched is None:
+        return None, (401, "invalid token")
+    return matched, None
+
+
+def _ingest_index(tenant: str) -> dict:
+    """{event_id: receipt_id} for everything already ingested for a tenant.
+
+    Rebuilt from the records themselves rather than a side index, so it can
+    never drift from the chain it is supposed to describe. Read once per
+    tenant per process, then kept current in memory by the writer.
+    """
+    index = _ingest_index_cache.get(tenant)
+    if index is None:
+        index = {}
+        pattern = os.path.join(_tenant_runs_dir(tenant), "*.air.json")
+        for path in glob.glob(pattern):
+            try:
+                with open(path) as f:
+                    record = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            event_id = record.get("event_id")
+            if event_id:
+                index[event_id] = (record.get("receipt") or {}).get(
+                    "receipt_id", "")
+        _ingest_index_cache[tenant] = index
+    return index
+
+
+@contextlib.contextmanager
+def _ingest_writer_lock(tenant: str):
+    """Serialize writes to one tenant's chain.
+
+    Threads queue on the in-process lock; a competing PROCESS is refused
+    outright (409) rather than queued, because a writer that waits behind an
+    unknown holder is indistinguishable from one that is about to fork the
+    chain. Fail closed: the client still holds the events.
+    """
+    with _ingest_locks_guard:
+        lock = _ingest_locks.setdefault(tenant, threading.Lock())
+    with lock:
+        runs = _tenant_runs_dir(tenant)
+        os.makedirs(runs, exist_ok=True)
+        if fcntl is None:                     # pragma: no cover
+            yield
+            return
+        handle = open(os.path.join(runs, ".air-ingest.lock"), "w")
+        try:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                raise _ChainBusy()
+            yield
+        finally:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+            handle.close()
+
+
+def _ingest_write(tenant: str, event: dict):
+    """Chain one ingested event. Returns (receipt_id, chain_hash).
+
+    occurred_at is preserved separately from the server's write timestamp:
+    with an outbox those genuinely differ, and the audit story needs when the
+    decision was MADE, not when it happened to drain.
+    """
+    action = str(event.get("action") or "").strip() or "agent_action"
+    detail = str(event.get("detail") or "")
+    category = str(event.get("category") or "")
+
+    # Retrospective policy check, NOT enforcement. This event already
+    # happened inside the caller's system; the server cannot block it and
+    # must not claim to have. So status never says "blocked" here, and the
+    # MCP session's default-deny does not apply: a vocabulary miss is
+    # recorded as "no_rule" rather than forbid, because default-denying a
+    # foreign app's completed action would fabricate an enforcement event
+    # that never occurred - in a chain whose whole point is not lying.
+    # A real forbid rule IS recorded ("this happened and tenant policy
+    # forbids it") - that verdict is evidence, the block claim would not be.
+    decision = "permit"
+    if _covenant:
+        context = {"model": "", "tokens_total": 0,
+                   "category": category, "detail": detail}
+        if _rule_exists(action, context):
+            decision = _covenant.evaluate(action, context).value
+        else:
+            decision = "no_rule"
+
+    record = {
+        "run_id": str(uuid.uuid4()),
+        "event_id": str(event["event_id"]).strip(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "occurred_at": str(event.get("occurred_at") or ""),
+        "type": "agent_action",
+        "source": "ingest",
+        "action": action,
+        "detail": detail[:2000],
+        "model": "",
+        "status": "success",
+        "covenant_decision": decision,
+        "tokens": {"total": 0},
+    }
+    # Pass structured blocks through untouched. screening is what the
+    # evidence bundle categorizes on; attributes is the caller's own
+    # vocabulary, which this server deliberately does not interpret.
+    for key in ("screening", "attributes"):
+        if isinstance(event.get(key), dict):
+            record[key] = event[key]
+    if _covenant:
+        record["covenant_hash"] = _covenant.hash
+    record["receipt"] = _sign_receipt(tenant, action, decision, detail,
+                                      category)
+    chain_hash = _tenant_chain(tenant).write(record)
+    return record["receipt"].get("receipt_id", ""), chain_hash
+
+
+@app.custom_route("/ingest", methods=["POST"])
+async def _ingest(request):
+    """Accept a batch of events from an application and chain them.
+
+    Body: {"tenant": ..., "events": [{"event_id", "action", "detail",
+    "category", "occurred_at", "screening"?, "attributes"?}, ...]}
+    Returns: {"results": [{"event_id", "receipt_id", "chain_hash",
+    "duplicate"?}, ...]} in request order.
+    """
+    from starlette.responses import JSONResponse
+
+    tenant_for_token, err = _ingest_auth(request)
+    if err:
+        return JSONResponse({"error": err[1]}, status_code=err[0])
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "body must be JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "body must be a JSON object"},
+                            status_code=400)
+
+    tenant = str(body.get("tenant") or "").strip()
+    if not tenant:
+        return JSONResponse({"error": "tenant is required"}, status_code=400)
+    if tenant != tenant_for_token:
+        return JSONResponse(
+            {"error": "token is not valid for this tenant"}, status_code=403)
+
+    events = body.get("events")
+    if not isinstance(events, list) or not events:
+        return JSONResponse({"error": "events must be a non-empty array"},
+                            status_code=400)
+    if len(events) > _INGEST_MAX_EVENTS:
+        return JSONResponse(
+            {"error": f"batch too large (max {_INGEST_MAX_EVENTS} events)"},
+            status_code=413)
+    # Validate the whole batch before writing any of it, so a malformed
+    # tail cannot leave a half-written flush the client must reconcile.
+    for event in events:
+        if not isinstance(event, dict):
+            return JSONResponse({"error": "each event must be an object"},
+                                status_code=400)
+        if not str(event.get("event_id") or "").strip():
+            return JSONResponse(
+                {"error": "every event needs an event_id (idempotency key)"},
+                status_code=400)
+
+    results = []
+    try:
+        with _ingest_writer_lock(tenant):
+            index = _ingest_index(tenant)
+            for event in events:
+                event_id = str(event["event_id"]).strip()
+                if event_id in index:
+                    results.append({"event_id": event_id,
+                                    "receipt_id": index[event_id],
+                                    "duplicate": True})
+                    continue
+                receipt_id, chain_hash = _ingest_write(tenant, event)
+                index[event_id] = receipt_id
+                results.append({"event_id": event_id,
+                                "receipt_id": receipt_id,
+                                "chain_hash": chain_hash})
+    except _ChainBusy:
+        return JSONResponse(
+            {"error": "chain unavailable: another writer holds this tenant"},
+            status_code=409)
+
+    logger.info("ingest tenant=%s events=%d written=%d", tenant, len(events),
+                sum(1 for r in results if not r.get("duplicate")))
+    return JSONResponse({"results": results})
+
+
+@app.custom_route("/ingest/status", methods=["GET"])
+async def _ingest_status(request):
+    """Chain state for the authenticated tenant, so a caller's own health
+    endpoint can confirm events are actually landing here."""
+    from starlette.responses import JSONResponse
+
+    tenant, err = _ingest_auth(request)
+    if err:
+        return JSONResponse({"error": err[1]}, status_code=err[0])
+    engine = ReplayEngine(runs_dir=_tenant_runs_dir(tenant))
+    total = engine.load()
+    result = engine.verify_chain()
+    ingested = len(_ingest_index(tenant))
+    return JSONResponse({
+        "tenant": tenant,
+        "records": total,
+        "ingested_events": ingested,
+        "chain_intact": bool(result.intact),
+        "single_writer": fcntl is not None,
+    })
 
 
 def _rule_exists(action: str, context: dict) -> bool:
