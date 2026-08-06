@@ -163,7 +163,9 @@ def _mcp_server(monkeypatch, tmp_path):
 
 def _patch_local_tsa(monkeypatch, tsa: "LocalTSA"):
     """Make the MCP server's anchor path use a local offline TSA."""
-    def fake_timestamp_head(head_hex, tsa_urls=None):
+    # **kw: tolerate the caller's optional args (e.g. the interactive
+    # anchor timeout) so a signature change cannot silently break this stub.
+    def fake_timestamp_head(head_hex, tsa_urls=None, **kw):
         return AnchorResult(ok=True, head=head_hex, tsr=tsa.reply(head_hex),
                             tsa_url="local-test-tsa", timestamp="T0")
     # export_evidence imports timestamp_head from air_blackbox.anchor at call
@@ -221,7 +223,7 @@ def test_mcp_anchor_gap_is_reported_not_hidden(tmp_path, monkeypatch):
 
     # No reachable TSA -> anchor gap.
     monkeypatch.setattr("air_blackbox.anchor.timestamp_head",
-                        lambda h, u=None: AnchorResult(
+                        lambda h, u=None, **kw: AnchorResult(
                             ok=False, head=h, error="no TSA reachable"))
     srv.record_action("read_profile")
     out = srv.export_evidence()

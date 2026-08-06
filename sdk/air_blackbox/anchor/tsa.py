@@ -58,8 +58,16 @@ def make_query(head_hex: str) -> bytes:
 
 
 def timestamp_head(head_hex: str,
-                   tsa_urls: Optional[List[str]] = None) -> AnchorResult:
-    """Obtain an RFC 3161 timestamp over the head from the first reachable TSA."""
+                   tsa_urls: Optional[List[str]] = None,
+                   timeout: float = 20.0) -> AnchorResult:
+    """Obtain an RFC 3161 timestamp over the head from the first reachable TSA.
+
+    timeout is PER URL, and the default list holds three, so a caller that
+    must answer an interactive request should pass a smaller value: an
+    unreachable TSA otherwise costs timeout x len(urls) before returning.
+    An anchor gap is recorded honestly by the caller, so failing fast costs
+    nothing but the anchor itself.
+    """
     if not head_hex:
         return AnchorResult(ok=False, head=head_hex, error="no chain head to anchor")
     import httpx
@@ -73,7 +81,7 @@ def timestamp_head(head_hex: str,
     last_err = "no TSA reachable"
     for url in urls:
         try:
-            resp = httpx.post(url, content=tsq, timeout=20.0,
+            resp = httpx.post(url, content=tsq, timeout=timeout,
                               headers={"Content-Type": "application/timestamp-query"})
         except httpx.HTTPError as e:
             last_err = f"{url}: {e}"

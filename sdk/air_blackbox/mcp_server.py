@@ -532,6 +532,58 @@ async def _ingest(request):
     return JSONResponse({"results": results})
 
 
+@app.custom_route("/ingest/export", methods=["GET", "POST"])
+async def _ingest_export(request):
+    """Export the ingesting tenant's evidence bundle, returned as the ZIP.
+
+    export_evidence (the MCP tool) exports the tenant derived from the CHAT
+    session's OAuth subject - which is not the tenant an application ingests
+    under. An operator asking Claude to export after wiring up ingest would
+    get their own empty session chain and reasonably conclude "no records
+    yet", when the records exist under a different tenant entirely.
+
+    The ingest token is already bound to exactly one tenant, so it is the
+    right credential for exporting that tenant's evidence: no broader grant
+    is created by honoring it here.
+
+    Anchoring is bounded (see _anchor_timeout) so this answers promptly; an
+    anchor gap is recorded in the bundle rather than hidden.
+    """
+    from starlette.responses import FileResponse, JSONResponse
+
+    tenant, err = _ingest_auth(request)
+    if err:
+        return JSONResponse({"error": err[1]}, status_code=err[0])
+
+    engine = ReplayEngine(runs_dir=_tenant_runs_dir(tenant))
+    if engine.load() == 0:
+        return JSONResponse(
+            {"error": f"no records for tenant '{tenant}' - nothing to export"},
+            status_code=404)
+
+    try:
+        with _ingest_writer_lock(tenant):
+            note = _export_tenant(tenant, anchor_timeout=_anchor_timeout())
+    except _ChainBusy:
+        return JSONResponse(
+            {"error": "chain unavailable: another writer holds this tenant"},
+            status_code=409)
+
+    # _export_tenant returns prose for the chat tool; recover the path it wrote.
+    path = None
+    for token in note.replace(",", " ").split():
+        if token.endswith(".air-evidence"):
+            path = token
+            break
+    if not path or not os.path.exists(path):
+        return JSONResponse({"error": "bundle was written but could not be "
+                                      "located", "detail": note},
+                            status_code=500)
+    return FileResponse(path, media_type="application/zip",
+                        filename=os.path.basename(path),
+                        headers={"X-Air-Export-Note": note[:400]})
+
+
 @app.custom_route("/ingest/status", methods=["GET"])
 async def _ingest_status(request):
     """Chain state for the authenticated tenant, so a caller's own health
@@ -908,13 +960,17 @@ def export_evidence() -> str:
     attachments/) aligned to SB 26-189 deployer documentation duties.
     The bundle supports an impact assessment and is audit-ready; it is
     not a legal compliance determination."""
-    return _export_tenant(_current_tenant())
+    return _export_tenant(_current_tenant(), anchor_timeout=_anchor_timeout())
 
 
-def _export_tenant(tenant: str) -> str:
+def _export_tenant(tenant: str, anchor_timeout: Optional[float] = None) -> str:
     """Core evidence export for one tenant. Called by the export_evidence
     tool and by the auto-export scheduler - evidence must never depend on
-    a busy human remembering to ask for it."""
+    a busy human remembering to ask for it.
+
+    anchor_timeout bounds the external TSA call. Interactive callers pass a
+    short one so the response arrives; the scheduler passes None to wait.
+    """
     from dataclasses import asdict
 
     from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
@@ -930,7 +986,8 @@ def _export_tenant(tenant: str) -> str:
 
     # Anchor the head at an external TSA BEFORE packaging, so the timestamp
     # token travels inside the signed bundle (verifiable offline by a stranger).
-    anchor_note, anchor_manifest = _anchor_current_head(tenant)
+    anchor_note, anchor_manifest = _anchor_current_head(
+        tenant, timeout=anchor_timeout)
 
     # Deployer-supplied register info and attachments. Missing values are
     # exported as "deployer-supplied" so gaps are explicit, never hidden.
@@ -983,7 +1040,25 @@ def _anchor_dir(tenant: str) -> str:
     return d
 
 
-def _anchor_current_head(tenant: str):
+def _anchor_timeout() -> float:
+    """Per-TSA timeout for anchoring during an INTERACTIVE export.
+
+    export_evidence is called from a chat connector, which gives up long
+    before the handler does. The default TSA list holds three URLs, so the
+    old 20s-per-URL default could block a single tool call for a minute and
+    surface to the user as "the server isn't responding" - a timeout, not an
+    error, with nothing to debug. An anchor gap is already recorded honestly,
+    so a short deadline trades an optional timestamp for a response that
+    actually arrives. The 24h auto-export is not interactive and keeps the
+    patient default.
+    """
+    try:
+        return max(1.0, float(os.environ.get("AIR_ANCHOR_TIMEOUT", "6")))
+    except ValueError:
+        return 6.0
+
+
+def _anchor_current_head(tenant: str, timeout: Optional[float] = None):
     """Timestamp the current chain head at an external TSA and persist the
     token. An unreachable TSA is recorded as a gap, never silently dropped.
     Returns (note, manifest_dict) - the manifest goes into the signed bundle."""
@@ -1001,7 +1076,8 @@ def _anchor_current_head(tenant: str):
         return "Anchor: no chained records to anchor.", {"anchored": False,
                                                          "reason": "no records"}
 
-    result = timestamp_head(head, _tsa_urls())
+    result = timestamp_head(head, _tsa_urls(),
+                            timeout=timeout if timeout is not None else 20.0)
     if not result.ok:
         # An anchor gap is itself evidence - record it, do not hide it.
         with open(os.path.join(_anchor_dir(tenant), "gaps.log"), "a") as f:
