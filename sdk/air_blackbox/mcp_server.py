@@ -411,11 +411,23 @@ def _ingest_write(tenant: str, event: dict):
     detail = str(event.get("detail") or "")
     category = str(event.get("category") or "")
 
+    # Retrospective policy check, NOT enforcement. This event already
+    # happened inside the caller's system; the server cannot block it and
+    # must not claim to have. So status never says "blocked" here, and the
+    # MCP session's default-deny does not apply: a vocabulary miss is
+    # recorded as "no_rule" rather than forbid, because default-denying a
+    # foreign app's completed action would fabricate an enforcement event
+    # that never occurred - in a chain whose whole point is not lying.
+    # A real forbid rule IS recorded ("this happened and tenant policy
+    # forbids it") - that verdict is evidence, the block claim would not be.
     decision = "permit"
     if _covenant:
-        decision = _covenant.evaluate(action, {
-            "model": "", "tokens_total": 0,
-            "category": category, "detail": detail}).value
+        context = {"model": "", "tokens_total": 0,
+                   "category": category, "detail": detail}
+        if _rule_exists(action, context):
+            decision = _covenant.evaluate(action, context).value
+        else:
+            decision = "no_rule"
 
     record = {
         "run_id": str(uuid.uuid4()),
@@ -427,7 +439,7 @@ def _ingest_write(tenant: str, event: dict):
         "action": action,
         "detail": detail[:2000],
         "model": "",
-        "status": "blocked" if decision == "forbid" else "success",
+        "status": "success",
         "covenant_decision": decision,
         "tokens": {"total": 0},
     }

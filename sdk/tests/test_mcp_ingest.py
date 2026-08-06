@@ -321,3 +321,60 @@ def _only_record(server):
     assert len(paths) == 1, f"expected exactly one record, got {len(paths)}"
     with open(paths[0]) as f:
         return json.load(f)
+
+
+# ---- covenant interaction ------------------------------------------------
+# The deployed server runs with AIR_COVENANT set. Ingest must treat that
+# covenant as a retrospective second opinion, never as enforcement: the
+# events already happened in the caller's system.
+
+@pytest.fixture
+def governed_server(tmp_path, monkeypatch):
+    covenant = os.path.join(
+        os.path.dirname(__file__), "..", "air_blackbox", "gate", "examples",
+        "recruiting-screener.covenant.yaml")
+    monkeypatch.setenv("AIR_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("AIR_INGEST_TOKENS", "tok-a:sourcingnav")
+    monkeypatch.setenv("AIR_COVENANT", os.path.abspath(covenant))
+    import importlib
+
+    from air_blackbox import mcp_server as m
+    importlib.reload(m)
+    assert m._covenant is not None
+    return m
+
+
+def test_vocabulary_miss_is_no_rule_not_a_fabricated_block(governed_server):
+    """define_search_criteria has no rule in the recruiting covenant. The
+    MCP session path default-denies unknown names; applied to ingest that
+    would record a foreign app's completed action as 'blocked' - an
+    enforcement event that never happened, in a tamper-evident chain."""
+    r = _post(governed_server, _payload(governed_server,
+                                        [_event("e1",
+                                                action="define_search_criteria")]))
+    assert r.status_code == 200
+    record = _only_record(governed_server)
+    assert record["status"] == "success"
+    assert record["covenant_decision"] == "no_rule"
+
+
+def test_matched_rule_verdict_is_recorded_without_blocking(governed_server):
+    """reject_candidate is require_approval in the covenant. The verdict is
+    evidence; the event still records as what it was - a completed action."""
+    _post(governed_server, _payload(governed_server,
+                                    [_event("e1", action="reject_candidate")]))
+    record = _only_record(governed_server)
+    assert record["status"] == "success"
+    assert record["covenant_decision"] == "require_approval"
+
+
+def test_forbidden_action_records_the_verdict_and_the_fact(governed_server):
+    """The strongest sample: the caller reports an action tenant policy
+    forbids. Honest record = it happened AND policy forbids it. Claiming
+    it was blocked would be the lie."""
+    _post(governed_server, _payload(
+        governed_server,
+        [_event("e1", action="infer_protected_attributes")]))
+    record = _only_record(governed_server)
+    assert record["status"] == "success"
+    assert record["covenant_decision"] == "forbid"
