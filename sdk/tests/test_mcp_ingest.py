@@ -378,3 +378,63 @@ def test_forbidden_action_records_the_verdict_and_the_fact(governed_server):
     record = _only_record(governed_server)
     assert record["status"] == "success"
     assert record["covenant_decision"] == "forbid"
+
+
+# ---- export ---------------------------------------------------------------
+# export_evidence (the chat tool) exports the SESSION's tenant, which is not
+# the tenant an app ingests under. Without this endpoint an operator asking
+# Claude to export would get an empty chain and conclude nothing was recorded.
+
+def test_export_returns_a_bundle_for_the_ingesting_tenant(server, monkeypatch):
+    monkeypatch.setenv("AIR_TSA_URLS", "http://127.0.0.1:9/none")  # fail fast
+    _post(server, _payload(server, [_event("e1"), _event("e2")]))
+    r = asyncio.run(server._ingest_export(_FakeRequest(token="tok-a")))
+    assert r.status_code == 200
+    assert r.media_type == "application/zip"
+    assert str(r.path).endswith(".air-evidence")
+
+
+def test_exported_bundle_verifies_and_holds_the_ingested_records(server,
+                                                                 monkeypatch):
+    monkeypatch.setenv("AIR_TSA_URLS", "http://127.0.0.1:9/none")
+    _post(server, _payload(server, [_event("e1"), _event("e2")]))
+    r = asyncio.run(server._ingest_export(_FakeRequest(token="tok-a")))
+
+    import zipfile
+    with zipfile.ZipFile(str(r.path)) as z:
+        names = set(z.namelist())
+        assert "manifest.json" in names
+        assert any(n.startswith("mapping/") for n in names)
+        manifest = json.loads(z.read("manifest.json"))
+        actions = z.read("records/actions.jsonl").decode().strip().splitlines()
+    assert manifest["tenant"] == "sourcingnav"
+    assert manifest["counts"]["actions"] == 2
+    assert len(actions) == 2
+
+
+def test_export_requires_auth_and_is_tenant_bound(server):
+    assert asyncio.run(
+        server._ingest_export(_FakeRequest(token=None))).status_code == 401
+    assert asyncio.run(
+        server._ingest_export(_FakeRequest(token="nope"))).status_code == 401
+
+
+def test_export_of_an_empty_tenant_is_404_not_an_empty_bundle(server):
+    """A bundle attesting nothing is worse than an honest 404 - it looks like
+    evidence."""
+    r = asyncio.run(server._ingest_export(_FakeRequest(token="tok-b")))
+    assert r.status_code == 404
+
+
+def test_anchor_timeout_is_short_by_default(server):
+    """The interactive path must answer before a chat connector gives up:
+    3 default TSAs x 20s was a minute of blocking that surfaced as 'the
+    server isn't responding'."""
+    assert server._anchor_timeout() <= 10
+
+
+def test_anchor_timeout_is_configurable(server, monkeypatch):
+    monkeypatch.setenv("AIR_ANCHOR_TIMEOUT", "3")
+    assert server._anchor_timeout() == 3.0
+    monkeypatch.setenv("AIR_ANCHOR_TIMEOUT", "garbage")
+    assert server._anchor_timeout() == 6.0
