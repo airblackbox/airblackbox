@@ -118,9 +118,17 @@ def test_categorize_record(records):
 def test_manifest_shape_and_counts(bundle):
     _, manifest = bundle
     assert manifest["bundle_version"] == "1.0"
+    # The fixture is the distinction in miniature: one reject reviewed by
+    # j.smith, one engine score with nobody assigned. The coarse total says
+    # "1 missing reviewer"; the split says the adverse decision was reviewed
+    # and the unreviewed record is an engine output, which is not a gap.
     assert manifest["counts"] == {
         "actions": 5, "screening_decisions": 2, "blocked_actions": 1,
-        "human_approvals": 1, "screening_decisions_missing_reviewer": 1}
+        "human_approvals": 1,
+        "adverse_decisions": 1,
+        "adverse_decisions_missing_reviewer": 0,
+        "engine_outputs_without_reviewer": 1,
+        "screening_decisions_missing_reviewer": 1}
     assert manifest["frameworks"] == ["CO-SB26-189"]
     assert manifest["outcome_monitoring"] == "deployer-supplied"
     assert manifest["system"]["deployer"] == "Test LLC"
@@ -249,3 +257,60 @@ def test_missing_required_file_fails_check1(bundle):
         verify_bundle(path, out=io.StringIO())
     assert e.value.check == 1
     assert "receipts.json" in e.value.message
+
+
+# ---- adverse vs engine reviewer gaps --------------------------------------
+# Production data made this concrete: 14 of 53 screening records had no
+# human_reviewer, and the coarse count invited "fixing" it by naming the
+# search-runner as the reviewer of engine scores nobody reviewed. That would
+# have fabricated human oversight inside the format that exists to evidence it.
+
+def _screening(action, reviewer="", decision_type=""):
+    return {"run_id": f"r-{action}-{reviewer}-{decision_type}",
+            "action": action, "status": "success",
+            "timestamp": "2026-08-07T00:00:00Z",
+            "screening": {"human_reviewer": reviewer,
+                          "decision_type": decision_type}}
+
+
+def test_adverse_and_engine_reviewer_gaps_are_counted_separately(signer,
+                                                                 tmp_path):
+    from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
+    records = [
+        _screening("reject_candidate", reviewer="u-abc"),   # reviewed: fine
+        _screening("reject_candidate"),                     # THE gap
+        _screening("reject_candidate"),                     # THE gap
+        _screening("score_candidate"),                      # engine: not a gap
+        _screening("score_candidate"),                      # engine: not a gap
+        _screening("rank_candidates"),                      # engine: not a gap
+    ]
+    _, manifest = generate_evidence_bundle_v1(
+        records, "t", signer, {"intact": True, "verified_records": len(records)},
+        output_dir=str(tmp_path))
+    c = manifest["counts"]
+    assert c["adverse_decisions"] == 3
+    assert c["adverse_decisions_missing_reviewer"] == 2
+    assert c["engine_outputs_without_reviewer"] == 3
+    # The coarse total keeps its old meaning for readers of older bundles.
+    assert c["screening_decisions_missing_reviewer"] == 5
+
+
+def test_decision_type_reject_counts_as_adverse_whatever_the_action_name(
+        signer, tmp_path):
+    """Callers name actions in their own vocabulary; a reject is a reject."""
+    from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
+    records = [_screening("filter_candidate", decision_type="reject")]
+    _, manifest = generate_evidence_bundle_v1(
+        records, "t", signer, {"intact": True, "verified_records": 1},
+        output_dir=str(tmp_path))
+    assert manifest["counts"]["adverse_decisions_missing_reviewer"] == 1
+
+
+def test_engine_scores_alone_report_no_adverse_gap(signer, tmp_path):
+    """A day of pure scoring must not read as a compliance problem."""
+    from air_blackbox.export.evidence_bundle import generate_evidence_bundle_v1
+    _, manifest = generate_evidence_bundle_v1(
+        [_screening("score_candidate") for _ in range(20)], "t", signer,
+        {"intact": True, "verified_records": 20}, output_dir=str(tmp_path))
+    assert manifest["counts"]["adverse_decisions_missing_reviewer"] == 0
+    assert manifest["counts"]["engine_outputs_without_reviewer"] == 20

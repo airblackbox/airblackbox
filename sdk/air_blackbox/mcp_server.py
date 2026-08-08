@@ -1022,12 +1022,15 @@ def _export_tenant(tenant: str, anchor_timeout: Optional[float] = None) -> str:
                 f"{verification.verified_records} of {total} records verified; "
                 f"{unchained} carry no chain hash. The manifest records this. "
                 f"Tell the user.")
-    gaps = manifest["counts"]["screening_decisions_missing_reviewer"]
+    # Report only ADVERSE decisions here. Engine scores are legitimately
+    # reviewer-less, and surfacing them as "gaps" trains the operator to
+    # ignore the number that actually matters.
+    gaps = manifest["counts"]["adverse_decisions_missing_reviewer"]
     gap_note = ""
     if gaps:
-        gap_note = (f" NOTE: {gaps} screening decision(s) carry no "
-                    f"human_reviewer - flagged in the manifest as review-"
-                    f"protocol gaps; tell the user.")
+        gap_note = (f" NOTE: {gaps} decision(s) that ENDED a candidacy carry "
+                    f"no human_reviewer - flagged in the manifest as "
+                    f"review-protocol gaps; tell the user.")
     return (f"Evidence bundle written: {path} ({total} records, chain fully "
             f"verified at export time; verification stamped into the signed "
             f"manifest; verify independently with 'air-evidence verify "
