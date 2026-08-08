@@ -119,6 +119,28 @@ _SCREENING_ACTIONS = frozenset(
     {"advance_candidate", "reject_candidate", "score_candidate",
      "rank_candidates", "schedule_interview"})
 
+#: Actions that END or HARM a candidacy. The explanation right and the
+#: meaningful-human-review duty (SB 26-189, California FEHA ADS rules) attach
+#: to ADVERSE outcomes, so a missing reviewer on one of these is a real
+#: compliance gap. A missing reviewer on an engine score is NOT: scoring is an
+#: input to a decision, not the decision. Counting them together buries the
+#: gaps that matter inside routine engine volume, and invites the opposite
+#: error - "fixing" the number by naming a reviewer who never reviewed
+#: anything, which would fabricate the human oversight this format exists to
+#: evidence.
+_ADVERSE_ACTIONS = frozenset({"reject_candidate"})
+
+
+def is_adverse_decision(record: Dict[str, Any]) -> bool:
+    """True if this record ends or harms a candidacy."""
+    if record.get("action") in _ADVERSE_ACTIONS:
+        return True
+    return (record.get("screening") or {}).get("decision_type") == "reject"
+
+
+def _reviewer(record: Dict[str, Any]) -> str:
+    return (record.get("screening") or {}).get("human_reviewer") or ""
+
 
 def categorize_record(record: Dict[str, Any]) -> str:
     """Map a chained record to its evidence category (see mapping/*.json)."""
@@ -227,14 +249,25 @@ def generate_evidence_bundle_v1(
     cats = [categorize_record(r) for r in chain_entries]
     screening_records = [r for r, c in zip(chain_entries, cats)
                          if c == "screening_decision"]
-    missing_reviewer = sum(
+    missing_reviewer = sum(1 for r in screening_records if not _reviewer(r))
+    adverse = [r for r in screening_records if is_adverse_decision(r)]
+    adverse_missing = sum(1 for r in adverse if not _reviewer(r))
+    engine_no_reviewer = sum(
         1 for r in screening_records
-        if not r.get("screening", {}).get("human_reviewer"))
+        if not is_adverse_decision(r) and not _reviewer(r))
     counts = {
         "actions": len(chain_entries),
         "screening_decisions": len(screening_records),
         "blocked_actions": cats.count("blocked_action"),
         "human_approvals": cats.count("human_approval"),
+        "adverse_decisions": len(adverse),
+        # The number an auditor should read first.
+        "adverse_decisions_missing_reviewer": adverse_missing,
+        # Context, not a gap: engine outputs are legitimately reviewer-less.
+        "engine_outputs_without_reviewer": engine_no_reviewer,
+        # Retained unchanged: this field predates the split and appears in
+        # already-signed bundles. Its meaning must not shift under readers of
+        # older exports, so it stays the coarse total.
         "screening_decisions_missing_reviewer": missing_reviewer,
     }
 
@@ -321,6 +354,15 @@ def generate_evidence_bundle_v1(
                            "SB 24-205, sets no explicit retention period); "
                            "computed from export time."),
         "frameworks": ["CO-SB26-189"],
+        "review_note": ("adverse_decisions_missing_reviewer is the "
+                        "compliance-relevant count: decisions that ended a "
+                        "candidacy with no named human reviewer. "
+                        "engine_outputs_without_reviewer counts scoring and "
+                        "ranking, which are inputs to a decision rather than "
+                        "the decision, and are legitimately reviewer-less. "
+                        "screening_decisions_missing_reviewer is the coarse "
+                        "total of both, kept for compatibility with bundles "
+                        "exported before the split."),
         "outcome_monitoring": "deployer-supplied",
         "anchor": anchor_manifest or {"status": "absent"},
         "files": files,
