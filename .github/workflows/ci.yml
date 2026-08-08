@@ -73,6 +73,10 @@ jobs:
 
   fuzz:
     runs-on: ubuntu-latest
+    # 4 targets x 30s of fuzzing is ~4 minutes with setup. A cap turns a
+    # runner reaped mid-queue (which reports as a red X with no steps and no
+    # logs, indistinguishable from a real failure) into an explicit timeout.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

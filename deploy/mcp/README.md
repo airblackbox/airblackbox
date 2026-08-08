@@ -15,6 +15,17 @@ pip install air-blackbox[mcp]
   "env": {"AIR_COVENANT": "/path/to/recruiting-screener.covenant.yaml"}}}}
 ```
 
+## Integrating an application (not a Claude session)
+
+A hosted product writes receipts through `POST /ingest` instead of the MCP
+tools: it keeps a durable outbox and this server is the single writer, because
+a serverless app cannot own a single-writer audit chain without forking it.
+
+    fly secrets set AIR_INGEST_TOKENS="$(openssl rand -hex 32):acme-corp"
+
+Full contract, client requirements, and failure semantics:
+[docs/guides/ingest-integration.md](../../docs/guides/ingest-integration.md)
+
 ## Remote (claude.ai custom connector) — tethered to airblackbox.ai
 
 ```bash
