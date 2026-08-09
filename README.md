@@ -32,7 +32,7 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 **Signed, post-quantum-ready**: the audit chain is HMAC-SHA256 (alter one record and every record after it breaks); each Gate action carries a public-key signature — ML-DSA-65 (FIPS 204, post-quantum) when the `pqc` extra is installed (`pip install "air-blackbox[pqc]"`), Ed25519 otherwise. Keys are generated locally, persisted per tenant, and never leave your machine. What is quantum-exposed, what is not, and the migration plan are written down in the [cryptographic posture](docs/security/cryptographic-posture.md).
 
-**Evidence bundle**: one command packages the records, chain/receipt verification results, the public key, and regulator mappings (Colorado SB 26-189) into a signed `.air-evidence` bundle (v1 format). `air-evidence verify` runs five ordered checks and needs **no secrets** — one public-key signature covers every file in the bundle. Bundles can also auto-export on a schedule (`AIR_AUTO_EXPORT_INTERVAL_HOURS`), so evidence never depends on a busy human remembering to ask for it.
+**Evidence bundle**: two formats, and the difference matters. `air-blackbox export --format evidence` writes a self-verifying ZIP with a standalone `verify.py` that your auditor runs with your signing key. Bundles exported through the AIR MCP server are `.air-evidence` v1: records, chain/receipt verification results, the public key, and regulator mappings (Colorado SB 26-189), with the manifest signed by Ed25519 or ML-DSA-65. `air-evidence verify` reads the v1 format, runs six ordered checks, and needs **no secrets** — one public-key signature covers every file in the bundle, and a member the manifest does not list is rejected rather than passed over. Bundles can also auto-export on a schedule (`AIR_AUTO_EXPORT_INTERVAL_HOURS`), so evidence never depends on a busy human remembering to ask for it.
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
@@ -63,8 +63,9 @@ air-blackbox replay
 # Verify the tamper-evident chain (zero config: reads the gateway's local key)
 air-blackbox replay --verify
 
-# Generate a signed evidence package for audit or regulator review
-air-blackbox export
+# Generate an evidence package for audit or regulator review
+air-blackbox export                       # JSON summary, HMAC attestation
+air-blackbox export --format evidence     # self-verifying ZIP + standalone verify.py
 ```
 
 

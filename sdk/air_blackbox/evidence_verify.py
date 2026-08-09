@@ -2,13 +2,16 @@
 
     air-evidence verify bundle.air-evidence [--key HMAC_KEY] [--tsa-cacert CA]
 
-Runs six checks in order, failing loudly with the exact record id on the
-first failure:
+Runs six checks in order, failing loudly on the first failure. Checks 3 and
+4 name the exact record id; checks 1, 2, 5 and 6 name the offending file,
+count, or anchor - a record edit is caught by check 2 as a file digest
+mismatch before the record-level recompute is ever reached:
 
   1. ZIP integrity and required files present
-  2. Manifest signature valid against the bundled public key (and the
-     manifest's per-file digests match the actual bundle contents, so the
-     one signature transitively covers every file)
+  2. Manifest signature valid against the bundled public key, the manifest's
+     per-file digests match the actual bundle contents, and no member is
+     present that the manifest does not list - so the one signature covers
+     every file in the bundle
   3. Chain hashes consistent over records/actions.jsonl, and the chain was
      recorded intact at export (full HMAC recompute when --key is provided)
   4. Every record's receipt signature verifies with the public key
@@ -235,6 +238,20 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         if got != want:
             _fail(2, f"file digest mismatch for {fname}: contents were "
                      "altered after the manifest was signed")
+    # The digest loop above only proves the LISTED files are unaltered. Without
+    # this, a member absent from the manifest is covered by nothing: an
+    # attacker can drop a forged attachment into a validly signed bundle and
+    # all six checks still pass. The generator writes manifest.json plus
+    # exactly the members it lists (evidence_bundle.py:389-397), so anything
+    # else was added after signing.
+    unsigned = sorted(n for n in names
+                      if n != "manifest.json"
+                      and not n.endswith("/")
+                      and n not in (manifest.get("files") or {}))
+    if unsigned:
+        _fail(2, "bundle contains file(s) the manifest does not list, so the "
+                 "signature does not cover them - added after signing: "
+                 f"{', '.join(unsigned)}")
     print(f"[2/6] Manifest signature ({alg}) and "
           f"{len(manifest.get('files') or {})} file digests: OK", file=out)
 

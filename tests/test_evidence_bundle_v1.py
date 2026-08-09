@@ -1,6 +1,6 @@
 """Evidence Bundle v1: generation, signing, and independent verification.
 
-Covers the five verifier checks plus tamper detection: a bundle must verify
+Covers the six verifier checks plus tamper detection: a bundle must verify
 clean end-to-end, and any post-signing alteration (records, manifest, or a
 receipt) must fail loudly with the offending record identified.
 """
@@ -257,6 +257,44 @@ def test_missing_required_file_fails_check1(bundle):
         verify_bundle(path, out=io.StringIO())
     assert e.value.check == 1
     assert "receipts.json" in e.value.message
+
+
+def test_unlisted_member_added_after_signing_fails_check2(bundle):
+    """A file the manifest does not list is covered by nothing.
+
+    The per-file digest loop only proves the LISTED files are unaltered, so
+    before this check an attacker could drop a forged document into a validly
+    signed bundle and all six checks still passed clean - 0 alterations, valid
+    signature, the lot. The forged file is the interesting one precisely
+    because it is the kind an auditor would read: an impact assessment nobody
+    approved.
+    """
+    path, manifest = bundle
+    forged = "attachments/human-review-signoff.md"
+    assert forged not in manifest["files"], "fixture already lists this name"
+    with zipfile.ZipFile(path, "a") as zf:
+        zf.writestr(forged, "# Human review sign-off\nApproved by nobody.\n")
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(path, out=io.StringIO())
+    assert e.value.check == 2
+    assert forged in e.value.message
+    assert "does not list" in e.value.message
+
+
+def test_legitimate_attachment_is_listed_and_verifies(tmp_path, signer,
+                                                      records):
+    """The guard must not reject attachments the generator itself signs."""
+    attach = tmp_path / "attachments"
+    attach.mkdir()
+    (attach / "dpia.md").write_text("# DPIA\n")
+    path, manifest = generate_evidence_bundle_v1(
+        chain_entries=records, tenant="t", signer=signer,
+        chain_verification={"fully_intact": True, "intact": True,
+                            "verified_records": len(records)},
+        attachments_dir=str(attach), output_dir=str(tmp_path))
+    assert "attachments/dpia.md" in manifest["files"]
+    summary = verify_bundle(path, out=io.StringIO())
+    assert summary["alterations"] == 0
 
 
 # ---- adverse vs engine reviewer gaps --------------------------------------
