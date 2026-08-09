@@ -291,8 +291,6 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
                           14: "Human Oversight", 15: "Accuracy & Security"}
             for article in articles:
                 art_num = article.get("number", 0)
-                if art_num not in article_map:
-                    continue
                 passes = []
                 fails = []
                 warns = []
@@ -307,7 +305,18 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
                         fails.append(summary)
                     elif status == "warn":
                         warns.append(summary)
-                line = f"Article {art_num} ({article_map[art_num]}): "
+                if not (passes or fails or warns):
+                    continue
+                # Non-EU groups (US state law, GDPR, bias) use string keys and
+                # carry their own title. They used to be skipped outright, so
+                # the model never saw a single state-law or GDPR finding.
+                if isinstance(art_num, int) and art_num in article_map:
+                    label = f"Article {art_num} ({article_map[art_num]})"
+                elif isinstance(art_num, int):
+                    label = f"Article {art_num}"
+                else:
+                    label = article.get("title") or str(art_num)
+                line = f"{label}: "
                 if passes:
                     line += f"{len(passes)} PASS ({'; '.join(passes[:2])})"
                 if fails:

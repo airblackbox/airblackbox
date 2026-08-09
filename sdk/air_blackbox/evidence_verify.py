@@ -1,14 +1,21 @@
 """air-evidence: independent verifier for .air-evidence v1 bundles.
 
-    air-evidence verify bundle.air-evidence [--key HMAC_KEY] [--tsa-cacert CA]
+    air-evidence verify bundle.air-evidence [--expect-key FINGERPRINT]
+                                            [--rekor-verify]
+                                            [--key HMAC_KEY] [--tsa-cacert CA]
 
-Runs six checks in order, failing loudly with the exact record id on the
-first failure:
+Runs six checks in order, failing loudly on the first failure. Checks 3 and
+4 name the exact record id; checks 1, 2, 5 and 6 name the offending file,
+count, or anchor - a record edit is caught by check 2 as a file digest
+mismatch before the record-level recompute is ever reached:
 
   1. ZIP integrity and required files present
-  2. Manifest signature valid against the bundled public key (and the
-     manifest's per-file digests match the actual bundle contents, so the
-     one signature transitively covers every file)
+  2. Manifest signature valid against the bundled public key, the manifest's
+     per-file digests match the actual bundle contents, and no member is
+     present that the manifest does not list - so the one signature covers
+     every file in the bundle. The key travels INSIDE the bundle, so this
+     proves internal consistency, not provenance: pass --expect-key to pin
+     the issuer, or the verdict reads VERIFIED (UNATTRIBUTED).
   3. Chain hashes consistent over records/actions.jsonl, and the chain was
      recorded intact at export (full HMAC recompute when --key is provided)
   4. Every record's receipt signature verifies with the public key
@@ -17,11 +24,16 @@ first failure:
      matches the RFC 3161 timestamp countersigned by an external authority -
      the check that makes an operator rewrite detectable. An unanchored
      bundle is reported as such (no rewrite protection), never silently
-     passed as fully verified.
+     passed as fully verified. A bundle may also carry a public
+     transparency-log receipt; that receipt is signed by a key it carries, so
+     --rekor-verify fetches the entry and confirms it exists and agrees.
 
 No secrets are required - a client's lawyer, their enterprise customer, or a
 regulator can run this as-is. The --key option additionally recomputes the
 private HMAC chain; --tsa-cacert lets check 6 run fully offline.
+
+Known limits are documented, including unfixed ones, in
+docs/security/red-team-2026-08.md.
 """
 
 from __future__ import annotations
@@ -40,6 +52,7 @@ from air_blackbox.export.evidence_bundle import (
     V1_REQUIRED_FILES,
     canonical_manifest_bytes,
     categorize_record,
+    is_adverse_decision,
 )
 from air_blackbox.anchor.head import head_over_entries
 
@@ -136,8 +149,18 @@ def _auth_payload(receipt: Dict[str, Any]) -> bytes:
     return json.dumps(data, sort_keys=True).encode("utf-8")
 
 
+def _fingerprint(alg: str, pub_hex: str) -> str:
+    """Stable short identity for a bundle's signing key."""
+    if not pub_hex:
+        return alg
+    return f"{alg}:{hashlib.sha256(bytes.fromhex(pub_hex)).hexdigest()[:16]}"
+
+
 def verify_bundle(path: str, hmac_key: str | None = None,
                   tsa_cacert: str | None = None,
+                  expect_key: str | None = None,
+                  rekor_verify: bool = False,
+                  rekor_server: str | None = None,
                   out=sys.stdout) -> Dict[str, Any]:
     """Run all six checks. Returns a summary dict; raises
     VerificationFailure on the first failed check.
@@ -157,7 +180,21 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     bad = zf.testzip()
     if bad is not None:
         _fail(1, f"corrupt member in ZIP: {bad}")
-    names = set(zf.namelist())
+    # Duplicate member names must die here, before any digest is computed.
+    # ZIP allows two entries with the same name; Python's zipfile resolves
+    # reads to the LAST one, while `unzip -p`, streaming readers and most
+    # other tooling take the FIRST. So a forged copy written first and the
+    # genuine copy written second passes every digest check - the verifier
+    # hashes the genuine bytes and prints "0 alterations" while an auditor
+    # opening the same file reads the forgery. No legitimate v1 bundle has
+    # duplicate names: the generator writes each member exactly once.
+    listed = zf.namelist()
+    dupes = sorted({n for n in listed if listed.count(n) > 1})
+    if dupes:
+        _fail(1, "duplicate member name(s) in ZIP - different tools would "
+                 "read different content from the same bundle: "
+                 f"{', '.join(dupes)}")
+    names = set(listed)
     missing = [n for n in V1_REQUIRED_FILES if n not in names]
     if missing:
         _fail(1, f"required files missing from bundle: {', '.join(missing)}")
@@ -226,6 +263,15 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                               hashlib.sha256).hexdigest()
         if not hmac_mod.compare_digest(expect, sig.get("value", "")):
             _fail(2, "manifest HMAC signature INVALID for the provided key")
+        # This branch used to leave manifest_pubkey_hex unset, which silently
+        # disabled check 4's rule that every receipt must be signed by the
+        # bundle's own key - so downgrading alg to hmac-sha256 and supplying
+        # your own --key unbound the receipts from the manifest. The bundled
+        # PEM is still the bundle's declared key; hold the receipts to it.
+        try:
+            manifest_pubkey_hex = _pem_raw_key(pem_text).hex()
+        except Exception:
+            manifest_pubkey_hex = _hex_block_key(pem_text) or None
     else:
         _fail(2, f"unsupported manifest signature algorithm: '{alg}'")
     for fname, want in (manifest.get("files") or {}).items():
@@ -235,8 +281,58 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         if got != want:
             _fail(2, f"file digest mismatch for {fname}: contents were "
                      "altered after the manifest was signed")
+    # The digest loop above only proves the LISTED files are unaltered. Without
+    # this, a member absent from the manifest is covered by nothing: an
+    # attacker can drop a forged attachment into a validly signed bundle and
+    # all six checks still pass. The generator writes manifest.json plus
+    # exactly the members it lists (evidence_bundle.py:389-397), so anything
+    # else was added after signing.
+    # A name ending in "/" is exempt ONLY if it is a genuine directory entry,
+    # meaning it carries no data. ZIP does not enforce that: a member named
+    # "attachments/signoff.pdf/" can hold a full payload, and exempting it on
+    # the name alone reopens exactly the hole this guard closes.
+    signed_files = manifest.get("files") or {}
+    unsigned = sorted(
+        n for n in names
+        if n != "manifest.json"
+        and n not in signed_files
+        and not (n.endswith("/") and zf.getinfo(n).file_size == 0))
+    if unsigned:
+        _fail(2, "bundle contains file(s) the manifest does not list, so the "
+                 "signature does not cover them - added after signing: "
+                 f"{', '.join(unsigned)}")
+    # A valid signature proves internal consistency, NOT provenance: the key it
+    # is checked against travels inside the bundle, so anyone can mint a key,
+    # assemble records of their choosing, and sign them. Pinning the expected
+    # signer is the only thing that turns "consistent" into "from whom I
+    # think". When the caller does not pin one, say so rather than let a bare
+    # VERIFIED imply an attribution the check never made.
+    # Derive the identity from the key material actually used to verify, not
+    # from signature.public_key_hex. canonical_manifest_bytes() excludes the
+    # signature object from the signed digest (it cannot cover itself), so
+    # that field is attacker-mutable: deleting it used to degrade the
+    # fingerprint to a bare algorithm name, which is the value --expect-key
+    # is compared against.
+    fingerprint = _fingerprint(alg, manifest_pubkey_hex or "")
+    signer_pinned = False
+    if expect_key:
+        want = expect_key.strip().lower()
+        got = fingerprint.lower()
+        # Accept either the full "alg:hex" form or the bare hex portion.
+        if want not in (got, got.split(":")[-1]):
+            _fail(2, f"signer mismatch: bundle is signed by {fingerprint}, "
+                     f"expected {expect_key}. This bundle was not issued by "
+                     "the party you pinned.")
+        signer_pinned = True
     print(f"[2/6] Manifest signature ({alg}) and "
           f"{len(manifest.get('files') or {})} file digests: OK", file=out)
+    if signer_pinned:
+        print(f"      signer pinned and matched: {fingerprint}", file=out)
+    else:
+        print(f"      signer NOT pinned: this bundle is signed by "
+              f"{fingerprint}, but nothing here proves who that is. Compare it "
+              "against a fingerprint you obtained from the issuer separately, "
+              "or re-run with --expect-key.", file=out)
 
     # ---- Check 3: chain hashes over records/actions.jsonl -----------------
     records: List[Dict[str, Any]] = []
@@ -340,26 +436,59 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) has "
                      f"unsupported signing method '{method}'")
         checked += 1
-    print(f"[4/6] Receipts: {checked}/{len(records)} records carry a "
-          f"receipt, all signatures valid", file=out)
+    # "all signatures valid" over zero receipts certifies nothing. Records
+    # without a receipt are skipped above, so a bundle where none carry one
+    # passed this check while establishing no authorship whatsoever. Gateway
+    # and trust-layer records legitimately have no receipts today, so this is
+    # reported rather than failed - but it is reported, not glossed.
+    if records and not checked:
+        print(f"[4/6] Receipts: 0/{len(records)} records carry a receipt - "
+              "NOTHING was checked here. This bundle evidences what happened, "
+              "not who authorized it.", file=out)
+    else:
+        print(f"[4/6] Receipts: {checked}/{len(records)} records carry a "
+              f"receipt, all signatures valid", file=out)
 
     # ---- Check 5: manifest counts match reality ---------------------------
     cats = [categorize_record(r) for r in records]
     screening = [r for r, c in zip(records, cats) if c == "screening_decision"]
+
+    def _rev(r):
+        # Mirrors evidence_bundle._reviewer: `or {}` matters because a record
+        # may carry "screening": null, which .get(default) would not catch.
+        return (r.get("screening") or {}).get("human_reviewer") or ""
+
+    adverse = [r for r in screening if is_adverse_decision(r)]
     actual = {
         "actions": len(records),
         "screening_decisions": len(screening),
         "blocked_actions": cats.count("blocked_action"),
         "human_approvals": cats.count("human_approval"),
         "screening_decisions_missing_reviewer": sum(
+            1 for r in screening if not _rev(r)),
+        # These three were declared in the manifest but never recomputed, so
+        # the bundle could assert "adverse_decisions_missing_reviewer: 0" over
+        # records that show otherwise - and that is the first number an
+        # auditor reads. A signed lie is still a lie; check 5 exists to make
+        # the manifest's summary answerable to the records underneath it.
+        "adverse_decisions": len(adverse),
+        "adverse_decisions_missing_reviewer": sum(
+            1 for r in adverse if not _rev(r)),
+        "engine_outputs_without_reviewer": sum(
             1 for r in screening
-            if not r.get("screening", {}).get("human_reviewer")),
+            if not is_adverse_decision(r) and not _rev(r)),
     }
     declared = manifest.get("counts") or {}
     for k, v in actual.items():
         if k in declared and declared[k] != v:
             _fail(5, f"count mismatch for '{k}': manifest says "
                      f"{declared[k]}, records show {v}")
+    # A manifest that simply omits a count cannot be checked against the
+    # records, so an omitted compliance count is itself a finding.
+    undeclared = sorted(k for k in actual if k not in declared)
+    if undeclared:
+        _fail(5, "manifest omits count(s) the records support, so its summary "
+                 f"cannot be checked: {', '.join(undeclared)}")
     print("[5/6] Counts: manifest matches records", file=out)
 
     # ---- Check 6: external anchor (operator-rewrite detection) -------------
@@ -371,6 +500,7 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     # such rather than silently blessed.
     anchor = manifest.get("anchor") or {}
     anchor_state = "absent"
+    public_log_state = "absent"
     if anchor.get("anchored") and anchor.get("tsr_b64"):
         from air_blackbox.anchor.tsa import verify_anchor_bytes
         try:
@@ -378,6 +508,12 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         except Exception as e:
             _fail(6, f"anchor token is not valid base64: {e}")
         rederived = _rederive_head(records, up_to_seq=anchor.get("seq_max"))
+        # An anchor over an empty head attests to nothing: strip every record
+        # and the derivation degenerates rather than failing.
+        if not rederived:
+            _fail(6, "bundle claims an external anchor but contains no chained "
+                     "records to re-derive a head from - the timestamp commits "
+                     "to nothing")
         ok, detail = verify_anchor_bytes(rederived, tsr, ca_pem=tsa_cacert)
         if ok:
             anchor_state = "verified"
@@ -422,21 +558,37 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             if "REWRITE DETECTED" in detail:
                 _fail(6, f"public-log anchor: {detail}")
             _fail(6, f"public-log anchor invalid: {detail}")
-        anchor_state = ("verified+public-log" if anchor_state == "verified"
-                        else "public-log")
-        print(f"[6b ] Public-log anchor: {detail} "
-              f"(rekor uuid {rekor['uuid'][:16]}..., log index "
-              f"{rekor.get('log_index')}). The entry is permanent; "
-              "audit every anchor under this key with air-evidence audit-log.",
-              file=out)
+        # The step above verifies the receipt's signature against a public key
+        # the receipt itself carries, so on its own it proves self-consistency:
+        # anyone can mint a key, sign a payload over any head, and attach a
+        # plausible uuid and log index. Saying "the entry is permanent" without
+        # fetching it asserted log membership that was never checked.
+        if rekor_verify:
+            from air_blackbox.anchor.rekor import verify_anchor_in_log
+            from air_blackbox.anchor.rekor import DEFAULT_REKOR_SERVER
+            in_log, log_detail = verify_anchor_in_log(
+                rekor, server=rekor_server or DEFAULT_REKOR_SERVER)
+            if not in_log:
+                _fail(6, f"public-log anchor: {log_detail}")
+            public_log_state = "in-log"
+            print(f"[6b ] Public-log anchor: {log_detail}. Membership is "
+                  "permanent and cannot be retracted - but a public log "
+                  "accepts writes from anyone, so this shows the commitment "
+                  "was published, not who published it. Sweep every anchor "
+                  "under this key with air-evidence audit-log.", file=out)
+        else:
+            public_log_state = "embedded-only"
+            print(f"[6b ] Public-log anchor: {detail}, but NOT checked against "
+                  f"the log (rekor uuid {rekor['uuid'][:16]}..., claimed index "
+                  f"{rekor.get('log_index')}). The receipt is signed by a key "
+                  "it carries, so this is self-consistency only. Re-run with "
+                  "--rekor-verify to confirm the entry exists.", file=out)
 
-    pub_hex = (manifest.get("signature") or {}).get("public_key_hex", "")
-    fingerprint = (
-        f"{alg}:{hashlib.sha256(bytes.fromhex(pub_hex)).hexdigest()[:16]}"
-        if pub_hex else alg)
     return {"records": len(records), "alterations": 0,
-            "fingerprint": fingerprint, "counts": actual,
-            "anchor": anchor_state,
+            "fingerprint": fingerprint, "signer_pinned": signer_pinned,
+            "counts": actual, "anchor": anchor_state,
+            "public_log": public_log_state,
+            "receipts_checked": checked,
             "bundle_id": manifest.get("bundle_id", "")}
 
 
@@ -453,11 +605,32 @@ def main(argv: List[str] | None = None) -> int:
     vp.add_argument("--tsa-cacert", default=None,
                     help="PEM CA chain of the timestamp authority, for offline "
                          "anchor verification (else FreeTSA's CA is fetched)")
+    vp.add_argument("--strict", action="store_true",
+                    help="exit non-zero unless the issuer was pinned, an "
+                         "external anchor verified, and any public-log receipt "
+                         "was checked against the log. Reporting is the "
+                         "default; this enforces.")
+    vp.add_argument("--rekor-verify", action="store_true",
+                    help="fetch the public transparency-log entry and confirm "
+                         "it exists and matches (requires network). Without "
+                         "it the embedded log receipt is only checked for "
+                         "self-consistency.")
+    vp.add_argument("--rekor-server", default=None,
+                    help="transparency log base URL (default: public Rekor)")
+    vp.add_argument("--expect-key", default=None, metavar="FINGERPRINT",
+                    help="the signer fingerprint you expect, obtained from the "
+                         "issuer out-of-band (e.g. ed25519:0e80dd4149f3042a). "
+                         "Without it, a valid signature proves the bundle is "
+                         "internally consistent, not who issued it.")
     args = ap.parse_args(argv)
+    strict = args.strict
 
     try:
         summary = verify_bundle(args.bundle, hmac_key=args.key,
-                                tsa_cacert=args.tsa_cacert)
+                                tsa_cacert=args.tsa_cacert,
+                                expect_key=args.expect_key,
+                                rekor_verify=args.rekor_verify,
+                                rekor_server=args.rekor_server)
     except VerificationFailure as e:
         print(f"FAILED at check {e.check}: {e.message}", file=sys.stderr)
         return 1
@@ -469,9 +642,41 @@ def main(argv: List[str] | None = None) -> int:
         "absent": "signature valid; NOT anchored - an operator rewrite would "
                   "not be detectable by this check",
     }.get(anchor, anchor)
-    print(f"VERIFIED [{qualifier}]: {summary['records']} records, "
-          f"{summary['alterations']} alterations, "
-          f"signed by {summary['fingerprint']}")
+    if summary.get("public_log") == "embedded-only":
+        qualifier += "; public-log receipt not checked against the log"
+    if summary["records"] and not summary.get("receipts_checked"):
+        qualifier += "; no per-record receipts, authorship unevidenced"
+
+    # A bare "VERIFIED" gets read as "issued by the expected party, and proof
+    # against a rewrite". Neither holds unless the signer is pinned and an
+    # external witness checked out, so the headline names what is missing
+    # instead of leaving the reader to find it in the qualifier.
+    gaps = []
+    if not summary["signer_pinned"]:
+        gaps.append("UNATTRIBUTED")
+    if anchor != "verified":
+        gaps.append("UNWITNESSED")
+    if summary.get("public_log") == "embedded-only":
+        gaps.append("LOG-UNCHECKED")
+    verdict = "VERIFIED" if not gaps else f"VERIFIED ({', '.join(gaps)})"
+
+    signed_by = (f"signed by {summary['fingerprint']}"
+                 if summary["signer_pinned"] else
+                 f"signed by {summary['fingerprint']} - signer NOT pinned, "
+                 "compare this against the issuer or pass --expect-key")
+    print(f"{verdict} [{qualifier}]: {summary['records']} records, "
+          f"{summary['alterations']} alterations, {signed_by}")
+
+    # Default exit stays 0 when nothing failed: today's CLI exports are never
+    # anchored, so failing on that by default would reject the project's own
+    # output. --strict is the switch for anyone who needs the strong reading
+    # enforced rather than merely reported.
+    if strict and gaps:
+        print(f"STRICT: refusing to pass - {', '.join(gaps)}. Pin the issuer "
+              "with --expect-key, require an anchored bundle, and pass "
+              "--rekor-verify when a public-log receipt is present.",
+              file=sys.stderr)
+        return 2
     return 0
 
 

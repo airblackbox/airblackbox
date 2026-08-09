@@ -273,7 +273,17 @@ def test_export_publishes_to_log_and_bundle_verifies(tmp_path, monkeypatch,
     buf = io.StringIO()
     summary = verify_bundle(bundles[0], out=buf)
     assert "Public-log anchor" in buf.getvalue()
-    assert "public-log" in summary["anchor"]
+    # Offline, the embedded receipt is only self-consistent: it is signed by a
+    # key it carries, so nothing yet shows the entry is in the log.
+    assert summary["public_log"] == "embedded-only"
+    assert "NOT checked against the log" in buf.getvalue()
+
+    # With the log reachable, the entry itself is confirmed.
+    buf2 = io.StringIO()
+    online = verify_bundle(bundles[0], rekor_verify=True,
+                           rekor_server=rekor.server, out=buf2)
+    assert online["public_log"] == "in-log"
+    assert "found in the public log at index" in buf2.getvalue()
 
     tool_out = srv.audit_public_log()
     assert "PUBLIC LOG CONSISTENT" in tool_out
@@ -333,3 +343,124 @@ def test_untampered_history_audits_clean(tmp_path, rekor):
     assert audit.anchors_checked == 2
     assert audit.consistent == 2
     assert not audit.rewrite_detected
+
+
+# ---------------------------------------------------------------------------
+# Red-team finding 6: a forged public-log receipt.
+# ---------------------------------------------------------------------------
+
+def test_forged_log_receipt_passes_offline_but_fails_against_the_log(
+        tmp_path, monkeypatch, rekor):
+    """Anyone can mint a key and sign a payload over any head they like.
+
+    verify_bundle_anchor checks the receipt's signature against a public key
+    the receipt itself carries, so a wholly fabricated anchor is offline-
+    indistinguishable from a real one - and the verifier used to print "the
+    entry is permanent" over it. Only fetching the entry settles it.
+    """
+    import glob as _glob
+    import io
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+    )
+
+    from air_blackbox.anchor.rekor import anchor_payload_bytes
+    from air_blackbox.evidence_verify import verify_bundle, VerificationFailure
+
+    srv = _fresh_srv(tmp_path, monkeypatch, rekor)
+    monkeypatch.delenv("AIR_REKOR_SERVER", raising=False)   # no real anchoring
+    srv.record_action("reject_candidate", detail="candidate A")
+    srv.export_evidence()
+    bundle = _glob.glob(str(tmp_path / "**" / "*.air-evidence"),
+                        recursive=True)[0]
+
+    # Recompute the true head so the forgery is consistent with the records -
+    # the attacker is not rewriting history, only fabricating the witness.
+    import zipfile
+    from air_blackbox.evidence_verify import _rederive_head
+    with zipfile.ZipFile(bundle) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        recs = [json.loads(l) for l in
+                zf.read("records/actions.jsonl").decode().splitlines() if l]
+    seq = max(r.get("chain_seq") or 0 for r in recs)
+    head = _rederive_head(recs, up_to_seq=seq)
+
+    key = Ed25519PrivateKey.generate()          # attacker's own key
+    payload = anchor_payload_bytes(head, seq, "2026-08-09T00:00:00Z")
+    pub = key.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    manifest["anchor"] = {
+        "anchored": False, "status": "absent",
+        "rekor": {"uuid": "f" * 64, "log_index": 999999,
+                  "payload_b64": base64.b64encode(payload).decode(),
+                  "signature_hex": key.sign(payload).hex(),
+                  "public_key_hex": pub.hex()},
+    }
+    # Re-sign the manifest so checks 1-5 pass: the attacker controls the bundle.
+    signer = srv._tenant_signer("_local")
+    from air_blackbox.export.evidence_bundle import canonical_manifest_bytes
+    digest = hashlib.sha256(canonical_manifest_bytes(manifest)).hexdigest()
+    manifest["signature"]["signed_digest"] = digest
+    manifest["signature"]["value"] = signer.sign(bytes.fromhex(digest))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(bundle) as zin, \
+            zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.namelist():
+            zout.writestr(item, json.dumps(manifest, indent=2)
+                          if item == "manifest.json" else zin.read(item))
+    with open(bundle, "wb") as f:
+        f.write(buf.getvalue())
+
+    # Offline: the forgery sails through and is reported as self-consistent.
+    out = io.StringIO()
+    summary = verify_bundle(bundle, out=out)
+    assert summary["public_log"] == "embedded-only"
+    assert "NOT checked against the log" in out.getvalue()
+
+    # Against the log: no such entry.
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(bundle, rekor_verify=True, rekor_server=rekor.server,
+                      out=io.StringIO())
+    assert e.value.check == 6
+    assert "could not fetch rekor entry" in e.value.message
+
+
+def test_log_index_mismatch_is_caught_but_the_unknown_sentinel_is_not(rekor):
+    """-1 means the publisher never learned the index, not a disagreement.
+
+    Treating the sentinel as a mismatch rejected bundles the log itself
+    confirms - a strictness bug that would have failed genuine evidence.
+    """
+    from air_blackbox.anchor.rekor import (
+        anchor_head_to_rekor, verify_anchor_in_log,
+    )
+    seed = os.urandom(32)
+    rk = anchor_head_to_rekor("ab" * 32, 7, seed, server=rekor.server).to_dict()
+
+    unknown = dict(rk, log_index=-1)
+    ok, detail = verify_anchor_in_log(unknown, server=rekor.server)
+    assert ok, detail
+
+    wrong = dict(rk, log_index=424242)
+    ok, detail = verify_anchor_in_log(wrong, server=rekor.server)
+    assert not ok and "log index mismatch" in detail
+
+
+def test_log_entry_disagreeing_with_the_bundle_is_caught(rekor):
+    """The entry exists, but says something other than the bundle claims."""
+    import base64 as _b64
+
+    from air_blackbox.anchor.rekor import (
+        anchor_head_to_rekor, anchor_payload_bytes, verify_anchor_in_log,
+    )
+    seed = os.urandom(32)
+    rk = anchor_head_to_rekor("ab" * 32, 7, seed, server=rekor.server).to_dict()
+    # Same real, logged uuid - but the bundle carries a payload over a
+    # different head, hoping the reader only checks that an entry exists.
+    swapped = dict(rk, payload_b64=_b64.b64encode(
+        anchor_payload_bytes("cd" * 32, 7, "2026-08-09T00:00:00Z")).decode())
+    ok, detail = verify_anchor_in_log(swapped, server=rekor.server)
+    assert not ok
+    assert "disagrees with the logged entry on chain_head" in detail

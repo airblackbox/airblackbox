@@ -8,19 +8,31 @@ the Python source code and checking for real patterns.
 import os
 import re
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
+
+
+#: Which body of law a finding belongs to. `article` is only an EU AI Act
+#: article number when framework is "eu_ai_act"; for anything else it is
+#: None, because a US hiring-law finding has no EU article and must never be
+#: displayed under one. US state findings were previously filed under
+#: article=16 for want of a field, which reads as EU AI Act Article 16
+#: (obligations of providers of high-risk AI systems) to every downstream
+#: renderer.
+FRAMEWORK_EU_AI_ACT = "eu_ai_act"
+FRAMEWORK_US_HIRING = "us_hiring"
 
 
 @dataclass
 class CodeFinding:
     """A single thing we found (or didn't find) in the code."""
-    article: int
+    article: Optional[int]
     name: str
     status: str  # "pass", "warn", "fail"
     evidence: str
     detection: str = "auto"
     fix_hint: str = ""
     files: list = field(default_factory=list)
+    framework: str = FRAMEWORK_EU_AI_ACT
 
 
 def scan_codebase(scan_path: str) -> List[CodeFinding]:
@@ -593,17 +605,17 @@ def _check_zip_proxy(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     files_with_zip = [fp for fp, content in file_contents.items()
                       if re.search(zip_combined, content, re.IGNORECASE)]
     if not files_with_zip:
-        return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+        return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="Illinois HB 3773: ZIP code as proxy",
             status="pass", evidence="No ZIP/postal code usage detected in hiring scoring context")]
 
     files_with_zip_scoring = [fp for fp in files_with_zip
                               if re.search(scoring_combined, file_contents[fp], re.IGNORECASE)]
     if files_with_zip_scoring:
-        return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+        return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="Illinois HB 3773: ZIP code as proxy",
             status="fail",
             evidence=f"ZIP/postal code used alongside scoring/ranking in {len(files_with_zip_scoring)} file(s): {', '.join(_rel(f, scan_path) for f in files_with_zip_scoring[:3])}. Illinois HB 3773 prohibits ZIP as proxy for protected characteristics.",
             fix_hint="Remove ZIP code from scoring features or document a disparity analysis")]
-    return [CodeFinding(article=16, name="Illinois HB 3773: ZIP code as proxy",
+    return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="Illinois HB 3773: ZIP code as proxy",
         status="warn",
         evidence=f"ZIP/postal code referenced in {len(files_with_zip)} file(s) but not in obvious scoring context. Verify it does not influence ranking.",
         fix_hint="Audit whether ZIP code flows into candidate ranking or filtering logic")]
@@ -622,9 +634,9 @@ def _check_bias_audit(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     hits = [fp for fp, content in file_contents.items()
             if re.search(combined, content, re.IGNORECASE)]
     if hits:
-        return [CodeFinding(article=16, name="NYC LL144: Bias audit framework",
+        return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="NYC LL144: Bias audit framework",
             status="pass", evidence=f"Bias audit or fairness metrics detected in {len(hits)} file(s)")]
-    return [CodeFinding(article=16, name="NYC LL144: Bias audit framework",
+    return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="NYC LL144: Bias audit framework",
         status="fail",
         evidence="No bias audit framework detected. NYC LL144 requires annual independent bias audits for automated employment decision tools.",
         fix_hint="Add fairness metrics (fairlearn, aequitas, AI Fairness 360) with disparate impact analysis across race/ethnicity and sex")]
@@ -643,9 +655,9 @@ def _check_hiring_retention(file_contents: dict, scan_path: str) -> List[CodeFin
     hits = [fp for fp, content in file_contents.items()
             if re.search(combined, content, re.IGNORECASE)]
     if hits:
-        return [CodeFinding(article=16, name="California FEHA: Data retention",
+        return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="California FEHA: Data retention",
             status="pass", evidence=f"Data retention policy detected in {len(hits)} file(s)")]
-    return [CodeFinding(article=16, name="California FEHA: Data retention",
+    return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="California FEHA: Data retention",
         status="fail",
         evidence="No data retention policy detected. California FEHA requires 4-year retention of hiring AI decisions and candidate data.",
         fix_hint="Add retention_policy config with minimum 4-year (1460-day) retention for candidate evaluation data")]
