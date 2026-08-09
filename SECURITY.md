@@ -56,9 +56,9 @@ operator rewrite detectable.
 **What it does not establish.** That the bundle was issued by any particular
 party. The signature is checked against a public key carried *inside* the
 bundle, so anyone can generate a key, assemble a bundle, and sign it. The
-verifier prints the signing key fingerprint; comparing it against a value
-obtained out-of-band is currently the reader's job, and nothing in the tool
-says so loudly enough. This is tracked as finding 4 in the red-team review
+verifier prints the signing key fingerprint; pass `--expect-key` to pin it,
+and when you do not, the verdict reads `VERIFIED (UNATTRIBUTED)` because the
+comparison is still yours to make. Tracked as finding 4 in the red-team review
 below.
 
 **What no verifier can establish.** Whether records were left out before
@@ -70,7 +70,7 @@ format resolves the second.
 
 - [Red-team findings, August 2026](docs/security/red-team-2026-08.md) — 75
   adversarial attacks against the evidence bundle verifier. 17 confirmed
-  breaks across 8 root causes: 3 fixed, 5 open with mitigations. Unfixed
+  breaks across 8 root causes: 6 fixed, 2 open with mitigations. Unfixed
   findings are published deliberately, because the people relying on a
   `VERIFIED` result need to know what it does and does not prove.
 

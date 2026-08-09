@@ -1,6 +1,7 @@
 """air-evidence: independent verifier for .air-evidence v1 bundles.
 
-    air-evidence verify bundle.air-evidence [--key HMAC_KEY] [--tsa-cacert CA]
+    air-evidence verify bundle.air-evidence [--expect-key FINGERPRINT]
+                                            [--key HMAC_KEY] [--tsa-cacert CA]
 
 Runs six checks in order, failing loudly on the first failure. Checks 3 and
 4 name the exact record id; checks 1, 2, 5 and 6 name the offending file,
@@ -11,7 +12,9 @@ mismatch before the record-level recompute is ever reached:
   2. Manifest signature valid against the bundled public key, the manifest's
      per-file digests match the actual bundle contents, and no member is
      present that the manifest does not list - so the one signature covers
-     every file in the bundle
+     every file in the bundle. The key travels INSIDE the bundle, so this
+     proves internal consistency, not provenance: pass --expect-key to pin
+     the issuer, or the verdict reads VERIFIED (UNATTRIBUTED).
   3. Chain hashes consistent over records/actions.jsonl, and the chain was
      recorded intact at export (full HMAC recompute when --key is provided)
   4. Every record's receipt signature verifies with the public key
@@ -25,6 +28,9 @@ mismatch before the record-level recompute is ever reached:
 No secrets are required - a client's lawyer, their enterprise customer, or a
 regulator can run this as-is. The --key option additionally recomputes the
 private HMAC chain; --tsa-cacert lets check 6 run fully offline.
+
+Known limits are documented, including unfixed ones, in
+docs/security/red-team-2026-08.md.
 """
 
 from __future__ import annotations
@@ -140,8 +146,16 @@ def _auth_payload(receipt: Dict[str, Any]) -> bytes:
     return json.dumps(data, sort_keys=True).encode("utf-8")
 
 
+def _fingerprint(alg: str, pub_hex: str) -> str:
+    """Stable short identity for a bundle's signing key."""
+    if not pub_hex:
+        return alg
+    return f"{alg}:{hashlib.sha256(bytes.fromhex(pub_hex)).hexdigest()[:16]}"
+
+
 def verify_bundle(path: str, hmac_key: str | None = None,
                   tsa_cacert: str | None = None,
+                  expect_key: str | None = None,
                   out=sys.stdout) -> Dict[str, Any]:
     """Run all six checks. Returns a summary dict; raises
     VerificationFailure on the first failed check.
@@ -244,6 +258,15 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                               hashlib.sha256).hexdigest()
         if not hmac_mod.compare_digest(expect, sig.get("value", "")):
             _fail(2, "manifest HMAC signature INVALID for the provided key")
+        # This branch used to leave manifest_pubkey_hex unset, which silently
+        # disabled check 4's rule that every receipt must be signed by the
+        # bundle's own key - so downgrading alg to hmac-sha256 and supplying
+        # your own --key unbound the receipts from the manifest. The bundled
+        # PEM is still the bundle's declared key; hold the receipts to it.
+        try:
+            manifest_pubkey_hex = _pem_raw_key(pem_text).hex()
+        except Exception:
+            manifest_pubkey_hex = _hex_block_key(pem_text) or None
     else:
         _fail(2, f"unsupported manifest signature algorithm: '{alg}'")
     for fname, want in (manifest.get("files") or {}).items():
@@ -273,8 +296,33 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         _fail(2, "bundle contains file(s) the manifest does not list, so the "
                  "signature does not cover them - added after signing: "
                  f"{', '.join(unsigned)}")
+    # A valid signature proves internal consistency, NOT provenance: the key it
+    # is checked against travels inside the bundle, so anyone can mint a key,
+    # assemble records of their choosing, and sign them. Pinning the expected
+    # signer is the only thing that turns "consistent" into "from whom I
+    # think". When the caller does not pin one, say so rather than let a bare
+    # VERIFIED imply an attribution the check never made.
+    fingerprint = _fingerprint(alg, (manifest.get("signature") or {})
+                               .get("public_key_hex", ""))
+    signer_pinned = False
+    if expect_key:
+        want = expect_key.strip().lower()
+        got = fingerprint.lower()
+        # Accept either the full "alg:hex" form or the bare hex portion.
+        if want not in (got, got.split(":")[-1]):
+            _fail(2, f"signer mismatch: bundle is signed by {fingerprint}, "
+                     f"expected {expect_key}. This bundle was not issued by "
+                     "the party you pinned.")
+        signer_pinned = True
     print(f"[2/6] Manifest signature ({alg}) and "
           f"{len(manifest.get('files') or {})} file digests: OK", file=out)
+    if signer_pinned:
+        print(f"      signer pinned and matched: {fingerprint}", file=out)
+    else:
+        print(f"      signer NOT pinned: this bundle is signed by "
+              f"{fingerprint}, but nothing here proves who that is. Compare it "
+              "against a fingerprint you obtained from the issuer separately, "
+              "or re-run with --expect-key.", file=out)
 
     # ---- Check 3: chain hashes over records/actions.jsonl -----------------
     records: List[Dict[str, Any]] = []
@@ -378,8 +426,18 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             _fail(4, f"receipt at index {i} (run_id={rec.get('run_id')}) has "
                      f"unsupported signing method '{method}'")
         checked += 1
-    print(f"[4/6] Receipts: {checked}/{len(records)} records carry a "
-          f"receipt, all signatures valid", file=out)
+    # "all signatures valid" over zero receipts certifies nothing. Records
+    # without a receipt are skipped above, so a bundle where none carry one
+    # passed this check while establishing no authorship whatsoever. Gateway
+    # and trust-layer records legitimately have no receipts today, so this is
+    # reported rather than failed - but it is reported, not glossed.
+    if records and not checked:
+        print(f"[4/6] Receipts: 0/{len(records)} records carry a receipt - "
+              "NOTHING was checked here. This bundle evidences what happened, "
+              "not who authorized it.", file=out)
+    else:
+        print(f"[4/6] Receipts: {checked}/{len(records)} records carry a "
+              f"receipt, all signatures valid", file=out)
 
     # ---- Check 5: manifest counts match reality ---------------------------
     cats = [categorize_record(r) for r in records]
@@ -439,6 +497,12 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         except Exception as e:
             _fail(6, f"anchor token is not valid base64: {e}")
         rederived = _rederive_head(records, up_to_seq=anchor.get("seq_max"))
+        # An anchor over an empty head attests to nothing: strip every record
+        # and the derivation degenerates rather than failing.
+        if not rederived:
+            _fail(6, "bundle claims an external anchor but contains no chained "
+                     "records to re-derive a head from - the timestamp commits "
+                     "to nothing")
         ok, detail = verify_anchor_bytes(rederived, tsr, ca_pem=tsa_cacert)
         if ok:
             anchor_state = "verified"
@@ -491,13 +555,10 @@ def verify_bundle(path: str, hmac_key: str | None = None,
               "audit every anchor under this key with air-evidence audit-log.",
               file=out)
 
-    pub_hex = (manifest.get("signature") or {}).get("public_key_hex", "")
-    fingerprint = (
-        f"{alg}:{hashlib.sha256(bytes.fromhex(pub_hex)).hexdigest()[:16]}"
-        if pub_hex else alg)
     return {"records": len(records), "alterations": 0,
-            "fingerprint": fingerprint, "counts": actual,
-            "anchor": anchor_state,
+            "fingerprint": fingerprint, "signer_pinned": signer_pinned,
+            "counts": actual, "anchor": anchor_state,
+            "receipts_checked": checked,
             "bundle_id": manifest.get("bundle_id", "")}
 
 
@@ -514,11 +575,17 @@ def main(argv: List[str] | None = None) -> int:
     vp.add_argument("--tsa-cacert", default=None,
                     help="PEM CA chain of the timestamp authority, for offline "
                          "anchor verification (else FreeTSA's CA is fetched)")
+    vp.add_argument("--expect-key", default=None, metavar="FINGERPRINT",
+                    help="the signer fingerprint you expect, obtained from the "
+                         "issuer out-of-band (e.g. ed25519:0e80dd4149f3042a). "
+                         "Without it, a valid signature proves the bundle is "
+                         "internally consistent, not who issued it.")
     args = ap.parse_args(argv)
 
     try:
         summary = verify_bundle(args.bundle, hmac_key=args.key,
-                                tsa_cacert=args.tsa_cacert)
+                                tsa_cacert=args.tsa_cacert,
+                                expect_key=args.expect_key)
     except VerificationFailure as e:
         print(f"FAILED at check {e.check}: {e.message}", file=sys.stderr)
         return 1
@@ -530,9 +597,18 @@ def main(argv: List[str] | None = None) -> int:
         "absent": "signature valid; NOT anchored - an operator rewrite would "
                   "not be detectable by this check",
     }.get(anchor, anchor)
-    print(f"VERIFIED [{qualifier}]: {summary['records']} records, "
-          f"{summary['alterations']} alterations, "
-          f"signed by {summary['fingerprint']}")
+    # "VERIFIED" on its own has been read as "issued by the expected party".
+    # It never meant that unless the signer was pinned, so do not print it as
+    # though it did.
+    if summary["records"] and not summary.get("receipts_checked"):
+        qualifier += "; no per-record receipts, authorship unevidenced"
+    verdict = "VERIFIED" if summary["signer_pinned"] else "VERIFIED (UNATTRIBUTED)"
+    signed_by = (f"signed by {summary['fingerprint']}"
+                 if summary["signer_pinned"] else
+                 f"signed by {summary['fingerprint']} - signer NOT pinned, "
+                 "compare this against the issuer or pass --expect-key")
+    print(f"{verdict} [{qualifier}]: {summary['records']} records, "
+          f"{summary['alterations']} alterations, {signed_by}")
     return 0
 
 

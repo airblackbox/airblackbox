@@ -16,6 +16,7 @@ import pytest
 
 from air_blackbox.evidence_verify import (
     VerificationFailure,
+    _fingerprint,
     main as verify_main,
     verify_bundle,
 )
@@ -58,6 +59,13 @@ def _record(signer, action, detail="", status="success",
     if screening is not None:
         rec["screening"] = screening
     return rec
+
+
+def _rechain(records):
+    """Re-apply the chain after mutating records (chain_hash covers content)."""
+    for r in records:
+        r.pop("chain_hash", None)
+    return _chain(records)
 
 
 def _chain(records):
@@ -404,6 +412,79 @@ def test_empty_directory_entry_is_still_tolerated(bundle):
         zf.writestr("attachments/", b"")
     summary = verify_bundle(path, out=io.StringIO())
     assert summary["alterations"] == 0
+
+
+# ---- signer pinning (red-team finding 4: no trust root) -------------------
+# A valid signature proves the bundle is internally consistent, not who issued
+# it: the key it is checked against travels inside the bundle. Anyone can mint
+# a key, assemble records of their choosing, and sign them. Pinning the
+# expected signer is the only thing that turns "consistent" into "from whom I
+# think it is", so an unpinned run must not read as an attribution.
+
+def test_matching_expect_key_pins_the_signer(bundle):
+    path, manifest = bundle
+    fp = _fingerprint("ed25519", manifest["signature"]["public_key_hex"])
+    summary = verify_bundle(path, expect_key=fp, out=io.StringIO())
+    assert summary["signer_pinned"] is True
+    assert summary["fingerprint"] == fp
+
+
+def test_expect_key_accepts_the_bare_hex_form(bundle):
+    path, manifest = bundle
+    fp = _fingerprint("ed25519", manifest["signature"]["public_key_hex"])
+    summary = verify_bundle(path, expect_key=fp.split(":")[-1].upper(),
+                            out=io.StringIO())
+    assert summary["signer_pinned"] is True
+
+
+def test_wrong_expect_key_fails_even_though_the_bundle_is_valid(bundle):
+    """The forged-bundle case: everything checks out, wrong issuer."""
+    path, _ = bundle
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(path, expect_key="ed25519:0000000000000000",
+                      out=io.StringIO())
+    assert e.value.check == 2
+    assert "not issued by the party you pinned" in e.value.message
+
+
+def test_unpinned_run_says_so_and_does_not_claim_attribution(bundle):
+    path, _ = bundle
+    out = io.StringIO()
+    summary = verify_bundle(path, out=out)
+    assert summary["signer_pinned"] is False
+    assert "signer NOT pinned" in out.getvalue()
+
+
+def test_cli_marks_an_unpinned_verdict_unattributed(bundle, capsys):
+    path, _ = bundle
+    assert verify_main(["verify", path]) == 0
+    assert "VERIFIED (UNATTRIBUTED)" in capsys.readouterr().out
+
+
+def test_cli_verdict_is_plain_verified_when_pinned(bundle, capsys):
+    path, manifest = bundle
+    fp = _fingerprint("ed25519", manifest["signature"]["public_key_hex"])
+    assert verify_main(["verify", path, "--expect-key", fp]) == 0
+    out = capsys.readouterr().out
+    assert "VERIFIED [" in out and "UNATTRIBUTED" not in out
+
+
+def test_receiptless_bundle_does_not_claim_valid_signatures(tmp_path, signer,
+                                                            records):
+    """Check 4 skips records with no receipt, so "all signatures valid" over
+    zero receipts certified nothing. Gateway records legitimately have none,
+    so this is reported rather than failed - but it must be reported."""
+    stripped = [{k: v for k, v in r.items() if k != "receipt"} for r in records]
+    stripped = _rechain(stripped)
+    path, _ = generate_evidence_bundle_v1(
+        chain_entries=stripped, tenant="t", signer=signer,
+        chain_verification={"fully_intact": True, "intact": True,
+                            "verified_records": len(stripped)},
+        output_dir=str(tmp_path))
+    out = io.StringIO()
+    summary = verify_bundle(path, out=out)
+    assert summary["receipts_checked"] == 0
+    assert "NOTHING was checked here" in out.getvalue()
 
 
 # ---- adverse vs engine reviewer gaps --------------------------------------

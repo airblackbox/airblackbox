@@ -2,7 +2,8 @@
 
 This document records an adversarial review of `air-evidence verify` and the
 `.air-evidence` v1 bundle format, including findings that are **not yet
-fixed**.
+fixed**. Six of the eight root causes are now fixed; two remain open with
+mitigations below.
 
 We publish unfixed findings because of who relies on this tool. The party
 reading a `VERIFIED` result is usually an auditor, a regulator, or a customer
@@ -32,10 +33,10 @@ not a break — the operator holds that by design.
 | 1 | Duplicate ZIP member names | High | **Fixed** |
 | 2 | Unsigned payload disguised as a directory entry | High | **Fixed** |
 | 3 | Compliance counts declared but never recomputed | High | **Fixed** |
-| 4 | No trust root: any key verifies | High | Open — design decision |
-| 5 | Signature algorithm downgrade | Medium | Open |
+| 4 | No trust root: any key verifies | High | **Partially fixed** — `--expect-key`, unattributed verdict |
+| 5 | Signature algorithm downgrade | Medium | **Fixed** |
 | 6 | Public transparency-log anchor is forgeable | High | Open |
-| 7 | Empty record set degenerates the anchor check | Medium | Open |
+| 7 | Empty record set degenerates the anchor check | Medium | **Fixed** |
 | 8 | `signature` sub-object excluded from the signed digest | Low | Open |
 
 ---
@@ -88,6 +89,30 @@ only useful if something catches it.
 All eight counts are now recomputed, and a manifest that *omits* a count the
 records support fails rather than escaping the comparison.
 
+### 5. Signature algorithm downgrade (Medium)
+
+Switching the manifest's `signature.alg` to `hmac-sha256` and supplying `--key`
+took a branch that never set `manifest_pubkey_hex`, which silently disabled
+check 4's rule that every receipt must be signed by the bundle's own key. The
+HMAC branch now derives the key from the bundled PEM, so the receipts stay
+bound to it whichever algorithm signed the manifest.
+
+### 7. Empty record set degenerates the anchor check (Medium)
+
+`head_over_entries()` returns `""` for an empty set, so a bundle stripped of
+all records produced an empty head and the anchor comparison could not execute
+meaningfully. A bundle that claims an anchor but carries no chained records
+now fails check 6: the timestamp commits to nothing.
+
+### Bonus: check 4 could pass over zero receipts
+
+Not in the original findings, surfaced while fixing 5. Records without a
+receipt are skipped, so `all signatures valid` was printed over a bundle where
+nothing had been checked. Gateway and trust-layer records legitimately carry no
+receipts today, so this is reported rather than failed — the verifier now says
+`0/N records carry a receipt - NOTHING was checked here`, and the CLI verdict
+adds `authorship unevidenced`.
+
 ---
 
 ## Open
@@ -117,33 +142,38 @@ somewhere else.
    an external timestamp authority witnessed the chain head at a point in
    time, which a bundle fabricated later cannot reproduce.
 
-**Direction.** The intended fix is not a PKI. A forger can always mint a key;
-what they cannot do is obtain a timestamp dated before the dispute. Planned,
-in order:
+**Partially addressed.** `--expect-key <fingerprint>` now pins the expected
+signer and fails check 2 on a mismatch. When no key is pinned the verifier
+says so on its own line, and the CLI verdict reads `VERIFIED (UNATTRIBUTED)`
+rather than a bare `VERIFIED` — the guarantee is no longer overstated, but the
+comparison is still the reader's to make.
 
-- `--expect-key <fingerprint>`, and an explicit *"signer not pinned"* line in
-  the summary when it is absent, so the current guarantee stops being
-  overstated.
-- Bind the signing key's fingerprint into the anchored head preimage.
-  `head_over_entries()` currently hashes only `(chain_seq, chain_hash)` pairs,
-  so a genuine anchor survives having the manifest re-signed under a different
-  key. It should not.
-- Require a verified anchor for a clean verdict; report an unanchored bundle as
-  unverified rather than passing it with a note.
-- Sigstore keyless signing (OIDC identity via Fulcio) for bundles issued
-  through the hosted connector, giving real attribution without key
-  management. Self-hosted exports keep the local-key path and the caveat.
+**A correction to an earlier version of this document**, which proposed
+binding the signing key into the anchored head preimage as the next step. That
+was investigated and **abandoned as redundant**. Each record's `chain_hash`
+covers the record *including its receipt*; receipts carry the signer's
+signature; and check 4 requires every receipt to verify against the manifest's
+own key. Changing the signing key therefore changes every receipt, every chain
+hash, and the head — so a genuine anchor already cannot be inherited by a
+bundle re-signed under a different key. Measured directly:
 
-### 5. Signature algorithm downgrade (Medium)
+```
+v1 head over operator-signed records : bb1c3e30575578b7fc98
+v1 head over attacker-signed records : 9830dcee22e7ed7d2535
+```
 
-Switching the manifest's `signature.alg` to `hmac-sha256` and supplying
-`--key` takes a branch that never sets `manifest_pubkey_hex`, weakening the
-binding between the manifest and the per-record receipts checked in check 4.
+Adding an explicit binding would have introduced a format version marker and a
+compatibility path across four call sites for no additional protection.
 
-**Mitigation:** treat any bundle whose manifest reports `hmac-sha256` as
-requiring a shared secret and therefore not independently verifiable. A
-genuine bundle from a normal install is Ed25519 or ML-DSA-65; `cryptography`
-is a hard dependency, so the HMAC manifest path should not occur in practice.
+**Remaining, and what would actually help:** an *unanchored* bundle is where
+this bites, because there is then no external witness at all and nothing
+constrains a wholly fabricated bundle beyond the reader's own key comparison.
+The useful next steps are therefore to require a verified anchor for a clean
+verdict rather than reporting the gap and passing, and to offer Sigstore
+keyless signing (OIDC identity via Fulcio) for bundles issued through the
+hosted connector so attribution does not depend on out-of-band key exchange.
+Self-hosted exports keep the local-key path and the caveat.
+
 
 ### 6. Public transparency-log anchor is forgeable (High)
 
@@ -155,14 +185,6 @@ validated against the public log itself.
 until this is fixed. The RFC 3161 anchor in check 6 is the meaningful external
 witness today.
 
-### 7. Empty record set degenerates the anchor check (Medium)
-
-`head_over_entries()` returns `""` for an empty set. A bundle stripped of all
-records produces an empty head, and the anchor comparison cannot execute
-meaningfully.
-
-**Mitigation:** read the record count in the verifier summary. A bundle
-claiming to evidence activity should not contain zero records.
 
 ### 8. `signature` sub-object excluded from the signed digest (Low)
 
