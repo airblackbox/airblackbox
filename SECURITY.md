@@ -39,6 +39,41 @@ AIR Blackbox Gateway sits in the request path between your AI agent and the LLM 
 2. **AIR record files** — These contain vault references and checksums, not raw content. However, metadata (model names, timestamps, token counts) may still be sensitive in some contexts. Apply appropriate filesystem permissions.
 3. **Network position** — The gateway terminates your agent's API call and forwards it. It sees the full request and response in transit. Deploy it in the same trust boundary as your agent.
 
+## Threat Model — Evidence Bundles
+
+A `.air-evidence` bundle is meant to be handed to someone who does not trust
+the party that produced it. That makes the verifier a different security
+problem from the gateway, with a different adversary: usually the **issuer**,
+not an outsider.
+
+**What `air-evidence verify` establishes.** The bundle is internally
+consistent — records, chain, receipts, per-file digests and declared counts
+all agree — and nothing has been altered since it was signed. When check 6
+reports a verified RFC 3161 anchor, an external timestamp authority witnessed
+the chain head at a point in time, which is the property that makes an
+operator rewrite detectable.
+
+**What it does not establish.** That the bundle was issued by any particular
+party. The signature is checked against a public key carried *inside* the
+bundle, so anyone can generate a key, assemble a bundle, and sign it. The
+verifier prints the signing key fingerprint; comparing it against a value
+obtained out-of-band is currently the reader's job, and nothing in the tool
+says so loudly enough. This is tracked as finding 4 in the red-team review
+below.
+
+**What no verifier can establish.** Whether records were left out before
+export, and whether a named human reviewer genuinely reviewed anything.
+External anchoring at recording time constrains the first. Nothing in the
+format resolves the second.
+
+## Published Security Reviews
+
+- [Red-team findings, August 2026](docs/security/red-team-2026-08.md) — 75
+  adversarial attacks against the evidence bundle verifier. 17 confirmed
+  breaks across 8 root causes: 3 fixed, 5 open with mitigations. Unfixed
+  findings are published deliberately, because the people relying on a
+  `VERIFIED` result need to know what it does and does not prove.
+
 ## Supported Versions
 
 | Version | Supported |
