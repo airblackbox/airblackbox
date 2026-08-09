@@ -33,6 +33,40 @@ DARK  = "#1e293b"
 
 W = 7.0  # usable width in inches
 
+#: Official EU AI Act article names. Only real articles belong here - the
+#: compliance engine's other groups (US state law, GDPR, bias) carry their
+#: own title and are never numbered as articles. Kept in sync with the
+#: coverage claim in README.md by tests/test_readme_article_coverage.py.
+LABELS = {
+    9:  "Article 9 - Risk Management",
+    10: "Article 10 - Data Governance",
+    11: "Article 11 - Technical Documentation",
+    12: "Article 12 - Record-Keeping",
+    14: "Article 14 - Human Oversight",
+    15: "Article 15 - Accuracy, Robustness & Cybersecurity",
+}
+
+
+def section_heading(group: dict) -> str:
+    """Heading for one compliance result group in the exported report.
+
+    The engine keys every group by "number" and supplies a "title". Only
+    some groups are EU AI Act articles: US state law, GDPR and bias findings
+    use string keys ("CO", "GDPR", "BIAS") and carry their own title. In a
+    document handed to a regulator an article number is a legal claim, so a
+    group that is not an article must never be rendered as one - previously
+    this function read a "number" key that does not exist, printed a bare
+    "Article " for every section, and would have labelled NYC LL144 findings
+    as EU AI Act Article 16 had the key been correct.
+    """
+    number = group.get("number", "")
+    title = (group.get("title") or "").strip()
+    if not isinstance(number, int):
+        return title or str(number)
+    if number in LABELS:
+        return LABELS[number]
+    return f"Article {number} - {title}" if title else f"Article {number}"
+
 
 def _c(h):
     from reportlab.lib import colors as _col
@@ -166,15 +200,7 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
     story.append(Spacer(1, 16))
 
 
-    # ── Per-article tables ──────────────────────────────────────
-    LABELS = {
-        9:  "Article 9 - Risk Management",
-        10: "Article 10 - Data Governance",
-        11: "Article 11 - Technical Documentation",
-        12: "Article 12 - Record-Keeping",
-        14: "Article 14 - Human Oversight",
-        15: "Article 15 - Accuracy, Robustness & Cybersecurity",
-    }
+    # ── Per-group tables ────────────────────────────────────────
     CW = [0.7*inch, 1.85*inch, 0.55*inch, 3.9*inch]
 
     def art_table(checks):
@@ -201,12 +227,9 @@ def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Repor
         return tbl
 
     for art in articles:
-        num    = art.get("article","")
-        title  = LABELS.get(num, f"Article {num}")
-        checks = art.get("checks", [])
         story.append(KeepTogether([
-            Paragraph(title, section_s),
-            art_table(checks),
+            Paragraph(section_heading(art), section_s),
+            art_table(art.get("checks", [])),
             Spacer(1, 8),
         ]))
 

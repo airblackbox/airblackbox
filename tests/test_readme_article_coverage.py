@@ -35,15 +35,14 @@ PDF_REPORT = REPO / "sdk" / "air_blackbox" / "export" / "pdf_report.py"
 EU_AI_ACT_SOURCES = ("code_scanner.py", "engine.py")
 
 #: Values passed as article= that are not EU AI Act article numbers.
-#:   0  - sentinel for "no Python files found", emitted before any check runs.
-#:   16 - overflow bucket for US hiring law (Illinois HB 3773, NYC LL144,
-#:        California FEHA). CodeFinding.article is an int, so these were filed
-#:        under a spare number rather than given their own field; engine.py
-#:        retitles the group "US Hiring AI Laws (context-specific)". EU AI Act
-#:        Article 16 is provider obligations and is genuinely uncovered.
+#:   0    - sentinel for "no Python files found", emitted before any check runs.
+#:   None - the finding belongs to another body of law and carries a
+#:          `framework` instead. US hiring findings used to be filed under
+#:          article=16, which every downstream renderer read as EU AI Act
+#:          Article 16 (provider obligations).
 #: If either stops being a bucket and becomes a real article, this test fails
 #: and the exclusion has to be justified again rather than inherited.
-NON_ARTICLE_BUCKETS = frozenset({0, 16})
+NON_ARTICLE_BUCKETS = frozenset({0, None})
 
 FINDING_FACTORIES = frozenset({"CodeFinding", "ComplianceCheck"})
 

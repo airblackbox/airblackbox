@@ -6,6 +6,10 @@ import os
 from dataclasses import dataclass
 from typing import Literal
 from air_blackbox.gateway_client import GatewayStatus
+from air_blackbox.compliance.code_scanner import (
+    FRAMEWORK_EU_AI_ACT,
+    FRAMEWORK_US_HIRING,
+)
 
 
 @dataclass
@@ -138,10 +142,13 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
     detected = detect_frameworks(scan_path)
     rec_pkg = TRUST_LAYER_MAP.get(detected[0], "air-langchain-trust") if detected else "air-langchain-trust"
 
-    # Group code findings by article number
+    # Group code findings by article number. Only EU AI Act findings carry an
+    # article; everything else is selected by framework so that a non-EU
+    # finding can never be picked up by an Article N lookup.
     code_by_article = {}
     for f in code_findings:
-        code_by_article.setdefault(f.article, []).append(f)
+        if getattr(f, "framework", FRAMEWORK_EU_AI_ACT) == FRAMEWORK_EU_AI_ACT:
+            code_by_article.setdefault(f.article, []).append(f)
 
     results = []
 
@@ -201,12 +208,17 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
         except Exception:
             pass
 
-        # Legacy hiring-context checks (article=16) from code_scanner
-        state_code_findings = code_by_article.get(16, [])
+        # Hiring-context checks from code_scanner. Keyed "US-HIRING" like the
+        # other non-EU groups above: these are Illinois HB 3773, NYC LL144 and
+        # California FEHA findings, and numbering them 16 labelled them as EU
+        # AI Act Article 16 (provider obligations) in the exported report.
+        state_code_findings = [
+            f for f in code_findings
+            if getattr(f, "framework", "") == FRAMEWORK_US_HIRING]
         state_checks = [_finding_to_dict(f) for f in state_code_findings]
         if state_checks:
             results.append({
-                "number": 16,
+                "number": "US-HIRING",
                 "title": "US Hiring AI Laws (context-specific)",
                 "checks": state_checks,
             })
