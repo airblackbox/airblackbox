@@ -56,10 +56,11 @@ operator rewrite detectable.
 **What it does not establish.** That the bundle was issued by any particular
 party. The signature is checked against a public key carried *inside* the
 bundle, so anyone can generate a key, assemble a bundle, and sign it. The
-verifier prints the signing key fingerprint; pass `--expect-key` to pin it,
-and when you do not, the verdict reads `VERIFIED (UNATTRIBUTED)` because the
-comparison is still yours to make. Tracked as finding 4 in the red-team review
-below.
+verifier prints the signing key fingerprint; pass `--expect-key` to pin it.
+When you do not, the headline names the gap — `VERIFIED (UNATTRIBUTED,
+UNWITNESSED)` — because the comparison is still yours to make. `--strict`
+exits non-zero rather than reporting. Tracked as finding 4 in the red-team
+review below.
 
 **What no verifier can establish.** Whether records were left out before
 export, and whether a named human reviewer genuinely reviewed anything.
@@ -70,9 +71,10 @@ format resolves the second.
 
 - [Red-team findings, August 2026](docs/security/red-team-2026-08.md) — 75
   adversarial attacks against the evidence bundle verifier. 17 confirmed
-  breaks across 8 root causes: 7 fixed, 1 open with a mitigation. Unfixed
-  findings are published deliberately, because the people relying on a
-  `VERIFIED` result need to know what it does and does not prove.
+  breaks across 8 root causes, all now addressed — one (no trust root)
+  mitigated rather than eliminated. Findings were published while still
+  unfixed, deliberately: the people relying on a `VERIFIED` result need to
+  know what it does and does not prove.
 
 ## Supported Versions
 

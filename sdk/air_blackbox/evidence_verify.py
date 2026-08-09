@@ -307,8 +307,13 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     # signer is the only thing that turns "consistent" into "from whom I
     # think". When the caller does not pin one, say so rather than let a bare
     # VERIFIED imply an attribution the check never made.
-    fingerprint = _fingerprint(alg, (manifest.get("signature") or {})
-                               .get("public_key_hex", ""))
+    # Derive the identity from the key material actually used to verify, not
+    # from signature.public_key_hex. canonical_manifest_bytes() excludes the
+    # signature object from the signed digest (it cannot cover itself), so
+    # that field is attacker-mutable: deleting it used to degrade the
+    # fingerprint to a bare algorithm name, which is the value --expect-key
+    # is compared against.
+    fingerprint = _fingerprint(alg, manifest_pubkey_hex or "")
     signer_pinned = False
     if expect_key:
         want = expect_key.strip().lower()
@@ -600,6 +605,11 @@ def main(argv: List[str] | None = None) -> int:
     vp.add_argument("--tsa-cacert", default=None,
                     help="PEM CA chain of the timestamp authority, for offline "
                          "anchor verification (else FreeTSA's CA is fetched)")
+    vp.add_argument("--strict", action="store_true",
+                    help="exit non-zero unless the issuer was pinned, an "
+                         "external anchor verified, and any public-log receipt "
+                         "was checked against the log. Reporting is the "
+                         "default; this enforces.")
     vp.add_argument("--rekor-verify", action="store_true",
                     help="fetch the public transparency-log entry and confirm "
                          "it exists and matches (requires network). Without "
@@ -613,6 +623,7 @@ def main(argv: List[str] | None = None) -> int:
                          "Without it, a valid signature proves the bundle is "
                          "internally consistent, not who issued it.")
     args = ap.parse_args(argv)
+    strict = args.strict
 
     try:
         summary = verify_bundle(args.bundle, hmac_key=args.key,
@@ -631,20 +642,41 @@ def main(argv: List[str] | None = None) -> int:
         "absent": "signature valid; NOT anchored - an operator rewrite would "
                   "not be detectable by this check",
     }.get(anchor, anchor)
-    # "VERIFIED" on its own has been read as "issued by the expected party".
-    # It never meant that unless the signer was pinned, so do not print it as
-    # though it did.
     if summary.get("public_log") == "embedded-only":
         qualifier += "; public-log receipt not checked against the log"
     if summary["records"] and not summary.get("receipts_checked"):
         qualifier += "; no per-record receipts, authorship unevidenced"
-    verdict = "VERIFIED" if summary["signer_pinned"] else "VERIFIED (UNATTRIBUTED)"
+
+    # A bare "VERIFIED" gets read as "issued by the expected party, and proof
+    # against a rewrite". Neither holds unless the signer is pinned and an
+    # external witness checked out, so the headline names what is missing
+    # instead of leaving the reader to find it in the qualifier.
+    gaps = []
+    if not summary["signer_pinned"]:
+        gaps.append("UNATTRIBUTED")
+    if anchor != "verified":
+        gaps.append("UNWITNESSED")
+    if summary.get("public_log") == "embedded-only":
+        gaps.append("LOG-UNCHECKED")
+    verdict = "VERIFIED" if not gaps else f"VERIFIED ({', '.join(gaps)})"
+
     signed_by = (f"signed by {summary['fingerprint']}"
                  if summary["signer_pinned"] else
                  f"signed by {summary['fingerprint']} - signer NOT pinned, "
                  "compare this against the issuer or pass --expect-key")
     print(f"{verdict} [{qualifier}]: {summary['records']} records, "
           f"{summary['alterations']} alterations, {signed_by}")
+
+    # Default exit stays 0 when nothing failed: today's CLI exports are never
+    # anchored, so failing on that by default would reject the project's own
+    # output. --strict is the switch for anyone who needs the strong reading
+    # enforced rather than merely reported.
+    if strict and gaps:
+        print(f"STRICT: refusing to pass - {', '.join(gaps)}. Pin the issuer "
+              "with --expect-key, require an anchored bundle, and pass "
+              "--rekor-verify when a public-log receipt is present.",
+              file=sys.stderr)
+        return 2
     return 0
 
 

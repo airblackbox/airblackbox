@@ -2,8 +2,10 @@
 
 This document records an adversarial review of `air-evidence verify` and the
 `.air-evidence` v1 bundle format, including findings that are **not yet
-fixed**. Seven of the eight root causes are now fixed; one remains open with
-a mitigation below.
+fixed**. All eight root causes have now been addressed. Finding 4 is
+mitigated rather than eliminated: what remains is a property of any
+self-describing bundle, and is stated plainly below rather than engineered
+around.
 
 We publish unfixed findings because of who relies on this tool. The party
 reading a `VERIFIED` result is usually an auditor, a regulator, or a customer
@@ -33,11 +35,11 @@ not a break — the operator holds that by design.
 | 1 | Duplicate ZIP member names | High | **Fixed** |
 | 2 | Unsigned payload disguised as a directory entry | High | **Fixed** |
 | 3 | Compliance counts declared but never recomputed | High | **Fixed** |
-| 4 | No trust root: any key verifies | High | **Partially fixed** — `--expect-key`, unattributed verdict |
+| 4 | No trust root: any key verifies | High | **Mitigated** — pinning, honest verdict, `--strict`; residual limit documented |
 | 5 | Signature algorithm downgrade | Medium | **Fixed** |
 | 6 | Public transparency-log anchor is forgeable | High | **Fixed** |
 | 7 | Empty record set degenerates the anchor check | Medium | **Fixed** |
-| 8 | `signature` sub-object excluded from the signed digest | Low | Open |
+| 8 | `signature` sub-object excluded from the signed digest | Low | **Fixed** |
 
 ---
 
@@ -131,6 +133,15 @@ all records produced an empty head and the anchor comparison could not execute
 meaningfully. A bundle that claims an anchor but carries no chained records
 now fails check 6: the timestamp commits to nothing.
 
+### 8. `signature` sub-object excluded from the signed digest (Low)
+
+`canonical_manifest_bytes()` excludes the `signature` object from the signed
+digest — it cannot cover itself. That made its fields attacker-mutable, and
+one of them mattered: `signature.public_key_hex` was the source of the
+fingerprint that `--expect-key` compares against, so deleting it degraded the
+printed identity to a bare algorithm name. The fingerprint is now derived from
+the key material actually used to verify the signature.
+
 ### Bonus: check 4 could pass over zero receipts
 
 Not in the original findings, surfaced while fixing 5. Records without a
@@ -142,7 +153,7 @@ adds `authorship unevidenced`.
 
 ---
 
-## Open
+## Mitigated, with a residual limit
 
 ### 4. No trust root: any key verifies (High)
 
@@ -169,11 +180,23 @@ somewhere else.
    an external timestamp authority witnessed the chain head at a point in
    time, which a bundle fabricated later cannot reproduce.
 
-**Partially addressed.** `--expect-key <fingerprint>` now pins the expected
-signer and fails check 2 on a mismatch. When no key is pinned the verifier
-says so on its own line, and the CLI verdict reads `VERIFIED (UNATTRIBUTED)`
-rather than a bare `VERIFIED` — the guarantee is no longer overstated, but the
-comparison is still the reader's to make.
+**What changed.**
+
+- `--expect-key <fingerprint>` pins the expected signer and fails check 2 on a
+  mismatch, accepting either the full `alg:hex` form or the bare hex.
+- The fingerprint is derived from the key material actually used to verify,
+  not from the unsigned `signature.public_key_hex` (see finding 8).
+- With nothing pinned, the verifier says so on its own line and the headline
+  names the gap. The verdict enumerates every weakness it found rather than
+  burying them: `VERIFIED (UNATTRIBUTED, UNWITNESSED)`.
+- `--strict` exits non-zero unless the issuer was pinned, an external anchor
+  verified, and any public-log receipt was checked against the log.
+
+**Why `--strict` is not the default.** Every bundle the CLI produces today is
+unanchored, so failing by default would reject the project's own output and
+teach users to pass a flag that turns the checking off — the worst possible
+outcome. Reporting is the default; enforcement is one flag away and is what
+belongs in a procurement checklist or a CI gate.
 
 **A correction to an earlier version of this document**, which proposed
 binding the signing key into the anchored head preimage as the next step. That
@@ -192,24 +215,25 @@ v1 head over attacker-signed records : 9830dcee22e7ed7d2535
 Adding an explicit binding would have introduced a format version marker and a
 compatibility path across four call sites for no additional protection.
 
-**Remaining, and what would actually help:** an *unanchored* bundle is where
-this bites, because there is then no external witness at all and nothing
-constrains a wholly fabricated bundle beyond the reader's own key comparison.
-The useful next steps are therefore to require a verified anchor for a clean
-verdict rather than reporting the gap and passing, and to offer Sigstore
-keyless signing (OIDC identity via Fulcio) for bundles issued through the
-hosted connector so attribution does not depend on out-of-band key exchange.
-Self-hosted exports keep the local-key path and the caveat.
+**The residual limit, stated plainly.** A self-describing bundle cannot
+authenticate its own issuer. Pinning moves the trust decision to the reader,
+where it belongs, but somebody still has to obtain the right fingerprint out
+of band. An *unanchored* bundle is where this bites hardest: there is no
+external witness at all, so nothing constrains a wholly fabricated bundle
+beyond that comparison.
+
+Two things would close it further, and neither is a verifier change:
+
+- **Anchor by default everywhere.** The MCP export already anchors on every
+  run. The CLI does not anchor at all, and does not produce the v1 format that
+  has an anchor slot — so a CLI user cannot get an externally witnessed bundle
+  today, whatever they pass to the verifier. That is a producer gap.
+- **Sigstore keyless signing** (OIDC identity via Fulcio) for bundles issued
+  through the hosted connector, so attribution stops depending on out-of-band
+  key exchange. Self-hosted exports keep the local-key path and the caveat.
 
 
 
-### 8. `signature` sub-object excluded from the signed digest (Low)
-
-`canonical_manifest_bytes()` deliberately excludes the `signature` object —
-it cannot cover itself. Fields inside it that are not otherwise validated,
-such as `public_key_hex` when it disagrees with the bundled PEM, are
-attacker-mutable. No break in signature validation follows from this on its
-own; it is recorded for completeness.
 
 ---
 

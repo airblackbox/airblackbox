@@ -455,18 +455,59 @@ def test_unpinned_run_says_so_and_does_not_claim_attribution(bundle):
     assert "signer NOT pinned" in out.getvalue()
 
 
-def test_cli_marks_an_unpinned_verdict_unattributed(bundle, capsys):
+def test_cli_headline_names_every_gap(bundle, capsys):
+    """The fixture is unpinned and unanchored, so the headline says both.
+
+    A bare VERIFIED gets read as "issued by the expected party, and proof
+    against a rewrite". Neither holds here, and the reader should not have to
+    dig through the qualifier to discover it.
+    """
     path, _ = bundle
     assert verify_main(["verify", path]) == 0
-    assert "VERIFIED (UNATTRIBUTED)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "VERIFIED (UNATTRIBUTED, UNWITNESSED)" in out
 
 
-def test_cli_verdict_is_plain_verified_when_pinned(bundle, capsys):
+def test_cli_drops_the_attribution_gap_once_pinned(bundle, capsys):
     path, manifest = bundle
     fp = _fingerprint("ed25519", manifest["signature"]["public_key_hex"])
     assert verify_main(["verify", path, "--expect-key", fp]) == 0
     out = capsys.readouterr().out
-    assert "VERIFIED [" in out and "UNATTRIBUTED" not in out
+    assert "UNATTRIBUTED" not in out
+    assert "VERIFIED (UNWITNESSED)" in out   # still no external witness
+
+
+def test_strict_refuses_to_pass_an_unattributed_unwitnessed_bundle(bundle,
+                                                                   capsys):
+    """Reporting is the default; --strict is for anyone who needs it enforced.
+
+    Default exit stays 0 when no check failed, because today's CLI exports are
+    never anchored - failing by default would reject the project's own output.
+    """
+    path, _ = bundle
+    assert verify_main(["verify", path, "--strict"]) == 2
+    err = capsys.readouterr().err
+    assert "STRICT: refusing to pass" in err
+    assert "UNATTRIBUTED" in err and "UNWITNESSED" in err
+
+
+def test_fingerprint_survives_a_deleted_public_key_hex(bundle, signer):
+    """signature.public_key_hex is outside the signed digest (finding 8).
+
+    It used to be the source of the fingerprint --expect-key compares against,
+    so deleting it degraded the identity to a bare algorithm name. The
+    fingerprint now comes from the key material actually used to verify.
+    """
+    path, manifest = bundle
+    expected = _fingerprint("ed25519", manifest["signature"]["public_key_hex"])
+    del manifest["signature"]["public_key_hex"]
+    digest = hashlib.sha256(canonical_manifest_bytes(manifest)).hexdigest()
+    manifest["signature"]["signed_digest"] = digest
+    manifest["signature"]["value"] = signer.sign(bytes.fromhex(digest))
+    _rewrite_member(path, "manifest.json", json.dumps(manifest, indent=2))
+    summary = verify_bundle(path, expect_key=expected, out=io.StringIO())
+    assert summary["fingerprint"] == expected
+    assert summary["signer_pinned"] is True
 
 
 def test_receiptless_bundle_does_not_claim_valid_signatures(tmp_path, signer,
