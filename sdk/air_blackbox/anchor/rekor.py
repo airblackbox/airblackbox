@@ -267,6 +267,62 @@ def verify_bundle_anchor(runs_head_at: Dict[int, str],
     return True, f"anchor consistent: head at seq {seq} matches the logged payload"
 
 
+def verify_anchor_in_log(anchor: Dict[str, Any],
+                         client: Optional[RekorClient] = None,
+                         server: str = DEFAULT_REKOR_SERVER
+                         ) -> tuple[bool, str]:
+    """Confirm the claimed entry is really in the public log and says the
+    same thing the bundle says it says.
+
+    verify_bundle_anchor() checks the embedded receipt's signature against a
+    public key the receipt itself carries, so offline it establishes
+    self-consistency and nothing more: anyone can mint a key, sign a payload
+    over any head they like, and attach a plausible-looking uuid and log
+    index. This is the check that the entry exists.
+
+    Even this does not establish authority. A public log accepts writes from
+    anyone, so membership proves the commitment was published at that index
+    and can never be retracted - not who published it. Pin the anchoring key
+    and sweep every entry under it (audit_runs_against_log) for that.
+    """
+    uuid = anchor.get("uuid")
+    if not uuid:
+        return False, "anchor carries no rekor uuid"
+    try:
+        embedded = json.loads(base64.b64decode(anchor["payload_b64"]).decode())
+    except Exception as e:
+        return False, f"embedded anchor payload unparseable: {e}"
+    try:
+        fields = (client or RekorClient(server)).fetch_entry(uuid)
+    except (RuntimeError, OSError) as e:
+        return False, f"could not fetch rekor entry {uuid[:16]}...: {e}"
+    try:
+        logged = decode_logged_payload(fields)
+    except (ValueError, KeyError) as e:
+        return False, f"logged entry {uuid[:16]}... is not an AIR anchor: {e}"
+
+    for field in ("chain_head", "chain_seq_max", "anchored_at"):
+        if str(logged.get(field)) != str(embedded.get(field)):
+            return False, (
+                f"the bundle's embedded anchor disagrees with the logged "
+                f"entry on {field}: bundle says {embedded.get(field)!r}, the "
+                f"public log says {logged.get(field)!r}")
+
+    # -1 is the "publisher never learned the index" sentinel (RekorAnchor
+    # defaults to it when the publish response carries no logIndex), so it is
+    # an absence, not a disagreement. Comparing it would reject bundles the
+    # log itself confirms.
+    claimed = anchor.get("log_index")
+    actual = fields.get("logIndex")
+    if (claimed is not None and actual is not None
+            and int(claimed) >= 0 and int(claimed) != int(actual)):
+        return False, (f"log index mismatch: the bundle claims {claimed}, the "
+                       f"entry is at {actual}")
+    return True, (f"entry {uuid[:16]}... found in the public log at index "
+                  f"{actual if actual is not None else claimed}, committing "
+                  "to the same head")
+
+
 def audit_runs_against_log(runs_dir: str, public_key_raw: bytes,
                            client: RekorClient) -> LogAuditResult:
     """Fetch EVERY anchor logged under the anchoring key and recompute the

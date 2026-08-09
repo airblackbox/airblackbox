@@ -1,6 +1,7 @@
 """air-evidence: independent verifier for .air-evidence v1 bundles.
 
     air-evidence verify bundle.air-evidence [--expect-key FINGERPRINT]
+                                            [--rekor-verify]
                                             [--key HMAC_KEY] [--tsa-cacert CA]
 
 Runs six checks in order, failing loudly on the first failure. Checks 3 and
@@ -23,7 +24,9 @@ mismatch before the record-level recompute is ever reached:
      matches the RFC 3161 timestamp countersigned by an external authority -
      the check that makes an operator rewrite detectable. An unanchored
      bundle is reported as such (no rewrite protection), never silently
-     passed as fully verified.
+     passed as fully verified. A bundle may also carry a public
+     transparency-log receipt; that receipt is signed by a key it carries, so
+     --rekor-verify fetches the entry and confirms it exists and agrees.
 
 No secrets are required - a client's lawyer, their enterprise customer, or a
 regulator can run this as-is. The --key option additionally recomputes the
@@ -156,6 +159,8 @@ def _fingerprint(alg: str, pub_hex: str) -> str:
 def verify_bundle(path: str, hmac_key: str | None = None,
                   tsa_cacert: str | None = None,
                   expect_key: str | None = None,
+                  rekor_verify: bool = False,
+                  rekor_server: str | None = None,
                   out=sys.stdout) -> Dict[str, Any]:
     """Run all six checks. Returns a summary dict; raises
     VerificationFailure on the first failed check.
@@ -490,6 +495,7 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     # such rather than silently blessed.
     anchor = manifest.get("anchor") or {}
     anchor_state = "absent"
+    public_log_state = "absent"
     if anchor.get("anchored") and anchor.get("tsr_b64"):
         from air_blackbox.anchor.tsa import verify_anchor_bytes
         try:
@@ -547,17 +553,36 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             if "REWRITE DETECTED" in detail:
                 _fail(6, f"public-log anchor: {detail}")
             _fail(6, f"public-log anchor invalid: {detail}")
-        anchor_state = ("verified+public-log" if anchor_state == "verified"
-                        else "public-log")
-        print(f"[6b ] Public-log anchor: {detail} "
-              f"(rekor uuid {rekor['uuid'][:16]}..., log index "
-              f"{rekor.get('log_index')}). The entry is permanent; "
-              "audit every anchor under this key with air-evidence audit-log.",
-              file=out)
+        # The step above verifies the receipt's signature against a public key
+        # the receipt itself carries, so on its own it proves self-consistency:
+        # anyone can mint a key, sign a payload over any head, and attach a
+        # plausible uuid and log index. Saying "the entry is permanent" without
+        # fetching it asserted log membership that was never checked.
+        if rekor_verify:
+            from air_blackbox.anchor.rekor import verify_anchor_in_log
+            from air_blackbox.anchor.rekor import DEFAULT_REKOR_SERVER
+            in_log, log_detail = verify_anchor_in_log(
+                rekor, server=rekor_server or DEFAULT_REKOR_SERVER)
+            if not in_log:
+                _fail(6, f"public-log anchor: {log_detail}")
+            public_log_state = "in-log"
+            print(f"[6b ] Public-log anchor: {log_detail}. Membership is "
+                  "permanent and cannot be retracted - but a public log "
+                  "accepts writes from anyone, so this shows the commitment "
+                  "was published, not who published it. Sweep every anchor "
+                  "under this key with air-evidence audit-log.", file=out)
+        else:
+            public_log_state = "embedded-only"
+            print(f"[6b ] Public-log anchor: {detail}, but NOT checked against "
+                  f"the log (rekor uuid {rekor['uuid'][:16]}..., claimed index "
+                  f"{rekor.get('log_index')}). The receipt is signed by a key "
+                  "it carries, so this is self-consistency only. Re-run with "
+                  "--rekor-verify to confirm the entry exists.", file=out)
 
     return {"records": len(records), "alterations": 0,
             "fingerprint": fingerprint, "signer_pinned": signer_pinned,
             "counts": actual, "anchor": anchor_state,
+            "public_log": public_log_state,
             "receipts_checked": checked,
             "bundle_id": manifest.get("bundle_id", "")}
 
@@ -575,6 +600,13 @@ def main(argv: List[str] | None = None) -> int:
     vp.add_argument("--tsa-cacert", default=None,
                     help="PEM CA chain of the timestamp authority, for offline "
                          "anchor verification (else FreeTSA's CA is fetched)")
+    vp.add_argument("--rekor-verify", action="store_true",
+                    help="fetch the public transparency-log entry and confirm "
+                         "it exists and matches (requires network). Without "
+                         "it the embedded log receipt is only checked for "
+                         "self-consistency.")
+    vp.add_argument("--rekor-server", default=None,
+                    help="transparency log base URL (default: public Rekor)")
     vp.add_argument("--expect-key", default=None, metavar="FINGERPRINT",
                     help="the signer fingerprint you expect, obtained from the "
                          "issuer out-of-band (e.g. ed25519:0e80dd4149f3042a). "
@@ -585,7 +617,9 @@ def main(argv: List[str] | None = None) -> int:
     try:
         summary = verify_bundle(args.bundle, hmac_key=args.key,
                                 tsa_cacert=args.tsa_cacert,
-                                expect_key=args.expect_key)
+                                expect_key=args.expect_key,
+                                rekor_verify=args.rekor_verify,
+                                rekor_server=args.rekor_server)
     except VerificationFailure as e:
         print(f"FAILED at check {e.check}: {e.message}", file=sys.stderr)
         return 1
@@ -600,6 +634,8 @@ def main(argv: List[str] | None = None) -> int:
     # "VERIFIED" on its own has been read as "issued by the expected party".
     # It never meant that unless the signer was pinned, so do not print it as
     # though it did.
+    if summary.get("public_log") == "embedded-only":
+        qualifier += "; public-log receipt not checked against the log"
     if summary["records"] and not summary.get("receipts_checked"):
         qualifier += "; no per-record receipts, authorship unevidenced"
     verdict = "VERIFIED" if summary["signer_pinned"] else "VERIFIED (UNATTRIBUTED)"

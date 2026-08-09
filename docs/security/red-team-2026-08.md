@@ -2,8 +2,8 @@
 
 This document records an adversarial review of `air-evidence verify` and the
 `.air-evidence` v1 bundle format, including findings that are **not yet
-fixed**. Six of the eight root causes are now fixed; two remain open with
-mitigations below.
+fixed**. Seven of the eight root causes are now fixed; one remains open with
+a mitigation below.
 
 We publish unfixed findings because of who relies on this tool. The party
 reading a `VERIFIED` result is usually an auditor, a regulator, or a customer
@@ -35,7 +35,7 @@ not a break — the operator holds that by design.
 | 3 | Compliance counts declared but never recomputed | High | **Fixed** |
 | 4 | No trust root: any key verifies | High | **Partially fixed** — `--expect-key`, unattributed verdict |
 | 5 | Signature algorithm downgrade | Medium | **Fixed** |
-| 6 | Public transparency-log anchor is forgeable | High | Open |
+| 6 | Public transparency-log anchor is forgeable | High | **Fixed** |
 | 7 | Empty record set degenerates the anchor check | Medium | **Fixed** |
 | 8 | `signature` sub-object excluded from the signed digest | Low | Open |
 
@@ -96,6 +96,33 @@ took a branch that never set `manifest_pubkey_hex`, which silently disabled
 check 4's rule that every receipt must be signed by the bundle's own key. The
 HMAC branch now derives the key from the bundled PEM, so the receipts stay
 bound to it whichever algorithm signed the manifest.
+
+### 6. Public transparency-log anchor is forgeable (High)
+
+`verify_bundle_anchor()` checks the embedded log receipt's signature against a
+public key **the receipt itself carries**. Offline that establishes
+self-consistency and nothing else: anyone can mint an Ed25519 key, sign a
+payload committing to any head, attach a plausible uuid and log index, and the
+verifier printed
+
+> Public-log anchor: anchor consistent … The entry is permanent
+
+asserting log membership it had never checked. The receipt was presented as the
+stronger of the two anchoring rails while being the weaker one.
+
+`air-evidence verify --rekor-verify` now fetches the claimed entry and confirms
+it exists, that its logged payload agrees with the bundle's on `chain_head`,
+`chain_seq_max` and `anchored_at`, and that the log index matches. Without the
+flag the verifier says so plainly — `NOT checked against the log … this is
+self-consistency only` — and the summary reports `public_log:
+"embedded-only"` rather than implying corroboration.
+
+**One honest limit remains, and it is inherent.** A public log accepts writes
+from anyone. Confirming an entry exists proves the commitment was published at
+that index and can never be retracted; it does not prove *who* published it.
+Authority still comes from pinning the anchoring key and sweeping every entry
+under it (`air-evidence audit-log`, `audit_runs_against_log`) — a rewritten
+history fails against the old entries, which is the actual M2 guarantee.
 
 ### 7. Empty record set degenerates the anchor check (Medium)
 
@@ -174,16 +201,6 @@ keyless signing (OIDC identity via Fulcio) for bundles issued through the
 hosted connector so attribution does not depend on out-of-band key exchange.
 Self-hosted exports keep the local-key path and the caveat.
 
-
-### 6. Public transparency-log anchor is forgeable (High)
-
-The Rekor anchor checked in step 6b can be minted by the same party producing
-the bundle, committing to whatever head they chose, rather than being
-validated against the public log itself.
-
-**Mitigation:** do not treat the public-log line as independent corroboration
-until this is fixed. The RFC 3161 anchor in check 6 is the meaningful external
-witness today.
 
 
 ### 8. `signature` sub-object excluded from the signed digest (Low)

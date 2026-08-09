@@ -70,7 +70,7 @@ format resolves the second.
 
 - [Red-team findings, August 2026](docs/security/red-team-2026-08.md) — 75
   adversarial attacks against the evidence bundle verifier. 17 confirmed
-  breaks across 8 root causes: 6 fixed, 2 open with mitigations. Unfixed
+  breaks across 8 root causes: 7 fixed, 1 open with a mitigation. Unfixed
   findings are published deliberately, because the people relying on a
   `VERIFIED` result need to know what it does and does not prove.
 
