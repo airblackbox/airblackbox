@@ -36,7 +36,7 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
-**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 13, 14, 15. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report.
+**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 14, 15. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report.
 
 **Replay**: load any past episode from the audit chain, verify the HMAC signature, and replay every step with timestamps. Incident reconstruction without guesswork.
 
