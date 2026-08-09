@@ -971,30 +971,101 @@ def replay(gateway, runs_dir, episode, last, verify):
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
 @click.option("--scan",     default=".", help="Path to scan for code-level checks")
 @click.option("--range",    "time_range", default="30d", help="Time range")
-@click.option("--format",   "fmt", type=click.Choice(["json", "pdf", "evidence"]), default="json")
+@click.option("--format",   "fmt",
+              type=click.Choice(["json", "pdf", "evidence", "air-evidence"]),
+              default="json")
 @click.option("--signing-key", default=None, help="HMAC signing key for the audit chain (or set TRUST_SIGNING_KEY)")
+@click.option("--no-anchor", is_flag=True, default=False,
+              help="air-evidence only: skip external timestamping. The "
+                   "resulting bundle has no witness an operator cannot forge, "
+                   "and the verifier reports it as UNWITNESSED.")
 @click.option("--output",   "-o", default=None, help="Output file path")
-def export(gateway, runs_dir, scan, time_range, fmt, signing_key, output):
+def export(gateway, runs_dir, scan, time_range, fmt, signing_key, no_anchor,
+           output):
     """Generate signed evidence bundles for auditors and insurers.
 
     \b
     Formats:
-        json      - machine-readable signed evidence bundle (default)
-        pdf       - formatted PDF compliance report for humans / auditors
-        evidence  - self-verifying .air-evidence.zip with a standalone verify.py
-                    an auditor runs offline (stdlib only) to get PASS/FAIL
+        json          - machine-readable summary with an HMAC attestation
+                        (default). Checking it requires your signing key.
+        pdf           - formatted PDF compliance report for humans
+        evidence      - self-verifying .air-evidence.zip with a standalone
+                        verify.py an auditor runs offline WITH your key
+        air-evidence  - signed .air-evidence v1 bundle, externally timestamped.
+                        `air-evidence verify` checks it with NO secret at all -
+                        the only format you can hand to someone who does not
+                        trust you.
 
     \b
     Examples:
         air-blackbox export
         air-blackbox export --format pdf
-        air-blackbox export --format evidence --signing-key "$TRUST_SIGNING_KEY"
+        air-blackbox export --format air-evidence
+        air-blackbox export --format air-evidence --no-anchor
         air-blackbox export --scan ~/myproject --format pdf
     """
     from air_blackbox.export.bundle import generate_evidence_bundle
     import json as jsonlib
 
     console.print("\n[bold cyan]AIR Blackbox[/] - Evidence Export\n")
+
+    if fmt == "air-evidence":
+        import os as _os
+
+        from air_blackbox.export.air_evidence import export_air_evidence
+
+        rdir = runs_dir or "./runs"
+        tsa = [u.strip() for u in
+               _os.environ.get("AIR_TSA_URLS", "").split(",") if u.strip()]
+        rekor = _os.environ.get("AIR_REKOR_SERVER", "").strip() or (
+            "https://rekor.sigstore.dev"
+            if _os.environ.get("AIR_REKOR", "").strip() in ("1", "true") else None)
+
+        with console.status("[bold green]Packaging and anchoring..."):
+            try:
+                result = export_air_evidence(
+                    rdir, output_dir=_os.path.dirname(output) or "." if output
+                    else ".", anchor=not no_anchor, tsa_urls=tsa or None,
+                    rekor_server=rekor,
+                    system={
+                        "name": _os.environ.get("AIR_SYSTEM_NAME", ""),
+                        "high_risk_rationale": _os.environ.get(
+                            "AIR_HIGH_RISK_RATIONALE", ""),
+                        "deployer": _os.environ.get("AIR_SYSTEM_DEPLOYER", ""),
+                    })
+            except ValueError as exc:
+                console.print(f"[red]{exc}[/]")
+                raise SystemExit(1)
+
+        if output and output != result.path:
+            _os.replace(result.path, output)
+            result.path = output
+
+        console.print(f"  [bold]Bundle:[/]       {result.path}")
+        console.print(f"  [bold]Records:[/]      {result.records}")
+        console.print(f"  [bold]Signed by:[/]    {result.fingerprint}")
+        for note in result.notes:
+            console.print(f"  [yellow]{note}[/]")
+        console.print(f"  [dim]{result.anchor_note}[/]")
+        console.print()
+        # The fingerprint is half of the trust story and the half nobody
+        # thinks to publish. --expect-key is useless to a recipient who has
+        # no out-of-band value to compare against, so hand it over here
+        # rather than making them go looking for it.
+        console.print(Panel(
+            f"Give your auditor the bundle and this fingerprint, by a "
+            f"different channel than the bundle:\n\n"
+            f"  [bold]{result.fingerprint}[/]\n\n"
+            f"They verify with no secret of yours:\n\n"
+            f"  [bold]air-evidence verify {_os.path.basename(result.path)} "
+            f"--expect-key {result.fingerprint}[/]\n\n"
+            + ("A verified external timestamp is included, so a rewrite of "
+               "this history is detectable by them."
+               if result.anchored else
+               "[yellow]No external timestamp: they will see UNWITNESSED, "
+               "and an operator rewrite would not be detectable.[/]"),
+            title="Hand-off", border_style="cyan"))
+        return
 
     if fmt == "evidence":
         import os as _os

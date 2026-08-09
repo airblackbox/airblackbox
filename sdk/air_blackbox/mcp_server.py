@@ -684,86 +684,24 @@ def _tenant_chain(tenant: str) -> AuditChain:
 _signers: dict = {}
 
 
-def _load_tenant_key(key_path: str):
-    """Parse a persisted tenant key file. Returns ("ed25519", seed_bytes),
-    ("ML-DSA-65", (pub, secret)), or None if absent/unreadable.
-
-    Two formats:
-      - legacy: bare hex of a 32-byte Ed25519 seed (pre-#63 tenants). Honored
-        forever so an existing tenant's public key never changes.
-      - v2 JSON: {"algorithm": ..., plus hex key fields}, which can carry the
-        ML-DSA-65 keypair (the secret alone cannot re-derive the public key,
-        so both are stored).
-    """
-    try:
-        with open(key_path) as f:
-            raw = f.read().strip()
-    except OSError:
-        return None
-    if raw.startswith("{"):
-        try:
-            doc = json.loads(raw)
-            alg = doc.get("algorithm", "")
-            if alg == "ML-DSA-65":
-                return (alg, (bytes.fromhex(doc["public_key"]),
-                              bytes.fromhex(doc["secret_key"])))
-            if alg == "ed25519":
-                return (alg, bytes.fromhex(doc["seed"]))
-        except (json.JSONDecodeError, KeyError, ValueError):
-            return None
-        return None
-    try:
-        seed = bytes.fromhex(raw)
-        return ("ed25519", seed) if len(seed) == 32 else None
-    except ValueError:
-        return None
-
-
-def _persist_tenant_key(key_path: str, doc: dict) -> None:
-    """Write a v2 key file (0600). Failure is non-fatal but the tenant's
-    public key will then change on restart - warn, don't refuse service."""
-    try:
-        with open(key_path, "w") as f:
-            json.dump(doc, f)
-        os.chmod(key_path, 0o600)
-    except OSError:
-        logger.warning(
-            "could not persist receipt key at %s; public key will not "
-            "be stable across restarts", key_path)
+# Key persistence lives in export/air_evidence.py so the CLI and this server
+# derive the SAME signing identity from a runs directory. A tenant's
+# fingerprint is what an auditor pins with --expect-key; two code paths
+# computing it separately is how it silently stops matching.
+from air_blackbox.export.air_evidence import (          # noqa: E402
+    load_signing_key as _load_tenant_key,
+    persist_signing_key as _persist_tenant_key,
+    signer_for as _signer_for_runs,
+)
 
 
 def _tenant_signer(tenant: str) -> ReceiptSigner:
+    """The tenant's persistent signer. Cached per process; the cache is what
+    tests clear to force a reload from disk."""
     signer = _signers.get(tenant)
     if signer is None:
-        runs = _tenant_runs_dir(tenant)
-        os.makedirs(runs, exist_ok=True)
-        key_path = os.path.join(runs, ".air-receipt-key")
-        hmac_key = os.environ.get("TRUST_SIGNING_KEY")
-        # Own the key so the tenant's public key is stable across restarts.
-        loaded = _load_tenant_key(key_path)
-        if loaded is not None and loaded[0] == "ML-DSA-65" and _HAS_MLDSA:
-            signer = ReceiptSigner(mldsa_keypair=loaded[1], hmac_key=hmac_key)
-        elif loaded is not None and loaded[0] == "ed25519":
-            # Includes every pre-#63 tenant: their identity is Ed25519 and
-            # stays Ed25519. Migrating would rotate their public key.
-            signer = ReceiptSigner(private_key=loaded[1], hmac_key=hmac_key)
-        elif _HAS_MLDSA:
-            # New tenant with the pqc extra installed: post-quantum from
-            # day one, persisted so it survives restarts (#63).
-            signer = ReceiptSigner(hmac_key=hmac_key)
-            pub, secret = signer.mldsa_keypair
-            _persist_tenant_key(key_path, {
-                "algorithm": "ML-DSA-65",
-                "public_key": pub.hex(),
-                "secret_key": secret.hex(),
-            })
-        else:
-            # New tenant, classical: fresh Ed25519 seed.
-            priv = os.urandom(32)
-            _persist_tenant_key(key_path, {
-                "algorithm": "ed25519", "seed": priv.hex(),
-            })
-            signer = ReceiptSigner(private_key=priv, hmac_key=hmac_key)
+        signer = _signer_for_runs(_tenant_runs_dir(tenant),
+                                  hmac_key=os.environ.get("TRUST_SIGNING_KEY"))
         _signers[tenant] = signer
     return signer
 
