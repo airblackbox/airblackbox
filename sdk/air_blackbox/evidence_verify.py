@@ -43,6 +43,7 @@ from air_blackbox.export.evidence_bundle import (
     V1_REQUIRED_FILES,
     canonical_manifest_bytes,
     categorize_record,
+    is_adverse_decision,
 )
 from air_blackbox.anchor.head import head_over_entries
 
@@ -160,7 +161,21 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     bad = zf.testzip()
     if bad is not None:
         _fail(1, f"corrupt member in ZIP: {bad}")
-    names = set(zf.namelist())
+    # Duplicate member names must die here, before any digest is computed.
+    # ZIP allows two entries with the same name; Python's zipfile resolves
+    # reads to the LAST one, while `unzip -p`, streaming readers and most
+    # other tooling take the FIRST. So a forged copy written first and the
+    # genuine copy written second passes every digest check - the verifier
+    # hashes the genuine bytes and prints "0 alterations" while an auditor
+    # opening the same file reads the forgery. No legitimate v1 bundle has
+    # duplicate names: the generator writes each member exactly once.
+    listed = zf.namelist()
+    dupes = sorted({n for n in listed if listed.count(n) > 1})
+    if dupes:
+        _fail(1, "duplicate member name(s) in ZIP - different tools would "
+                 "read different content from the same bundle: "
+                 f"{', '.join(dupes)}")
+    names = set(listed)
     missing = [n for n in V1_REQUIRED_FILES if n not in names]
     if missing:
         _fail(1, f"required files missing from bundle: {', '.join(missing)}")
@@ -244,10 +259,16 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     # all six checks still pass. The generator writes manifest.json plus
     # exactly the members it lists (evidence_bundle.py:389-397), so anything
     # else was added after signing.
-    unsigned = sorted(n for n in names
-                      if n != "manifest.json"
-                      and not n.endswith("/")
-                      and n not in (manifest.get("files") or {}))
+    # A name ending in "/" is exempt ONLY if it is a genuine directory entry,
+    # meaning it carries no data. ZIP does not enforce that: a member named
+    # "attachments/signoff.pdf/" can hold a full payload, and exempting it on
+    # the name alone reopens exactly the hole this guard closes.
+    signed_files = manifest.get("files") or {}
+    unsigned = sorted(
+        n for n in names
+        if n != "manifest.json"
+        and n not in signed_files
+        and not (n.endswith("/") and zf.getinfo(n).file_size == 0))
     if unsigned:
         _fail(2, "bundle contains file(s) the manifest does not list, so the "
                  "signature does not cover them - added after signing: "
@@ -363,20 +384,43 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     # ---- Check 5: manifest counts match reality ---------------------------
     cats = [categorize_record(r) for r in records]
     screening = [r for r, c in zip(records, cats) if c == "screening_decision"]
+
+    def _rev(r):
+        # Mirrors evidence_bundle._reviewer: `or {}` matters because a record
+        # may carry "screening": null, which .get(default) would not catch.
+        return (r.get("screening") or {}).get("human_reviewer") or ""
+
+    adverse = [r for r in screening if is_adverse_decision(r)]
     actual = {
         "actions": len(records),
         "screening_decisions": len(screening),
         "blocked_actions": cats.count("blocked_action"),
         "human_approvals": cats.count("human_approval"),
         "screening_decisions_missing_reviewer": sum(
+            1 for r in screening if not _rev(r)),
+        # These three were declared in the manifest but never recomputed, so
+        # the bundle could assert "adverse_decisions_missing_reviewer: 0" over
+        # records that show otherwise - and that is the first number an
+        # auditor reads. A signed lie is still a lie; check 5 exists to make
+        # the manifest's summary answerable to the records underneath it.
+        "adverse_decisions": len(adverse),
+        "adverse_decisions_missing_reviewer": sum(
+            1 for r in adverse if not _rev(r)),
+        "engine_outputs_without_reviewer": sum(
             1 for r in screening
-            if not r.get("screening", {}).get("human_reviewer")),
+            if not is_adverse_decision(r) and not _rev(r)),
     }
     declared = manifest.get("counts") or {}
     for k, v in actual.items():
         if k in declared and declared[k] != v:
             _fail(5, f"count mismatch for '{k}': manifest says "
                      f"{declared[k]}, records show {v}")
+    # A manifest that simply omits a count cannot be checked against the
+    # records, so an omitted compliance count is itself a finding.
+    undeclared = sorted(k for k in actual if k not in declared)
+    if undeclared:
+        _fail(5, "manifest omits count(s) the records support, so its summary "
+                 f"cannot be checked: {', '.join(undeclared)}")
     print("[5/6] Counts: manifest matches records", file=out)
 
     # ---- Check 6: external anchor (operator-rewrite detection) -------------

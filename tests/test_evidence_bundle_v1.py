@@ -213,6 +213,52 @@ def test_resigned_manifest_count_lie_fails_check5(bundle, signer):
     assert "blocked_actions" in e.value.message
 
 
+@pytest.mark.parametrize("field", [
+    "adverse_decisions_missing_reviewer",
+    "adverse_decisions",
+    "engine_outputs_without_reviewer",
+])
+def test_resigned_adverse_count_lie_fails_check5(bundle, signer, field):
+    """The compliance counts an auditor reads first must be recomputed too.
+
+    Check 5 originally recomputed five of the eight declared counts, and the
+    three it skipped were exactly the ones PR #80 added to surface human-review
+    gaps. A bundle could therefore declare adverse_decisions_missing_reviewer:
+    0 over records that show a rejection nobody reviewed, sign it validly, and
+    verify clean. Signing a false summary does not make it true; it makes it
+    an attributable lie, which is only useful if something catches it.
+    """
+    path, _ = bundle
+    with zipfile.ZipFile(path) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+    assert field in manifest["counts"], f"{field} is no longer declared"
+    manifest["counts"][field] = 99 if manifest["counts"][field] == 0 else 0
+    digest = hashlib.sha256(canonical_manifest_bytes(manifest)).hexdigest()
+    manifest["signature"]["signed_digest"] = digest
+    manifest["signature"]["value"] = signer.sign(bytes.fromhex(digest))
+    _rewrite_member(path, "manifest.json", json.dumps(manifest, indent=2))
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(path, out=io.StringIO())
+    assert e.value.check == 5
+    assert field in e.value.message
+
+
+def test_dropping_a_count_does_not_evade_check5(bundle, signer):
+    """Omitting a count must not be a way to escape being checked on it."""
+    path, _ = bundle
+    with zipfile.ZipFile(path) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+    del manifest["counts"]["adverse_decisions_missing_reviewer"]
+    digest = hashlib.sha256(canonical_manifest_bytes(manifest)).hexdigest()
+    manifest["signature"]["signed_digest"] = digest
+    manifest["signature"]["value"] = signer.sign(bytes.fromhex(digest))
+    _rewrite_member(path, "manifest.json", json.dumps(manifest, indent=2))
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(path, out=io.StringIO())
+    assert e.value.check == 5
+    assert "omits count" in e.value.message
+
+
 def test_invalid_receipt_fails_check4(tmp_path, signer, records):
     records[1]["receipt"]["authorization_sig"] = "00" * 64  # forged
     path, _ = generate_evidence_bundle_v1(
@@ -293,6 +339,69 @@ def test_legitimate_attachment_is_listed_and_verifies(tmp_path, signer,
                             "verified_records": len(records)},
         attachments_dir=str(attach), output_dir=str(tmp_path))
     assert "attachments/dpia.md" in manifest["files"]
+    summary = verify_bundle(path, out=io.StringIO())
+    assert summary["alterations"] == 0
+
+
+# ---- red-team regressions -------------------------------------------------
+# Every test below reproduces an attack that passed a shipped version of the
+# verifier clean. They are written as the attack, not as the fix, so they stay
+# meaningful if the implementation is rewritten.
+
+def test_duplicate_member_name_is_rejected(bundle):
+    """Forged copy first, genuine copy second - both named the same.
+
+    ZIP permits duplicate names. Python's zipfile resolves reads to the LAST
+    entry, so every digest check hashed the genuine bytes and the verifier
+    printed "0 alterations". `unzip -p`, streaming readers and most other
+    tooling take the FIRST entry and show the forgery. One file, certified
+    clean, displaying a fabricated human_reviewer to whoever opens it.
+    """
+    path, _ = bundle
+    with zipfile.ZipFile(path) as zin:
+        items = [(zi.filename, zin.read(zi.filename)) for zi in zin.infolist()]
+    genuine = dict(items)["records/actions.jsonl"]
+    forged = genuine.replace(b'"decision_type": "reject"',
+                             b'"decision_type": "advance"')
+    assert forged != genuine, "fixture no longer contains a reject decision"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zout:
+        for name, blob in items:
+            if name == "records/actions.jsonl":
+                zout.writestr(name, forged)   # first-wins readers see this
+                zout.writestr(name, blob)     # zipfile.read() sees this
+            else:
+                zout.writestr(name, blob)
+    with open(path, "wb") as f:
+        f.write(buf.getvalue())
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(path, out=io.StringIO())
+    assert e.value.check == 1
+    assert "duplicate member name" in e.value.message
+
+
+def test_unsigned_payload_disguised_as_a_directory_is_rejected(bundle):
+    """A member named "...pdf/" is not a directory just because it says so.
+
+    The unsigned-member guard originally exempted every name ending in "/" as
+    a directory entry. ZIP does not enforce that: the entry can carry a full
+    payload, which made the exemption a way straight back through the guard.
+    """
+    path, _ = bundle
+    with zipfile.ZipFile(path, "a") as zf:
+        zf.writestr("attachments/reviewer_signoff.pdf/",
+                    b"Every rejection was reviewed by J. Doe.")
+    with pytest.raises(VerificationFailure) as e:
+        verify_bundle(path, out=io.StringIO())
+    assert e.value.check == 2
+    assert "reviewer_signoff.pdf/" in e.value.message
+
+
+def test_empty_directory_entry_is_still_tolerated(bundle):
+    """The narrowed exemption must not reject a real directory entry."""
+    path, _ = bundle
+    with zipfile.ZipFile(path, "a") as zf:
+        zf.writestr("attachments/", b"")
     summary = verify_bundle(path, out=io.StringIO())
     assert summary["alterations"] == 0
 
