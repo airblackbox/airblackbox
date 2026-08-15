@@ -191,3 +191,66 @@ def test_mldsa_bundle_receipt_forgery_is_caught(tmp_path, monkeypatch):
         verify_bundle(bundles[0],
                       hmac_key=os.environ.get("TRUST_SIGNING_KEY"),
                       out=io.StringIO())
+
+
+# ---- pqcrypto API generations (upstream 1.0.0, released 2026-08-15) --------
+# pqcrypto renamed generate_keypair() -> keygen() AND changed how a valid
+# signature is reported:
+#     0.4.0  verify(valid) -> True     verify(invalid) -> False
+#     1.0.0  verify(valid) -> None     verify(invalid) -> raises
+# bool(verify(...)) therefore turned every VALID signature into False under
+# 1.0.0. These stub both generations so the shim cannot regress against either.
+
+class _FakeV04:
+    """pqcrypto 0.x: bool-returning verify."""
+    @staticmethod
+    def generate_keypair(): return (b"pk-0x", b"sk-0x")
+    @staticmethod
+    def sign(sk, data): return b"sig-0x"
+    @staticmethod
+    def verify(pk, data, sig): return sig == b"sig-0x"
+
+
+class _InvalidSignatureError(Exception):
+    pass
+
+
+class _FakeV10:
+    """pqcrypto 1.x: returns None on success, raises on failure."""
+    @staticmethod
+    def keygen(): return (b"pk-1x", b"sk-1x")
+    @staticmethod
+    def sign(sk, data, context=None, hash_algorithm=None): return b"sig-1x"
+    @staticmethod
+    def verify(pk, data, sig, context=None, hash_algorithm=None):
+        if sig != b"sig-1x":
+            raise _InvalidSignatureError("bad signature")
+        return None
+
+
+@pytest.mark.parametrize("fake,good,bad", [
+    (_FakeV04, b"sig-0x", b"forged"),
+    (_FakeV10, b"sig-1x", b"forged"),
+])
+def test_mldsa_shim_handles_both_pqcrypto_generations(monkeypatch, fake, good, bad):
+    from air_blackbox.gate import receipt as R
+    monkeypatch.setattr(R, "_MLDSA_PROVIDER", "pqcrypto")
+    monkeypatch.setattr(R, "_pqclean_mldsa65", fake, raising=False)
+
+    pk, sk = R.mldsa_generate_keypair()
+    assert pk and sk, "keygen must work under both API generations"
+    assert R.mldsa_sign(sk, b"msg") == good
+
+    # The regression that matters: a VALID signature must read as valid.
+    assert R.mldsa_verify(pk, b"msg", good) is True
+    assert R.mldsa_verify(pk, b"msg", bad) is False
+
+
+def test_mldsa_keygen_names_the_problem_if_neither_api_exists(monkeypatch):
+    class _Alien:
+        pass
+    from air_blackbox.gate import receipt as R
+    monkeypatch.setattr(R, "_MLDSA_PROVIDER", "pqcrypto")
+    monkeypatch.setattr(R, "_pqclean_mldsa65", _Alien, raising=False)
+    with pytest.raises(RuntimeError, match="neither keygen"):
+        R.mldsa_generate_keypair()
