@@ -65,10 +65,27 @@ def _oqs_mechanism():
     return "ML-DSA-65" if "ML-DSA-65" in enabled else "Dilithium3"
 
 
+def _pqcrypto_keygen():
+    """pqcrypto renamed generate_keypair() to keygen() in 1.0.0.
+
+    Both names are resolved at call time rather than pinning a version: 1.0.0
+    is the current release, and pinning below it would leave installs on an
+    old build of a cryptographic dependency, which is the wrong direction for
+    this particular library.
+    """
+    fn = getattr(_pqclean_mldsa65, "keygen", None) or \
+        getattr(_pqclean_mldsa65, "generate_keypair", None)
+    if fn is None:
+        raise RuntimeError(
+            "pqcrypto is installed but exposes neither keygen() nor "
+            "generate_keypair() for ML-DSA-65; unsupported version")
+    return fn()
+
+
 def mldsa_generate_keypair() -> tuple[bytes, bytes]:
     """Generate an ML-DSA-65 keypair. Returns (public_key, secret_key)."""
     if _MLDSA_PROVIDER == "pqcrypto":
-        pk, sk = _pqclean_mldsa65.generate_keypair()
+        pk, sk = _pqcrypto_keygen()
         return bytes(pk), bytes(sk)
     if _MLDSA_PROVIDER == "liboqs":
         sig = _oqs.Signature(_oqs_mechanism())
@@ -88,10 +105,24 @@ def mldsa_sign(secret_key: bytes, data: bytes) -> bytes:
 
 
 def mldsa_verify(public_key: bytes, data: bytes, signature: bytes) -> bool:
-    """Verify an ML-DSA-65 signature. Never raises; returns False on failure."""
+    """Verify an ML-DSA-65 signature. Never raises; returns False on failure.
+
+    The two pqcrypto generations disagree about how a *valid* signature is
+    reported, and the disagreement is silent and dangerous:
+
+        0.4.0   verify(valid) -> True     verify(invalid) -> False
+        1.0.0   verify(valid) -> None     verify(invalid) -> raises
+
+    So `bool(verify(...))` - which this used to do - turns every VALID
+    signature into False under 1.0.0. It fails closed rather than open, but it
+    would have made the post-quantum path unusable while looking like mass
+    tampering. Treat "returned without raising" as the success signal, and
+    only trust a returned value when the provider actually returns a bool.
+    """
     try:
         if _MLDSA_PROVIDER == "pqcrypto":
-            return bool(_pqclean_mldsa65.verify(public_key, data, signature))
+            result = _pqclean_mldsa65.verify(public_key, data, signature)
+            return result if isinstance(result, bool) else True
         if _MLDSA_PROVIDER == "liboqs":
             return bool(_oqs.Signature(_oqs_mechanism()).verify(
                 data, signature, public_key))
