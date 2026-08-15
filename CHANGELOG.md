@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-08-15
+
+The urgent line: **`pip install "air-blackbox[pqc]"` was broken for anyone who
+installed it on 2026-08-15**, the day `pqcrypto` 1.0.0 shipped. This release
+fixes it and gathers everything merged since 1.14.0 — the external red-team of
+the evidence verifier, the server-to-server ingest path, and a set of honest
+corrections to claims that overstated coverage.
+
+**Fixed**
+- **Post-quantum signing under `pqcrypto` 1.x.** `pqcrypto` 1.0.0 renamed
+  `generate_keypair()` to `keygen()` *and* changed `verify()` to return `None`
+  on success and raise on failure. The verifier did `bool(verify(...))`, so a
+  **valid** ML-DSA-65 signature read as `False` — every genuine post-quantum
+  receipt would have looked tampered. It failed closed (no forgery accepted),
+  but the path was unusable. Both API generations are now supported and
+  signatures interoperate. Anyone on 1.14.0 with the `pqc` extra should
+  upgrade. (#85)
+- **The README no longer claims EU AI Act Article 13.** No check ever
+  implemented it; the only reference was a demo table. A test now fails the
+  build if the documented article set and the implemented one disagree in
+  either direction. (#82)
+- **US state hiring-law findings are no longer labelled as EU AI Act articles.**
+  Illinois HB 3773, NYC LL144 and California FEHA findings were filed under
+  `article=16` (EU AI Act provider obligations). They now carry their own
+  framework. Separately, every section heading in the exported PDF was
+  rendering as a bare "Article " from a wrong dictionary key. (#81)
+- **Export no longer times out on the interactive path**, and the ingesting
+  tenant can export its own evidence. (#78)
+
+**Security**
+- **The evidence verifier was adversarially red-teamed: 75 attacks, 17
+  confirmed breaks, all addressed.** Highlights, each with a negative-control
+  test: a forged member could be smuggled past the signature via a duplicate
+  ZIP entry or a payload disguised as a directory; three compliance counts
+  (including `adverse_decisions_missing_reviewer`, the number an auditor reads
+  first) were declared but never recomputed; the public transparency-log
+  receipt was checked only against a key it carried, never against the log. The
+  full write-up, including the limits that remain, is published in
+  [docs/security/red-team-2026-08.md](docs/security/red-team-2026-08.md). (#81)
+
+**Added**
+- **`air-evidence verify --expect-key <fingerprint>`** pins the expected
+  issuer. Unpinned or unanchored bundles now report
+  `VERIFIED (UNATTRIBUTED, UNWITNESSED)` rather than a bare pass, and
+  `--strict` exits non-zero instead of reporting. `--rekor-verify` fetches the
+  transparency-log entry and confirms it matches. (#81)
+- **`/ingest`: a server-to-server event intake** for applications that cannot
+  own the audit chain themselves. Authenticated, tenant-scoped, single-writer
+  by design; returns a signed receipt id per event. See
+  [docs/guides/ingest-integration.md](docs/guides/ingest-integration.md).
+  (#76, #79)
+- **Adverse-decision reviewer gaps are counted separately from engine
+  outputs** in the evidence manifest, so a missing human reviewer on a
+  rejection is no longer buried inside routine scoring volume. (#80)
+- US AI-law references updated to the current statutes — Colorado SB 26-189
+  (SB 24-205 was repealed), Illinois HB 3773, California FEHA ADS. (#75)
+
 ## [1.14.0] - 2026-08-04
 
 First release since 1.13.2. Everything below was already merged to `main` but
