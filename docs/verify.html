@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify AI evidence — AIR Blackbox</title>
+<meta name="description" content="Drop an .air-evidence file to check whether it is authentic and unaltered. Runs entirely in your browser. No account, no upload, no signing key required.">
+<style>
+  :root{
+    --ground:#f3f2f2; --ink:#201e1d; --signal:#ec3013;
+    --dim:#6b6764; --line:#d8d5d2; --panel:#ffffff;
+    --ok:#166534; --ok-bg:#dcfce7; --warn:#854d0e; --warn-bg:#fef3c7;
+    --bad:#991b1b; --bad-bg:#fee2e2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  .wrap{max-width:780px;margin:0 auto;padding:48px 20px 80px}
+  h1{font-size:34px;line-height:1.15;margin:0 0 12px;letter-spacing:-.02em}
+  .lede{font-size:18px;color:var(--dim);margin:0 0 32px;max-width:60ch}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+    background:#e8e6e4;padding:1px 5px}
+  /* drop zone */
+  #drop{border:2px dashed var(--line);background:var(--panel);padding:44px 24px;
+    text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+  #drop:hover,#drop.over{border-color:var(--signal);background:#fff}
+  #drop h2{margin:0 0 6px;font-size:19px}
+  #drop p{margin:0;color:var(--dim);font-size:14px}
+  input[type=file]{display:none}
+  /* verdict */
+  #out{margin-top:28px}
+  .verdict{padding:20px 22px;border-left:5px solid;background:var(--panel);margin-bottom:20px}
+  .verdict.ok{border-color:var(--ok);background:var(--ok-bg)}
+  .verdict.warn{border-color:var(--warn);background:var(--warn-bg)}
+  .verdict.bad{border-color:var(--bad);background:var(--bad-bg)}
+  .verdict h2{margin:0 0 6px;font-size:22px}
+  .verdict p{margin:0;font-size:15px}
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:20px}
+  .fact{background:var(--panel);padding:14px 16px}
+  .fact .n{font-size:26px;font-weight:600;letter-spacing:-.02em}
+  .fact .l{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+  .fact.flag .n{color:var(--signal)}
+  h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);
+    margin:28px 0 10px}
+  .check{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);
+    align-items:flex-start}
+  .check:last-child{border-bottom:0}
+  .mark{flex:0 0 20px;font-weight:700;line-height:1.4}
+  .mark.ok{color:var(--ok)} .mark.warn{color:var(--warn)} .mark.bad{color:var(--bad)}
+  .check .t{font-weight:600;font-size:15px}
+  .check .d{color:var(--dim);font-size:14px;margin-top:2px}
+  .note{background:var(--panel);border:1px solid var(--line);padding:16px 18px;
+    font-size:14px;color:var(--dim);margin-top:24px}
+  .note strong{color:var(--ink)}
+  footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--dim)}
+  a{color:var(--signal)}
+  .fp{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all}
+  .pinrow{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pinrow input{flex:1;min-width:220px;padding:9px 11px;border:1px solid var(--line);
+    font-family:ui-monospace,Menlo,monospace;font-size:13px;background:var(--panel)}
+  .pinrow button{padding:9px 16px;border:0;background:var(--ink);color:var(--ground);
+    font-size:14px;cursor:pointer}
+  @media (prefers-color-scheme:dark){
+    :root{--ground:#1a1918;--ink:#f0eeec;--panel:#242322;--line:#3a3836;--dim:#9a9591;
+      --ok:#86efac;--ok-bg:#14321f;--warn:#fde68a;--warn-bg:#3a2f10;
+      --bad:#fca5a5;--bad-bg:#3d1717}
+    code{background:#332f2d}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Is this AI evidence real?</h1>
+  <p class="lede">Drop in an <code>.air-evidence</code> file and this page will tell you whether it
+  is authentic and unaltered since it was signed. Everything runs inside your browser — the file is
+  never uploaded, and you do not need an account, an install, or the sender's signing key.</p>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Choose an evidence file">
+    <h2>Drop an evidence file here</h2>
+    <p>or click to choose one &nbsp;·&nbsp; nothing leaves your computer</p>
+    <input type="file" id="file" accept=".air-evidence,.zip">
+  </div>
+
+  <div id="out"></div>
+
+  <div class="note" id="sample"><strong>No file to hand?</strong>
+    <a href="demo/sample.air-evidence" download>Download a sample bundle</a> and drop it in.
+    It contains ten decisions about fictional candidates, and it is signed by
+    <span class="fp">ed25519:10ba682c8ad13513</span> — paste that in to see an identity check
+    pass. It also reports one rejection with no human reviewer recorded, which is what a real
+    finding looks like.</div>
+
+  <footer>
+    Produced by <a href="https://airblackbox.ai">AIR Blackbox</a>. This page checks the bundle's
+    signature, its file digests, and its internal consistency. For the full check — including
+    cryptographic verification of the external timestamp — run
+    <code>air-evidence verify &lt;file&gt;</code>. Known limits are published in the
+    <a href="https://github.com/airblackbox/airblackbox/blob/main/docs/security/red-team-2026-08.md">red-team review</a>.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- tiny ZIP reader (central directory + raw deflate) ---------- */
+async function readZip(buf){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  // End of central directory: scan back for 0x06054b50
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--){
+    if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("not a ZIP file");
+  const count = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const entries = [];
+  for (let n = 0; n < count; n++){
+    if (dv.getUint32(off, true) !== 0x02014b50) throw new Error("bad central directory");
+    const method = dv.getUint16(off + 10, true);
+    const compSize = dv.getUint32(off + 20, true);
+    const rawSize  = dv.getUint32(off + 24, true);
+    const nameLen  = dv.getUint16(off + 28, true);
+    const extraLen = dv.getUint16(off + 30, true);
+    const cmtLen   = dv.getUint16(off + 32, true);
+    const localOff = dv.getUint32(off + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(off + 46, off + 46 + nameLen));
+    entries.push({name, method, compSize, rawSize, localOff});
+    off += 46 + nameLen + extraLen + cmtLen;
+  }
+  // Resolve data offsets from the local headers.
+  for (const e of entries){
+    if (dv.getUint32(e.localOff, true) !== 0x04034b50) throw new Error("bad local header for " + e.name);
+    const nl = dv.getUint16(e.localOff + 26, true), el = dv.getUint16(e.localOff + 28, true);
+    e.dataOff = e.localOff + 30 + nl + el;
+  }
+  return entries;
+}
+
+async function readMember(buf, e){
+  const slice = new Uint8Array(buf, e.dataOff, e.compSize);
+  if (e.method === 0) return slice.slice();
+  if (e.method !== 8) throw new Error("unsupported compression in " + e.name);
+  const ds = new DecompressionStream("deflate-raw");
+  const stream = new Blob([slice]).stream().pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/* ---------- helpers ---------- */
+const hex = b => Array.from(b).map(x => x.toString(16).padStart(2,"0")).join("");
+const unhex = s => new Uint8Array(s.match(/.{2}/g).map(h => parseInt(h,16)));
+async function sha256(bytes){ return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)); }
+const text = b => new TextDecoder().decode(b);
+
+/* Byte-for-byte match for Python's
+   json.dumps(obj, sort_keys=True, separators=(",",":"))  [ensure_ascii=True].
+   JSON.stringify agrees except that Python escapes every non-ASCII character,
+   so the output is post-processed to \uXXXX. Getting this wrong changes the
+   digest and every signature check fails, so it is the load-bearing function
+   on this page. */
+function canonicalJSON(value){
+  const enc = v => {
+    if (v === null) return "null";
+    const t = typeof v;
+    if (t === "number") return Number.isInteger(v) ? String(v) : JSON.stringify(v);
+    if (t === "boolean") return v ? "true" : "false";
+    if (t === "string") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(enc).join(",") + "]";
+    const keys = Object.keys(v).sort();
+    return "{" + keys.map(k => JSON.stringify(k) + ":" + enc(v[k])).join(",") + "}";
+  };
+  return enc(value).replace(/[-￿]/g,
+    c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+}
+
+function pemToDer(pem){
+  const m = pem.match(/-----BEGIN PUBLIC KEY-----([\s\S]+?)-----END PUBLIC KEY-----/);
+  if (!m) return null;                       // ML-DSA hex block, not SPKI PEM
+  const b64 = m[1].replace(/\s+/g, "");
+  const raw = atob(b64);
+  return Uint8Array.from(raw, ch => ch.charCodeAt(0));
+}
+
+async function ed25519Verify(spkiDer, sig, msg){
+  try{
+    const key = await crypto.subtle.importKey("spki", spkiDer, {name:"Ed25519"}, false, ["verify"]);
+    return await crypto.subtle.verify({name:"Ed25519"}, key, sig, msg);
+  }catch(err){ return null; }               // null = this browser cannot check
+}
+
+/* ---------- the checks ---------- */
+async function verify(buf, expectKey){
+  const R = {checks: [], facts: {}, level: "ok"};
+  const add = (mark, t, d) => {
+    R.checks.push({mark, t, d});
+    if (mark === "bad") R.level = "bad";
+    else if (mark === "warn" && R.level === "ok") R.level = "warn";
+  };
+  const fail = (t, d) => { add("bad", t, d); return R; };
+
+  let entries;
+  try { entries = await readZip(buf); }
+  catch(e){ return fail("This is not a readable evidence file", e.message +
+    ". An .air-evidence file is a signed archive; this file could not be opened as one."); }
+
+  // 1. layout + duplicate names
+  const names = entries.map(e => e.name);
+  const dupes = [...new Set(names.filter((n,i) => names.indexOf(n) !== i))];
+  if (dupes.length) return fail("Tampered: the file contains duplicated entries",
+    "Different programs would show different content from the same file — a known forgery " +
+    "technique. Duplicated: " + dupes.join(", "));
+  const REQUIRED = ["manifest.json","records/actions.jsonl","verification/chain.json",
+                    "verification/receipts.json","verification/public_key.pem"];
+  const missing = REQUIRED.filter(n => !names.includes(n));
+  if (missing.length) return fail("Incomplete: required parts are missing",
+    "This file is missing " + missing.join(", ") + ", so it cannot be checked.");
+  add("ok", "The file is a complete, well-formed evidence bundle",
+      entries.length + " parts present, no duplicates.");
+
+  const byName = Object.fromEntries(entries.map(e => [e.name, e]));
+  const read = async n => readMember(buf, byName[n]);
+
+  let manifest;
+  try { manifest = JSON.parse(text(await read("manifest.json"))); }
+  catch(e){ return fail("The summary sheet is unreadable", String(e)); }
+
+  // 2. signature over the canonical manifest digest
+  const sig = manifest.signature || {};
+  const digest = await sha256(new TextEncoder().encode(canonicalJSON(
+    Object.fromEntries(Object.entries(manifest).filter(([k]) => k !== "signature")))));
+  if (hex(digest) !== sig.signed_digest)
+    return fail("Tampered: the summary was changed after signing",
+      "The recorded contents no longer match what was signed.");
+
+  const pem = text(await read("verification/public_key.pem"));
+  const der = pemToDer(pem);
+  let fingerprint = sig.alg || "unknown";
+  if (sig.public_key_hex) fingerprint = sig.alg + ":" + hex(await sha256(unhex(sig.public_key_hex))).slice(0,16);
+  R.facts.fingerprint = fingerprint;
+
+  if (sig.alg === "ed25519" && der){
+    const okSig = await ed25519Verify(der, unhex(sig.value || ""), digest);
+    if (okSig === false) return fail("Tampered: the signature does not match",
+      "This file was altered after signing, or it was not signed by the key it carries.");
+    if (okSig === null) add("warn", "Signature could not be checked in this browser",
+      "Your browser does not support Ed25519 checking. Try a current Chrome, Edge, Firefox or " +
+      "Safari, or run air-evidence verify.");
+    else add("ok", "The summary sheet is signed and unaltered",
+      "Its contents match the signature exactly. Whether the underlying records match is the " +
+      "next check.");
+  } else {
+    add("warn", "Signed with a method this page cannot check",
+      "Algorithm: " + (sig.alg || "unknown") + ". Run air-evidence verify for a full check.");
+  }
+
+  // per-file digests + nothing unsigned smuggled in
+  let digestsOK = true;
+  for (const [fname, want] of Object.entries(manifest.files || {})){
+    if (!byName[fname]){ digestsOK = false;
+      add("bad","A listed part is missing from the file", fname + " is listed but not present."); break; }
+    if (hex(await sha256(await read(fname))) !== want){ digestsOK = false;
+      add("bad","Tampered: a part was changed after signing",
+        "The contents of " + fname + " no longer match the signature."); break; }
+  }
+  const listed = new Set(Object.keys(manifest.files || {}));
+  const extra = names.filter(n => n !== "manifest.json" && !listed.has(n) && !n.endsWith("/"));
+  if (extra.length) add("bad", "Tampered: unsigned content was added",
+    "These were added after signing and are covered by nothing: " + extra.join(", "));
+  else if (digestsOK) add("ok", "The records themselves are unaltered since signing",
+    listed.size + " parts checked individually against the signature, and nothing unsigned " +
+    "was added.");
+
+  // 3-5. records, receipts, counts
+  const lines = text(await read("records/actions.jsonl")).trim().split("\n").filter(Boolean);
+  const records = lines.map(l => JSON.parse(l));
+  R.facts.records = records.length;
+
+  /* Actually verify each receipt, rather than counting that one is present.
+     "carries a signature" and "carries a VALID signature" are different
+     claims, and only the second is worth anything to an auditor. The signed
+     payload is Python's json.dumps(fields, sort_keys=True) with its DEFAULT
+     separators — ", " and ": " — not the compact form used for the manifest. */
+  function receiptPayload(rc){
+    const f = {
+      receipt_id: rc.receipt_id || "", agent_id: rc.agent_id || "",
+      action_name: rc.action_name || "", action_category: rc.action_category || "",
+      payload_hash: rc.payload_hash || "", covenant_hash: rc.covenant_hash || "",
+      decision: rc.decision || "", authorized: rc.authorized === true,
+      parent_receipt_id: rc.parent_receipt_id === undefined ? null : rc.parent_receipt_id,
+      created_at: rc.created_at || "",
+    };
+    const body = Object.keys(f).sort()
+      .map(k => JSON.stringify(k) + ": " + JSON.stringify(f[k])).join(", ");
+    return new TextEncoder().encode(("{" + body + "}")
+      .replace(/[-￿]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4,"0")));
+  }
+
+  const withReceipt = records.filter(r => r.receipt);
+  let good = 0, invalid = 0, foreign = 0, uncheckable = 0;
+  for (const r of withReceipt){
+    const rc = r.receipt;
+    if (rc.signing_method !== "ed25519"){ uncheckable++; continue; }
+    if (sig.public_key_hex && (rc.signing_public_key || "").toLowerCase() !== sig.public_key_hex.toLowerCase()){
+      foreign++; continue;                    // signed by a key other than the bundle's own
+    }
+    const spki = pemToDer(pem);
+    const ok = spki ? await ed25519Verify(spki, unhex(rc.authorization_sig || ""), receiptPayload(rc)) : null;
+    if (ok === true) good++; else if (ok === false) invalid++; else uncheckable++;
+  }
+  if (withReceipt.length === 0)
+    add("warn", "No individual decision signatures",
+      "This file shows what happened, but not who authorised each decision. Nothing was checked here.");
+  else if (invalid || foreign)
+    add("bad", "Tampered: a decision signature does not hold",
+      `${invalid} signature(s) invalid and ${foreign} signed by a key other than this file's own.`);
+  else if (good)
+    add("ok", "Each decision was individually signed, and every signature checks out",
+      `${good} of ${records.length} records verified one by one` +
+      (uncheckable ? `; ${uncheckable} used a method this page cannot check.` : "."));
+  else
+    add("warn", "Decision signatures could not be checked in this browser",
+      `${uncheckable} receipt(s) use a method this page cannot verify. Run air-evidence verify.`);
+
+  const scr = records.filter(r => r.screening);
+  const reviewer = r => (r.screening || {}).human_reviewer || "";
+  const adverse = scr.filter(r => r.action === "reject_candidate" ||
+                                  (r.screening || {}).decision_type === "reject");
+  const gaps = adverse.filter(r => !reviewer(r)).length;
+  R.facts.decisions = scr.length;
+  R.facts.adverse = adverse.length;
+  R.facts.gaps = gaps;
+
+  const declared = manifest.counts || {};
+  const actual = {actions: records.length, screening_decisions: scr.length,
+    adverse_decisions: adverse.length, adverse_decisions_missing_reviewer: gaps};
+  const bad = Object.entries(actual).filter(([k,v]) => k in declared && declared[k] !== v);
+  if (bad.length) add("bad", "The summary does not match the records",
+    "It claims " + bad.map(([k,v]) => k + " = " + declared[k] + " but the records show " + v).join("; ") + ".");
+  else add("ok", "The summary matches the records underneath it",
+    "Counts were recalculated from the decisions themselves, not taken on trust.");
+
+  // 6. external witness
+  const anchor = manifest.anchor || {};
+  if (anchor.anchored && anchor.tsr_b64){
+    add("ok", "An independent timestamp authority witnessed this history",
+      "Countersigned " + (anchor.timestamp || "") + " by " + (anchor.tsa_url || "an external authority") +
+      ". Full cryptographic checking of the timestamp requires air-evidence verify.");
+    R.facts.witness = "Yes";
+  } else {
+    add("warn", "No independent timestamp",
+      "Nothing outside the sender's control witnessed this history, so if they rewrote their own " +
+      "records before signing, this check would not reveal it. Ask them for an anchored export.");
+    R.facts.witness = "No";
+  }
+
+  // issuer pinning
+  if (expectKey){
+    const want = expectKey.trim().toLowerCase();
+    const got = fingerprint.toLowerCase();
+    if (want === got || want === got.split(":").pop())
+      add("ok", "Sender identity matches what you expected", fingerprint);
+    else return fail("This did not come from the sender you expected",
+      "It is signed by " + fingerprint + ", but you expected " + expectKey + ".");
+    R.facts.pinned = true;
+  } else {
+    add("warn", "Sender identity not confirmed",
+      "The file is signed, but the key travels inside it — so anyone could produce a signed file. " +
+      "Ask the sender for their fingerprint through a different channel and paste it below.");
+  }
+  return R;
+}
+
+/* ---------- rendering ---------- */
+const out = document.getElementById("out");
+
+function headline(R){
+  const bad = R.level === "bad";
+  const gapText = R.facts.gaps > 0
+    ? ` It reports ${R.facts.gaps} decision${R.facts.gaps>1?"s":""} that ended a candidacy with no human reviewer recorded — that is a finding to raise with the sender, not a problem with the file.`
+    : "";
+  if (bad) return {cls:"bad", h:"Do not rely on this file",
+    p:"It failed at least one check below. Either it was altered after it was signed, or it was not produced by the sender it claims."};
+  if (R.level === "warn") return {cls:"warn", h:"Authentic, with things to ask about",
+    p:`The contents are genuine and unaltered. Some assurances are missing — see below.${gapText}`};
+  return {cls:"ok", h:"Authentic and complete",
+    p:`Every check passed. This evidence is unaltered since it was signed.${gapText}`};
+}
+
+function render(R){
+  const hd = headline(R);
+  const f = R.facts;
+  const facts = [
+    ["records","Actions recorded"], ["decisions","Decisions about people"],
+    ["adverse","Rejections"], ["gaps","Rejections with no reviewer"], ["witness","Independent witness"],
+  ].filter(([k]) => f[k] !== undefined)
+   .map(([k,l]) => `<div class="fact${k==="gaps"&&f.gaps>0?" flag":""}">
+      <div class="n">${f[k]}</div><div class="l">${l}</div></div>`).join("");
+
+  out.innerHTML = `
+    <div class="verdict ${hd.cls}"><h2>${hd.h}</h2><p>${hd.p}</p></div>
+    <div class="facts">${facts}</div>
+    <h3>What was checked</h3>
+    ${R.checks.map(c => `<div class="check"><div class="mark ${c.mark}">${
+      c.mark==="ok"?"✓":c.mark==="warn"?"!":"✕"}</div>
+      <div><div class="t">${c.t}</div><div class="d">${c.d}</div></div></div>`).join("")}
+    ${f.fingerprint ? `<div class="note"><strong>Signed by</strong>
+      <div class="fp">${f.fingerprint}</div>
+      ${f.pinned ? "" : `<div class="pinrow">
+        <input id="pin" placeholder="Paste the sender's fingerprint to confirm identity">
+        <button id="pinbtn">Check identity</button></div>`}</div>` : ""}
+    <div class="note"><strong>What this page cannot tell you.</strong> Whether records were left
+    out before the file was made, and whether a named reviewer genuinely reviewed anything. A
+    signature proves nothing was changed afterwards; it cannot prove everything was included.</div>`;
+
+  const btn = document.getElementById("pinbtn");
+  if (btn) btn.onclick = () => run(lastBuf, document.getElementById("pin").value);
+}
+
+let lastBuf = null;
+async function run(buf, expectKey){
+  lastBuf = buf;
+  out.innerHTML = `<div class="verdict"><h2>Checking…</h2><p>Running the checks in your browser.</p></div>`;
+  try { render(await verify(buf, expectKey)); }
+  catch(e){ out.innerHTML =
+    `<div class="verdict bad"><h2>Could not check this file</h2><p>${String(e.message || e)}</p></div>`; }
+}
+
+const drop = document.getElementById("drop"), input = document.getElementById("file");
+drop.onclick = () => input.click();
+drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") input.click(); };
+input.onchange = async () => { if (input.files[0]) run(await input.files[0].arrayBuffer(), ""); };
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", async e => {
+  const f = e.dataTransfer.files[0]; if (f) run(await f.arrayBuffer(), ""); });
+</script>
+</body>
+</html>
