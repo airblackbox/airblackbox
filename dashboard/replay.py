@@ -103,8 +103,16 @@ async def api_run(run_id: str):
     )
     if not matches:
         raise HTTPException(status_code=404, detail="run not found")
+
+    # Confirm the resolved path stays inside RUNS_DIR before opening it,
+    # so a crafted run_id can never escape the runs directory (path traversal).
+    record_path = os.path.realpath(matches[0])
+    runs_root = os.path.realpath(RUNS_DIR)
+    if os.path.commonpath([record_path, runs_root]) != runs_root:
+        raise HTTPException(status_code=400, detail="invalid run id")
+
     try:
-        with open(matches[0]) as f:
+        with open(record_path) as f:
             record = json.load(f)
     except (json.JSONDecodeError, OSError):
         raise HTTPException(status_code=500, detail="record unreadable")
