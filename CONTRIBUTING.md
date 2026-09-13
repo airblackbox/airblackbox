@@ -11,8 +11,8 @@ AIR Blackbox is building the standard for EU AI Act compliance scanning. Whether
 ### Fork and Clone
 
 1. Fork the repository on GitHub
-2. Clone your fork locally: `git clone https://github.com/YOUR_USERNAME/air-blackbox.git`
-3. Add the upstream remote: `git remote add upstream https://github.com/jasonjshotwell/air-blackbox.git`
+2. Clone your fork locally: `git clone https://github.com/YOUR_USERNAME/airblackbox.git`
+3. Add the upstream remote: `git remote add upstream https://github.com/airblackbox/airblackbox.git`
 
 ### Create a Feature Branch
 
@@ -52,12 +52,12 @@ Commit messages should be clear and descriptive. Reference issues when applicabl
 Clone the repository and install in development mode with all dependencies:
 
 ```bash
-git clone https://github.com/jasonjshotwell/air-blackbox.git
-cd air-blackbox
+git clone https://github.com/airblackbox/airblackbox.git
+cd airblackbox
 pip install -e ".[all]"
 
 # Verify
-air-blackbox --version        # Should print 1.10.0
+air-blackbox --version        # Should print the installed version
 pytest tests/ -q              # Should pass 1,500+ tests
 ruff check sdk/air_blackbox/  # Should print "All checks passed!"
 ```

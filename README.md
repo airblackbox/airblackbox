@@ -24,6 +24,52 @@ client = OpenAI(
 
 Every LLM call now generates a signed, tamper-evident, replayable audit record. No SDK changes. No refactoring. Measured overhead: ~3 ms per call, under 0.4% of a typical LLM request ([benchmarks](BENCHMARKS.md)).
 
+## Project status
+
+**Stable and maintained. Not currently adding features.**
+
+AIR Blackbox does what this README says it does, and the claims here are the
+ones the code can back. It runs in production in a live hiring system, where it
+has recorded 450 consequential AI decisions across two weeks — 93 of them
+candidacy-ending, none without a named human reviewer — in a chain anchored by
+an external timestamp authority and verifiable by a third party
+([case study](https://airblackbox.ai/blog/ai-recruiting-compliance-case-study)).
+
+What that means in practice:
+
+- **Security and correctness fixes still land.** Report issues to
+  jason@airblackbox.ai, subject `[SECURITY]`.
+- **New framework integrations and roadmap features are not planned.** Roadmap
+  issues have been closed rather than left open to rot; an empty backlog here
+  means "finished," not "abandoned."
+- **Pull requests are welcome and will get an actual answer.** Historically some
+  did not, which was a failure of maintenance rather than a judgement on the
+  work.
+- **Apache 2.0, with no relicensing planned**, so it is safe to build on and
+  safe to fork.
+
+Known limits are written down rather than marketed around — see the
+[red-team review](docs/security/red-team-2026-08.md), which documents 17
+confirmed breaks found against this project's own verifier and what was done
+about each.
+
+## Using it in your own product
+
+If you want signed, externally-anchored decision receipts inside an application
+you already run, you do not need the scanner or the gateway. The integration is
+a durable outbox in your app POSTing batches to a single-writer AIR server, and
+it takes about an hour:
+
+**[docs/guides/ingest-integration.md](docs/guides/ingest-integration.md)** — the
+wire contract for `/ingest`, `/ingest/export`, and `/ingest/status`, why your
+application must not own the chain, and the token-to-tenant binding.
+
+The bundle that comes out the other end is verifiable by anyone at
+[airblackbox.ai/verify](https://airblackbox.ai/verify) — in the browser, with no
+upload, no account, and no trust in you. That property is the whole point, so
+try it with the [sample bundle](https://airblackbox.ai/demo/sample.air-evidence)
+before you believe any of the above.
+
 ## What You Get
 
 **Audit chain**: every call produces an HMAC-SHA256 chained `.air.json` record, written asynchronously. Tamper with one record and every record after it breaks.
