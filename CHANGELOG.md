@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Added**
+- Add the Pydantic AI trust adapter with sync, async, streaming, safe records, chain resume, and OpenTelemetry span capture without replacing the global tracer provider.
+
 ## [1.15.0] - 2026-08-15
 
 The urgent line: **`pip install "air-blackbox[pqc]"` was broken for anyone who

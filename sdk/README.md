@@ -18,6 +18,8 @@ With framework support:
 pip install air-blackbox[langchain]    # LangChain trust layer
 pip install air-blackbox[crewai]       # CrewAI trust layer
 pip install air-blackbox[openai]       # OpenAI Agents SDK trust layer
+pip install air-blackbox[pydantic-ai]  # Pydantic AI trust layer
+pip install air-blackbox[trust]        # All framework trust layers
 pip install air-blackbox[all]          # Everything
 ```
 
@@ -49,6 +51,75 @@ trust = AirTrust()
 trust.attach(your_langchain_agent)
 # Framework auto-detected. Audit trails active.
 ```
+
+## Pydantic AI Trust Layer
+
+Install:
+
+```bash
+pip install air-blackbox[pydantic-ai]
+```
+
+Basic sync usage:
+
+```python
+from air_blackbox import AirTrust
+from pydantic_ai import Agent
+
+agent = Agent("openai:gpt-5.2")
+agent = AirTrust().attach(agent)
+result = agent.run_sync("Summarize the deployment risk.")
+```
+
+Async usage:
+
+```python
+agent = AirTrust().attach(Agent("openai:gpt-5.2"))
+result = await agent.run("Draft a customer-safe response.")
+```
+
+Structured output:
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+class Decision(BaseModel):
+    approved: bool
+    reason: str
+
+agent = AirTrust().attach(Agent("openai:gpt-5.2", output_type=Decision))
+decision = agent.run_sync("Should this refund be approved?").output
+```
+
+Tools:
+
+```python
+from pydantic_ai import Agent
+
+def lookup_order(order_id: str) -> str:
+    return "delivered"
+
+agent = AirTrust().attach(Agent("openai:gpt-5.2", tools=[lookup_order]))
+result = agent.run_sync("Check order A123.")
+```
+
+Streaming:
+
+```python
+agent = AirTrust().attach(Agent("openai:gpt-5.2"))
+
+async with agent.run_stream("Write a short status update.") as stream:
+    output = await stream.get_output()
+```
+
+The adapter records one AIR record per top-level `run_sync()`, `run()`, `run_stream()`, or `run_stream_sync()` call. Records include captured Pydantic AI messages, status, duration, usage where exposed, structured-output schema details, streaming completion state, and OpenTelemetry trace/span identifiers for agent, model, tool, validation, and streaming spans when Pydantic AI emits them.
+
+Privacy behavior: inputs, outputs, tool data, and span attributes pass through bounded JSON-safe serialization with secret-key filtering. AIR security checks use the canonical `RuntimeMonitor` PII and prompt-injection detectors before the record is written.
+
+OpenTelemetry behavior: the adapter adds an AIR `SpanProcessor` to the existing mutable tracer provider when possible and preserves all existing processors/exporters. It does not call `set_tracer_provider()` and does not replace the global tracer provider. If the current provider cannot accept processors, AIR creates an isolated provider and passes it to Pydantic AI through `InstrumentationSettings(tracer_provider=...)` for this adapter path only.
+
+Known limitations: AIR only records lifecycle details exposed by Pydantic AI result objects, message capture, and public OpenTelemetry spans. It does not persist raw SDK request/response objects, model clients, dependency containers, HTTP clients, or tracer internals.
 
 ## What It Does
 
