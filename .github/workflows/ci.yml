@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies (with post-quantum provider)
-        run: pip install -e ".[mcp,lake,pqc]" pytest
+        run: pip install -e ".[mcp,lake,pqc,pydantic-ai]" pytest
       - name: Assert ML-DSA-65 is actually active
         # Guard against the extra quietly failing to install: this job's whole
         # point is exercising the PQ path, so refuse to run "green" without it.
