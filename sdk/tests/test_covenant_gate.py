@@ -113,3 +113,65 @@ def test_verify_chain_reports_key_source(tmp_path, monkeypatch):
     assert eng.verify_chain(signing_key="k").key_source == "argument"
     monkeypatch.setenv("TRUST_SIGNING_KEY", "envk")
     assert eng.verify_chain().key_source == "env"
+
+
+class TestRecruitingScreenerTagging:
+    """Tagging must not fall through to default-deny.
+
+    The covenant is default-deny, so an action with no rule is forbidden. The
+    recruiting-screener covenant shipped without any tagging rule, which meant
+    a product recording `tag_candidate` got a BLOCKED verdict - the tagging
+    feature worked, but the governed record of it did not.
+    """
+
+    def _covenant(self):
+        from air_blackbox.gate.covenant import Covenant
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return Covenant.from_yaml(os.path.join(
+            here, "air_blackbox", "gate", "examples",
+            "recruiting-screener.covenant.yaml"))
+
+    @pytest.mark.parametrize("action", ["tag_candidate", "auto_tag_candidate", "retag_bench"])
+    def test_tagging_is_permitted(self, action):
+        from air_blackbox.gate.covenant import RuleAction
+        assert self._covenant().evaluate(action) == RuleAction.PERMIT
+
+    @pytest.mark.parametrize("action", [
+        "reject_candidate", "advance_candidate", "score_candidate", "rank_candidates",
+    ])
+    def test_outcome_decisions_still_need_a_human(self, action):
+        """Tagging being free must not have loosened the decisions that matter."""
+        from air_blackbox.gate.covenant import RuleAction
+        assert self._covenant().evaluate(action) == RuleAction.REQUIRE_APPROVAL
+
+    def test_protected_attribute_inference_still_forbidden(self):
+        """A parser that emits age or nationality proxies stays banned
+        whichever tagging name it runs under."""
+        from air_blackbox.gate.covenant import RuleAction
+        assert self._covenant().evaluate("infer_protected_attributes") == RuleAction.FORBID
+
+    def test_unknown_action_still_denied(self):
+        """The fix must not have turned the covenant permissive."""
+        from air_blackbox.gate.covenant import RuleAction
+        assert self._covenant().evaluate("exfiltrate_bench") == RuleAction.FORBID
+
+
+class TestCovenantVocabularyKeepsGuards:
+    """The agent-facing vocabulary must not flatten a conditional rule.
+
+    `forbid: llm_call when tokens_total > 100000` rendered bare as
+    `forbid: llm_call` sits beside `permit: llm_call`; since forbid outranks
+    permit, an agent reading that concludes llm_call is banned outright.
+    """
+
+    def test_guard_is_rendered(self):
+        from air_blackbox.gate.covenant import Covenant
+        from air_blackbox.mcp_server import _covenant_vocabulary
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cov = Covenant.from_yaml(os.path.join(
+            here, "air_blackbox", "gate", "examples",
+            "recruiting-screener.covenant.yaml"))
+        text = _covenant_vocabulary(cov)
+        assert "llm_call (only when tokens_total > 100000)" in text
+        forbid_line = next(l for l in text.splitlines() if l.strip().startswith("forbid:"))
+        assert "llm_call (only when" in forbid_line

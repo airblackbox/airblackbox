@@ -89,7 +89,17 @@ def _covenant_vocabulary(covenant: Covenant) -> str:
     action description silently reads as forbid."""
     by_action: dict = {"permit": [], "require_approval": [], "forbid": []}
     for rule in covenant.rules:
-        by_action.setdefault(rule.action.value, []).append(rule.target)
+        # Carry the guard through. Flattening it away makes a conditional rule
+        # read as an absolute one: `forbid: llm_call when tokens_total > 100000`
+        # rendered bare as `forbid: llm_call` sits next to `permit: llm_call`,
+        # and since forbid outranks permit, a careful reader concludes llm_call
+        # is banned outright and stops making model calls.
+        target = rule.target
+        if rule.when:
+            target += f" (only when {rule.when})"
+        if rule.unless:
+            target += f" (unless {rule.unless})"
+        by_action.setdefault(rule.action.value, []).append(target)
     lines = [f"\nActive covenant: '{covenant.agent}'. It is DEFAULT-DENY and "
              "matches EXACT action names only - always use these snake_case "
              "names with record_action/check_covenant, never free-text "
