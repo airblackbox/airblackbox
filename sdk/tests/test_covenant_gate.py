@@ -131,8 +131,8 @@ class TestRecruitingScreenerTagging:
             here, "air_blackbox", "gate", "examples",
             "recruiting-screener.covenant.yaml"))
 
-    @pytest.mark.parametrize("action", ["tag_candidate", "auto_tag_candidate", "retag_bench"])
-    def test_tagging_is_permitted(self, action):
+    @pytest.mark.parametrize("action", ["tag_candidate", "retag_bench"])
+    def test_human_tagging_is_permitted(self, action):
         from air_blackbox.gate.covenant import RuleAction
         assert self._covenant().evaluate(action) == RuleAction.PERMIT
 
@@ -145,10 +145,32 @@ class TestRecruitingScreenerTagging:
         assert self._covenant().evaluate(action) == RuleAction.REQUIRE_APPROVAL
 
     def test_protected_attribute_inference_still_forbidden(self):
-        """A parser that emits age or nationality proxies stays banned
-        whichever tagging name it runs under."""
         from air_blackbox.gate.covenant import RuleAction
         assert self._covenant().evaluate("infer_protected_attributes") == RuleAction.FORBID
+
+    def test_machine_tagging_denied_without_a_vocabulary_assertion(self):
+        """The real hole: rules match on exact action name, so
+        forbid:infer_protected_attributes does NOT inspect a tag's content.
+        Permitting auto_tag_candidate unguarded would route free-text parser
+        output past the prohibition. An unstated guard must fail closed."""
+        from air_blackbox.gate.covenant import RuleAction
+        cov = self._covenant()
+        assert cov.evaluate("auto_tag_candidate") == RuleAction.FORBID
+        assert cov.evaluate("auto_tag_candidate", {
+            "detail": "inferred likely age 55+, non-native speaker",
+        }) == RuleAction.FORBID
+
+    def test_machine_tagging_denied_for_uncontrolled_vocabulary(self):
+        from air_blackbox.gate.covenant import RuleAction
+        assert self._covenant().evaluate(
+            "auto_tag_candidate", {"tag_vocabulary": "freetext"}
+        ) == RuleAction.FORBID
+
+    def test_machine_tagging_permitted_only_on_an_explicit_assertion(self):
+        from air_blackbox.gate.covenant import RuleAction
+        assert self._covenant().evaluate(
+            "auto_tag_candidate", {"tag_vocabulary": "controlled"}
+        ) == RuleAction.PERMIT
 
     def test_unknown_action_still_denied(self):
         """The fix must not have turned the covenant permissive."""
@@ -165,6 +187,7 @@ class TestCovenantVocabularyKeepsGuards:
     """
 
     def test_guard_is_rendered(self):
+        pytest.importorskip("mcp")  # optional [mcp] extra
         from air_blackbox.gate.covenant import Covenant
         from air_blackbox.mcp_server import _covenant_vocabulary
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -172,6 +195,10 @@ class TestCovenantVocabularyKeepsGuards:
             here, "air_blackbox", "gate", "examples",
             "recruiting-screener.covenant.yaml"))
         text = _covenant_vocabulary(cov)
-        assert "llm_call (only when tokens_total > 100000)" in text
-        forbid_line = next(l for l in text.splitlines() if l.strip().startswith("forbid:"))
-        assert "llm_call (only when" in forbid_line
+        # guard surfaced, but NOT inside the copy-safe name list
+        assert "forbid llm_call (when tokens_total > 100000)" in text
+        name_lines = [l for l in text.splitlines()
+                      if l.strip().startswith(("permit:", "forbid:", "require_approval:"))]
+        for line in name_lines:
+            assert "(" not in line, f"prose leaked into a copy-safe name list: {line}"
+        assert "fail-closed" in text or "INDETERMINATE" in text
