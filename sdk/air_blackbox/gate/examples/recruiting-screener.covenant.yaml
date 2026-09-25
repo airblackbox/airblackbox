@@ -32,6 +32,31 @@ rules:
   - forbid: llm_call
     when: "tokens_total > 100000"   # runaway-agent budget
 
+  # Tagging and enrichment. A tag makes an existing record findable; by
+  # itself it does not change what happens to the candidate, and where tags
+  # go on to influence an outcome - a ranking, a score - that action is
+  # gated below, so the decision still needs a human.
+  #
+  # Read this next part before adding any further tagging name. Rules match
+  # on the EXACT action name. `forbid: infer_protected_attributes` therefore
+  # only fires for an action literally called that; it does NOT inspect the
+  # content of a tag. A parser emitting "likely 55+" or "non-native speaker"
+  # under the name auto_tag_candidate is not caught by that rule. Permitting
+  # a machine-tagging name with no further guard would hand free-text parser
+  # output a permitted route straight past the prohibition.
+  #
+  # So machine tagging is permitted only when the producer states, in the
+  # recorded context, that the tags came from a controlled vocabulary. Omit
+  # the field and the guard is indeterminate, which keeps the forbid active
+  # (see Covenant.evaluate) - unasserted parser output is denied, and the
+  # assertion itself lands in the chain where an auditor can weigh it.
+  - permit: tag_candidate           # a human applies a label; a human is accountable
+  - permit: retag_bench             # bulk re-tag over an existing pool
+
+  - permit: auto_tag_candidate      # parser-extracted, provenance recorded
+  - forbid: auto_tag_candidate
+    when: "tag_vocabulary != controlled"
+
   # Candidate-affecting decisions - NEVER solely automated (GDPR Art 22,
   # AI Act Art 14). A human must approve every outcome-changing action.
   - require_approval: reject_candidate

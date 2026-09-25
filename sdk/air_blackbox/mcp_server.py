@@ -88,8 +88,17 @@ def _covenant_vocabulary(covenant: Covenant) -> str:
     Claude therefore needs the exact vocabulary, or every natural-language
     action description silently reads as forbid."""
     by_action: dict = {"permit": [], "require_approval": [], "forbid": []}
+    guarded: list = []
     for rule in covenant.rules:
+        # The name lists stay bare snake_case, because they are declared to be
+        # exactly what gets passed to record_action; a name carrying prose, if
+        # copied verbatim, misses every rule and writes a blocked record into
+        # the chain. Guards are surfaced separately instead of inline, so a
+        # conditional rule is neither hidden nor pasted into a call.
         by_action.setdefault(rule.action.value, []).append(rule.target)
+        if rule.when or rule.unless:
+            cond = f"when {rule.when}" if rule.when else f"unless {rule.unless}"
+            guarded.append(f"{rule.action.value} {rule.target} ({cond})")
     lines = [f"\nActive covenant: '{covenant.agent}'. It is DEFAULT-DENY and "
              "matches EXACT action names only - always use these snake_case "
              "names with record_action/check_covenant, never free-text "
@@ -97,8 +106,17 @@ def _covenant_vocabulary(covenant: Covenant) -> str:
     for kind in ("permit", "require_approval", "forbid"):
         if by_action.get(kind):
             lines.append(f"  {kind}: {', '.join(sorted(set(by_action[kind])))}")
+    if guarded:
+        lines.append("Conditional rules - the guard decides, and a guard whose "
+                     "field you do not supply is INDETERMINATE, which leaves a "
+                     "forbid active (fail-closed). An action below can appear in "
+                     "both lists above for this reason:")
+        lines.extend(f"  - {g}" for g in sorted(set(guarded)))
     lines.append("Unlisted actions are treated as forbidden by default; use "
-                 "check_covenant to test a name before relying on it.")
+                 "check_covenant to test a name before relying on it. Note that "
+                 "check_covenant evaluates without your runtime context, so a "
+                 "guarded action reports its fail-closed answer there - supply "
+                 "the guard's field in record_action to get the other branch.")
     return "\n".join(lines)
 
 
