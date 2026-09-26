@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-09-26
+
 ### Added
 - `air_blackbox.record()`: record an agent's actions and export a signed,
   browser-verifiable `.air-evidence` bundle from a plain `pip install`, with
