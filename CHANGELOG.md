@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `air_blackbox.record()`: record an agent's actions and export a signed,
+  browser-verifiable `.air-evidence` bundle from a plain `pip install`, with
+  no server, token or optional extra. Ed25519 by default so the bundle
+  verifies at airblackbox.ai/verify; external timestamping on export, with an
+  unreachable authority recorded as a gap. Optional `covenant=` records a
+  policy decision per action.
+
+### Fixed
+- Recruiting-screener covenant: tagging actions no longer fall through to
+  default-deny; machine tagging requires an explicit controlled-vocabulary
+  assertion. Conditional rules are no longer hidden from the agent (#91).
+
 ## [1.15.0] - 2026-08-15
 
 The urgent line: **`pip install "air-blackbox[pqc]"` was broken for anyone who

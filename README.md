@@ -9,6 +9,38 @@
 
 **The flight recorder for autonomous AI agents. Record, replay, enforce, audit.**
 
+## Try it in five minutes
+
+When your agent does something, can someone else check what happened without
+taking your word for it? No server, no account, no extras:
+
+```bash
+pip install air-blackbox
+```
+
+```python
+import air_blackbox as air
+
+with air.record("support-agent") as rec:
+    rec.action("read_ticket", "ticket #4821: customer charged twice")
+    rec.action("issue_refund", "order 991, $40",
+               human_reviewer="dana@acme.com", decision_type="refund")
+
+print(rec.bundle_path)   # a signed .air-evidence file
+```
+
+Drop that file on **[airblackbox.ai/verify](https://airblackbox.ai/verify)**.
+Your browser checks every signature itself; nothing is uploaded. Then change
+one byte of the file and drop it again.
+
+Each action is chained, signed with Ed25519, and on export the chain is
+timestamped by an external authority when one is reachable (if not, the
+bundle says so rather than hiding it). Pass `covenant=` to record a policy
+decision for every action. This path is for one process; several processes
+sharing one history use the [ingest server](docs/guides/ingest-integration.md).
+
+## Or put it in front of every model call
+
 One proxy swap. Complete coverage. Runs locally.
 
 ```python
