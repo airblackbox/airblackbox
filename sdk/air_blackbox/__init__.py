@@ -12,7 +12,16 @@ One install. Four commands. 79% automated compliance.
 """
 
 __version__ = "1.15.0"
-__all__ = ["AirBlackbox", "AirTrust"]
+__all__ = ["AirBlackbox", "AirTrust", "record", "Recorder"]
+
+
+def __getattr__(name):
+    # Loaded on first use so a bare `import air_blackbox` stays as cheap as it
+    # was before `record` existed.
+    if name in ("record", "Recorder"):
+        from air_blackbox import recorder
+        return getattr(recorder, name)
+    raise AttributeError(f"module 'air_blackbox' has no attribute {name!r}")
 
 
 class AirBlackbox:
