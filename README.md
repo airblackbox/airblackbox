@@ -29,7 +29,8 @@ with air.record("support-agent") as rec:
 print(rec.bundle_path)   # a signed .air-evidence file
 ```
 
-Drop that file on **[airblackbox.ai/verify](https://airblackbox.ai/verify)**.
+Save that as `demo.py` and run `python demo.py` (it's Python, so it won't
+work pasted straight into a terminal). Drop the file it prints on **[airblackbox.ai/verify](https://airblackbox.ai/verify)**.
 Your browser checks every signature itself; nothing is uploaded. Then change
 one byte of the file and drop it again.
 
