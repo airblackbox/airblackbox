@@ -10,6 +10,18 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from air_blackbox.compliance.sources import (
+    JS_FAMILY,
+    PYTHON,
+    has,
+    is_js,
+    is_js_test_file,
+    is_scannable,
+    language_of,
+    languages_in,
+    read_sources,
+)
+
 
 #: Which body of law a finding belongs to. `article` is only an EU AI Act
 #: article number when framework is "eu_ai_act"; for anything else it is
@@ -36,21 +48,16 @@ class CodeFinding:
 
 
 def scan_codebase(scan_path: str) -> List[CodeFinding]:
-    """Walk all Python files and check for compliance patterns."""
-    py_files = _find_python_files(scan_path)
-    if not py_files:
+    """Walk all source files (Python, TypeScript, JavaScript) and check for
+    compliance patterns."""
+    source_files = _find_source_files(scan_path)
+    if not source_files:
         return [CodeFinding(
-            article=0, name="Python files",
-            status="warn", evidence=f"No Python files found in {scan_path}",
-            fix_hint="Point --scan at a directory containing Python code"
+            article=0, name="Source files",
+            status="warn", evidence=f"No Python, TypeScript or JavaScript files found in {scan_path}",
+            fix_hint="Point --scan at a directory containing Python, TypeScript or JavaScript code"
         )]
-    file_contents = {}
-    for fp in py_files:
-        try:
-            with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                file_contents[fp] = f.read()
-        except Exception:
-            continue
+    file_contents = read_sources(source_files)
     findings = []
     findings.extend(_check_error_handling(file_contents, scan_path))
     findings.extend(_check_fallback_patterns(file_contents, scan_path))
@@ -104,6 +111,31 @@ def _find_python_files(scan_path: str) -> List[str]:
     return py_files
 
 
+#: Same set _find_python_files uses.
+SOURCE_SKIP_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", ".venv", "venv",
+    "env", ".env", ".tox", ".mypy_cache", ".pytest_cache",
+    "dist", "build", "egg-info", ".eggs", "site-packages",
+    "deprecated", "archived",
+})
+
+
+def _find_source_files(scan_path: str) -> List[str]:
+    """Every scannable source file, in the same walk order as
+    _find_python_files, so a Python-only tree yields exactly the same list."""
+    if os.path.isfile(scan_path) and language_of(scan_path):
+        return [os.path.abspath(scan_path)]
+
+    found = []
+    for root, dirs, files in os.walk(scan_path):
+        dirs[:] = [d for d in dirs if d not in SOURCE_SKIP_DIRS and not d.endswith(".egg-info")]
+        for fname in files:
+            fp = os.path.join(root, fname)
+            if is_scannable(fp, scan_path):
+                found.append(fp)
+    return found
+
+
 def _is_test_file(filepath: str) -> bool:
     """Return True if filepath is a test file (test dirs, test_*.py, conftest.py).
     These are excluded from docstring/type-hint coverage to match the web scanner
@@ -121,7 +153,20 @@ def _is_test_file(filepath: str) -> bool:
         return True
     if basename in ("conftest.py",):
         return True
+    if language_of(filepath) in JS_FAMILY and is_js_test_file(filepath):
+        return True
     return False
+
+
+def _wording(file_contents: dict, python: str, js: str, both: str) -> str:
+    """Pick user-facing text by the languages scanned. A Python-only scan
+    always gets the original Python wording."""
+    langs = languages_in(file_contents)
+    if langs == [PYTHON] or not langs:
+        return python
+    if PYTHON not in langs:
+        return js
+    return both
 
 
 def _source_files_only(file_contents: dict) -> dict:
@@ -132,6 +177,196 @@ def _source_files_only(file_contents: dict) -> dict:
 
 def _rel(filepath: str, scan_path: str) -> str:
     return os.path.relpath(filepath, scan_path)
+
+
+# ─────────────────────────────────────────────
+# TypeScript / JavaScript adapters
+# Patterns for idioms with no Python spelling. They are only ever searched in
+# TS/JS files (sources.has), so they cannot change a Python result. Everything
+# that differs only by naming (requireApproval vs require_approval) is
+# handled by the snake_case view instead and needs nothing here.
+# ─────────────────────────────────────────────
+
+# Vercel AI SDK calls are free functions, with no client object to match.
+_JS_LLM_CALL = r'\b(?:generateText|streamText|generateObject|streamObject)\s*\('
+_JS_ERROR_HANDLING = r'\btry\s*\{.*?\bcatch\b|\.catch\s*\('
+# Ajv compiles a JSON Schema: the jsonschema.validate equivalent.
+_JS_STRONG_VALIDATION = r'\bnew\s+Ajv\b|\bajv\.(?:compile|validate)\s*\(|\bfrom\s+["\']ajv["\']'
+# Schema libraries are the Pydantic equivalent: they count when the same
+# file calls a model, exactly as Pydantic does. TS interfaces do not count,
+# because they vanish at runtime and validate nothing.
+_JS_WEAK_VALIDATION = (r'\bfrom\s+["\'](?:zod|yup|valibot|joi|superstruct|io-ts|arktype'
+                       r'|@sinclair/typebox|class-validator)["\']'
+                       r'|\brequire\(\s*["\'](?:zod|yup|joi|valibot)["\']\s*\)'
+                       r'|\bz\.(?:object|string|number|array|enum)\s*\(')
+# Library imports count like `structlog`; console.* does not, like print().
+_JS_LOGGING = (r'\b(?:pino|winston|bunyan|log4js|loglevel|consola|signale)\b'
+               r'|\blogger\.(?:debug|info|warn|warning|error|fatal|trace|log)\s*\('
+               r'|\bnew\s+Logger\s*\(')
+# Raw input interpolated into a template literal on one line: the same
+# single-line scope as the Python f-string pattern.
+_JS_PROMPT_INTERPOLATION = r'`[^`\n]*\$\{[^}\n]*input[^}\n]*\}[^`\n]*`'
+_JS_OUTPUT_VALIDATION = r'\b(?:generateObject|streamObject)\s*\(|\bOutput\.object\s*\('
+# npm rate limiters (the max_rpm / RPMController equivalents). Kebab names
+# like rate-limiter-flexible are already covered by the snake_case view.
+_JS_RATE_LIMIT = r'["\'](?:p-throttle|bottleneck|express-rate-limit|@upstash/ratelimit|limiter)["\']'
+# JS guardrail packages with no Python-named equivalent in the strong list.
+_JS_INJECTION_DEFENSE = r'["\']@openai/guardrails["\']|\bGuardrailsOpenAI\b|["\']llm-guard["\']'
+
+_JS_NOT_A_METHOD = {
+    "if", "for", "while", "switch", "catch", "function", "return", "typeof",
+    "await", "new", "else", "do", "try", "with", "yield", "super", "delete",
+    "void", "throw", "case", "import", "export", "in", "of", "instanceof",
+    "constructor",  # like __init__: not counted
+}
+_JS_FUNC = re.compile(
+    r'^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:async\s+)?function\s*\*?\s*'
+    r'([A-Za-z_$][\w$]*)?\s*(?:<[^>(]*>)?\s*\(')
+_JS_CLASS = re.compile(
+    r'^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)')
+_JS_ARROW = re.compile(
+    r'^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(:[^=]+?)?=\s*(?:async\s+)?'
+    r'(?:(function)\b|(?:<[^>(]*>\s*)?(\()|[A-Za-z_$][\w$]*\s*=>)')
+# `export const call = traceable(async (x) => ...)`, `memo(function Row(...`:
+# a function wrapped by a higher-order call, like a decorated `def`. Only at
+# module top level and only with a plain wrapper name, so that
+# `const timer = setTimeout(() => ...)` or `const xs = list.filter((x) => ...)`
+# inside a function body is not mistaken for a definition.
+_JS_WRAPPED = re.compile(
+    r'^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(:[^=]+?)?=\s*(?:await\s+)?'
+    r'(?:React\.)?[A-Za-z_$][\w$]*\s*(?:<[^>(]*>)?\(\s*(?:async\s+)?(?:(function)\b[^(]*|(?:<[^>(]*>\s*)?)\(')
+_JS_METHOD = re.compile(
+    r'^((?:(?:public|protected|private|static|readonly|async|override|abstract|get|set)\s+)*)'
+    r'\*?\s*(#?[A-Za-z_$][\w$]*)\s*(?:<[^>(]*>)?\s*\(')
+_JSDOC_TYPE = re.compile(r'@(?:param|returns?|type)\s*\{')
+
+
+def _jsdoc_has_prose(doc: str) -> bool:
+    """A JSDoc block documents something only if it says something: a block
+    of bare `@param {string} x` tags is type information (the JS spelling of
+    a Python type hint), not a docstring."""
+    for line in doc.split("\n"):
+        text = line.strip()
+        for token in ("/**", "*/"):
+            text = text.replace(token, "")
+        text = text.strip().lstrip("*").strip()
+        if text and not text.startswith("@"):
+            return True
+    return False
+
+
+@dataclass
+class _JsDef:
+    kind: str        # "function" | "class"
+    name: str
+    private: bool
+    documented: bool
+    typed: bool
+
+
+def _matching_paren(text: str, open_idx: int) -> int:
+    depth = 0
+    for k in range(open_idx, len(text)):
+        if text[k] == "(":
+            depth += 1
+        elif text[k] == ")":
+            depth -= 1
+            if depth == 0:
+                return k
+    return -1
+
+
+def _jsdoc_above(lines: List[str], i: int) -> Optional[str]:
+    """The /** ... */ block directly above line i (decorators and blank lines
+    in between are allowed), or None."""
+    j = i - 1
+    while j >= 0 and (not lines[j].strip() or lines[j].strip().startswith("@")):
+        j -= 1
+    if j < 0 or not lines[j].rstrip().endswith("*/"):
+        return None
+    end = j
+    while j >= 0 and "/*" not in lines[j]:
+        j -= 1
+    if j < 0 or not lines[j].strip().startswith("/**"):
+        return None
+    return "\n".join(lines[j:end + 1])
+
+
+def _js_definitions(content: str) -> List[_JsDef]:
+    """Function, method and class definitions in a TS/JS file.
+
+    Counted like Python's `def`/`class`: declarations, `const f = () =>`,
+    class and object methods (constructors excluded, as __init__ is).
+    Private means a leading underscore, `#name` or the `private` modifier.
+    Typed means TypeScript parameter/return types, or JSDoc @param/@returns
+    types (how JavaScript code carries types).
+    """
+    is_ts = getattr(content, "language", "") == "typescript"
+    lines = content.split("\n")
+    found = []
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if not s or s.startswith(("//", "/*", "*")):
+            continue
+        cls = _JS_CLASS.match(s)
+        if cls:
+            doc = _jsdoc_above(lines, i)
+            found.append(_JsDef("class", cls.group(1), cls.group(1).startswith("_"),
+                                doc is not None and _jsdoc_has_prose(doc), False))
+            continue
+        fn, arrow, meth = _JS_FUNC.match(s), _JS_ARROW.match(s), None
+        top_level = raw[:1] not in (" ", "\t")
+        wrapped = None if (fn or arrow or not top_level) else _JS_WRAPPED.match(s)
+        if not fn and not arrow and not wrapped:
+            meth = _JS_METHOD.match(s)
+            if not meth or meth.group(2) in _JS_NOT_A_METHOD:
+                continue
+        if not (fn or arrow or wrapped or meth):
+            continue
+        # Join a multi-line parameter list, as the Python check does.
+        full, j = s, i + 1
+        while j < len(lines) and full.count("(") > full.count(")") and j - i < 40:
+            full += " " + lines[j].strip()
+            j += 1
+        if fn:
+            name, open_idx, var_type = fn.group(1) or "default", fn.end() - 1, None
+        elif arrow:
+            name, var_type = arrow.group(1), arrow.group(2)
+            if arrow.group(3):      # `= function (`
+                open_idx = full.find("(", arrow.end())
+            elif arrow.group(4):    # `= (` or `= <T>(`
+                open_idx = arrow.end() - 1
+            else:                   # `= x =>`: single bare parameter
+                open_idx = -1
+        elif wrapped:
+            name, open_idx, var_type = wrapped.group(1), wrapped.end() - 1, wrapped.group(2)
+        else:
+            name, open_idx, var_type = meth.group(2), meth.end() - 1, None
+        params, rest = "", full
+        if open_idx >= 0:
+            close = _matching_paren(full, open_idx)
+            if close < 0:
+                continue
+            params, rest = full[open_idx + 1:close], full[close + 1:]
+        if fn and (" declare " in f" {s} " or rest.rstrip().endswith(";")):
+            continue  # overload signature or ambient declaration: no body
+        if arrow and arrow.group(4) and not re.match(r'\s*(?::\s*[^=]+?)?\s*=>', rest):
+            continue  # `const x = (a + b)` is not a function
+        if wrapped and not (wrapped.group(3) or re.match(r'\s*(?::\s*[^=]+?)?\s*=>', rest)):
+            continue  # `const x = f((a))` is a call, not a wrapped function
+        if meth and not re.match(r'\s*(?::\s*[^{;]+?)?\s*\{', rest):
+            continue  # a call, not a method definition
+        private = (name.startswith(("_", "#"))
+                   or (meth is not None and "private" in meth.group(1).split()))
+        doc = _jsdoc_above(lines, i)
+        typed = bool(doc and _JSDOC_TYPE.search(doc))
+        if is_ts and not typed:
+            typed = bool(var_type
+                         or re.search(r'[\w$\]}?)]\s*\??\s*:\s*[A-Za-z_$({\[]', params)
+                         or re.match(r'\s*:\s*\S', rest))
+        found.append(_JsDef("function", name, private,
+                            doc is not None and _jsdoc_has_prose(doc), typed))
+    return found
 
 
 def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -154,9 +389,9 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
     files_with_llm_calls = []
     files_with_error_handling = []
     for fp, content in file_contents.items():
-        if re.search(combined, content):
+        if has(combined, content, js=_JS_LLM_CALL):
             files_with_llm_calls.append(fp)
-            if re.search(r'\btry\b.*?\bexcept\b', content, re.DOTALL) or re.search(framework_combined, content, re.IGNORECASE):
+            if has(r'\btry\b.*?\bexcept\b', content, re.DOTALL, js=_JS_ERROR_HANDLING) or has(framework_combined, content, re.IGNORECASE):
                 files_with_error_handling.append(fp)
     if not files_with_llm_calls:
         return [CodeFinding(article=9, name="LLM call error handling",
@@ -166,18 +401,24 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
     uncovered = [_rel(f, scan_path) for f in files_with_llm_calls if f not in files_with_error_handling]
     if covered == total:
         return [CodeFinding(article=9, name="LLM call error handling",
-            status="pass", evidence=f"All {total} files with LLM calls have try/except blocks")]
+            status="pass", evidence=_wording(file_contents,
+                f"All {total} files with LLM calls have try/except blocks",
+                f"All {total} files with LLM calls have try/catch blocks",
+                f"All {total} files with LLM calls have try/except or try/catch blocks"))]
     else:
         return [CodeFinding(article=9, name="LLM call error handling",
             status="fail" if covered == 0 else "warn",
             evidence=f"{covered}/{total} files with LLM calls have error handling. Missing: {', '.join(uncovered[:5])}",
-            fix_hint="Wrap LLM API calls in try/except to handle failures gracefully")]
+            fix_hint=_wording(file_contents,
+                "Wrap LLM API calls in try/except to handle failures gracefully",
+                "Wrap LLM API calls in try/catch (or .catch() on the promise) to handle failures gracefully",
+                "Wrap LLM API calls in try/except (Python) or try/catch (TypeScript/JavaScript) to handle failures gracefully"))]
 
 
 def _check_fallback_patterns(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     patterns = [r'fallback', r'retry', r'backoff', r'with_fallbacks', r'with_retry', r'tenacity', r'max_retries', r'default_response']
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=9, name="Fallback/recovery patterns", status="pass", evidence=f"Fallback patterns found in {len(hits)} file(s)")]
     return [CodeFinding(article=9, name="Fallback/recovery patterns", status="warn", evidence="No fallback or retry patterns detected",
@@ -206,18 +447,27 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
 
     hits = []
     for fp, content in file_contents.items():
-        if re.search(strong_combined, content):
+        if has(strong_combined, content, js=_JS_STRONG_VALIDATION):
             hits.append(fp)
-        elif re.search(weak_combined, content) and re.search(llm_combined, content):
+        elif has(weak_combined, content, js=_JS_WEAK_VALIDATION) and has(llm_combined, content, js=_JS_LLM_CALL):
             hits.append(fp)
 
     total = len(file_contents)
     if hits:
         return [CodeFinding(article=10, name="Input validation / schema enforcement", status="pass",
-            evidence=f"Input validation found in {len(hits)}/{total} Python files (Pydantic, dataclass, or similar)")]
+            evidence=_wording(file_contents,
+                f"Input validation found in {len(hits)}/{total} Python files (Pydantic, dataclass, or similar)",
+                f"Input validation found in {len(hits)}/{total} source files (Zod, Ajv, or similar)",
+                f"Input validation found in {len(hits)}/{total} source files (Pydantic, Zod, or similar)"))]
     return [CodeFinding(article=10, name="Input validation / schema enforcement", status="warn",
-        evidence="No structured input validation detected (Pydantic, dataclass, TypedDict)",
-        fix_hint="Use Pydantic models or dataclasses to validate inputs before LLM calls")]
+        evidence=_wording(file_contents,
+            "No structured input validation detected (Pydantic, dataclass, TypedDict)",
+            "No structured input validation detected (Zod, Ajv, Valibot)",
+            "No structured input validation detected (Pydantic, dataclass, Zod, Ajv)"),
+        fix_hint=_wording(file_contents,
+            "Use Pydantic models or dataclasses to validate inputs before LLM calls",
+            "Use Zod schemas (or Ajv with a JSON Schema) to validate inputs before LLM calls",
+            "Validate inputs before LLM calls: Pydantic in Python, Zod or Ajv in TypeScript/JavaScript"))]
 
 
 def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -238,19 +488,25 @@ def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding
     ]
     strong_combined = "|".join(strong_patterns)
     moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE)]
     moderate_hits = [fp for fp, content in file_contents.items()
-                     if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
+                     if has(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
     if strong_hits:
         return [CodeFinding(article=10, name="PII handling in code", status="pass",
             evidence=f"PII detection/redaction found in {len(strong_hits)} file(s) (library-grade)")]
     if moderate_hits and len(moderate_hits) >= 3:
         return [CodeFinding(article=10, name="PII handling in code", status="warn",
             evidence=f"PII-aware variable names or references in {len(moderate_hits)} file(s), but no detection/redaction library",
-            fix_hint="Add actual PII detection (e.g., presidio, scrubadub) instead of just naming patterns")]
+            fix_hint=_wording(file_contents,
+                "Add actual PII detection (e.g., presidio, scrubadub) instead of just naming patterns",
+                "Add actual PII detection (e.g., redact-pii, or a Presidio analyzer service) instead of just naming patterns",
+                "Add actual PII detection (e.g., presidio, scrubadub, redact-pii) instead of just naming patterns"))]
     return [CodeFinding(article=10, name="PII handling in code", status="warn",
         evidence="No PII detection, redaction, or masking patterns found in code",
-        fix_hint="Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub)")]
+        fix_hint=_wording(file_contents,
+            "Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub)",
+            "Add PII detection before sending data to LLM providers (e.g., redact-pii, or a Presidio analyzer service)",
+            "Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub, redact-pii)"))]
 
 
 def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -262,6 +518,13 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     total_defs = 0
     documented_defs = 0
     for fp, content in source_files.items():
+        if is_js(content):
+            for d in _js_definitions(content):
+                if d.kind != "class" and d.private:
+                    continue  # mirrors skipping `def _x` (classes are always counted)
+                total_defs += 1
+                documented_defs += d.documented
+            continue
         lines = content.split("\n")
         i = 0
         while i < len(lines):
@@ -303,8 +566,14 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     elif pct >= 30: status = "warn"
     else: status = "fail"
     return [CodeFinding(article=11, name="Code documentation (docstrings)", status=status,
-        evidence=f"{documented_defs}/{total_defs} public functions/classes have docstrings ({pct:.0f}%)",
-        fix_hint="Add docstrings to public functions and classes explaining purpose and parameters")]
+        evidence=_wording(file_contents,
+            f"{documented_defs}/{total_defs} public functions/classes have docstrings ({pct:.0f}%)",
+            f"{documented_defs}/{total_defs} public functions/classes have JSDoc comments ({pct:.0f}%)",
+            f"{documented_defs}/{total_defs} public functions/classes have docstrings or JSDoc comments ({pct:.0f}%)"),
+        fix_hint=_wording(file_contents,
+            "Add docstrings to public functions and classes explaining purpose and parameters",
+            "Add JSDoc comments (/** ... */) to public functions and classes explaining purpose and parameters",
+            "Add docstrings (Python) or JSDoc comments (TypeScript/JavaScript) to public functions and classes explaining purpose and parameters"))]
 
 
 def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -331,6 +600,13 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     total_defs = 0
     typed_defs = 0
     for fp, content in source_files.items():
+        if is_js(content):
+            for d in _js_definitions(content):
+                if d.kind == "class" or d.private:
+                    continue  # mirrors counting public `def` only
+                total_defs += 1
+                typed_defs += d.typed
+            continue
         lines = content.split("\n")
         i = 0
         while i < len(lines):
@@ -360,8 +636,14 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     elif pct >= 20: status = "warn"
     else: status = "fail"
     return [CodeFinding(article=11, name="Type annotations", status=status,
-        evidence=f"{typed_defs}/{total_defs} public functions have type hints ({pct:.0f}%)",
-        fix_hint="Add type hints to function signatures for better documentation and tooling")]
+        evidence=_wording(file_contents,
+            f"{typed_defs}/{total_defs} public functions have type hints ({pct:.0f}%)",
+            f"{typed_defs}/{total_defs} public functions have type annotations (TypeScript or JSDoc types) ({pct:.0f}%)",
+            f"{typed_defs}/{total_defs} public functions have type hints or type annotations ({pct:.0f}%)"),
+        fix_hint=_wording(file_contents,
+            "Add type hints to function signatures for better documentation and tooling",
+            "Add parameter and return types (TypeScript, or JSDoc @param/@returns types in JavaScript)",
+            "Add type hints (Python) and parameter/return types (TypeScript or JSDoc) to function signatures"))]
 
 
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -370,12 +652,18 @@ def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         r'logging\.(?:debug|info|warning|error|critical)\(',
         r'structlog', r'loguru', r'logger\.(?:debug|info|warning|error)\(']
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_LOGGING)]
     total = len(file_contents)
     if not hits:
         return [CodeFinding(article=12, name="Application logging", status="fail",
-            evidence="No logging framework detected (logging, structlog, loguru)",
-            fix_hint="Add import logging and log key decisions, errors, and LLM interactions")]
+            evidence=_wording(file_contents,
+                "No logging framework detected (logging, structlog, loguru)",
+                "No logging framework detected (pino, winston, bunyan)",
+                "No logging framework detected (logging, structlog, loguru, pino, winston)"),
+            fix_hint=_wording(file_contents,
+                "Add import logging and log key decisions, errors, and LLM interactions",
+                "Add a structured logger (pino or winston) and log key decisions, errors, and LLM interactions",
+                "Add a logger (logging in Python, pino or winston in TypeScript/JavaScript) and log key decisions, errors, and LLM interactions"))]
     pct = len(hits) / total * 100 if total > 0 else 0
     return [CodeFinding(article=12, name="Application logging", status="pass" if pct >= 20 else "warn",
         evidence=f"Logging found in {len(hits)}/{total} files ({pct:.0f}%)")]
@@ -403,8 +691,8 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     ]
     combined = "|".join(patterns)
     prod_combined = "|".join(production_tracing)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
-    prod_hits = [fp for fp, content in file_contents.items() if re.search(prod_combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
+    prod_hits = [fp for fp, content in file_contents.items() if has(prod_combined, content, re.IGNORECASE)]
     if hits:
         evidence = f"Tracing patterns found in {len(hits)} file(s)"
         if prod_hits:
@@ -433,15 +721,15 @@ def _check_human_in_loop(file_contents: dict, scan_path: str) -> List[CodeFindin
     # community (github.com/deepset-ai/haystack/issues/10810).
     # Removed: r'confirm.*action' -- too generic, matches JS confirm()
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
 
     # Context-aware check: allow_delegation only counts if NOT in a
     # CrewAI Agent/Task constructor (where it means agent-to-agent)
     if not hits:
         crewai_patterns = r'(?:Agent|Task|Crew)\s*\('
         for fp, content in file_contents.items():
-            if re.search(r'allow_delegation', content, re.IGNORECASE):
-                if not re.search(crewai_patterns, content):
+            if has(r'allow_delegation', content, re.IGNORECASE):
+                if not has(crewai_patterns, content):
                     # allow_delegation in non-CrewAI context = real HITL
                     hits.append(fp)
 
@@ -467,8 +755,8 @@ def _check_rate_limiting(file_contents: dict, scan_path: str) -> List[CodeFindin
     ]
     strong_combined = "|".join(strong_patterns)
     weak_combined = "|".join(weak_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
-    weak_hits = [fp for fp, content in file_contents.items() if re.search(weak_combined, content, re.IGNORECASE)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE, js=_JS_RATE_LIMIT)]
+    weak_hits = [fp for fp, content in file_contents.items() if has(weak_combined, content, re.IGNORECASE)]
     if strong_hits:
         return [CodeFinding(article=14, name="Usage limits / budget controls", status="pass",
             evidence=f"Active rate limiting or budget controls found in {len(strong_hits)} file(s)")]
@@ -484,7 +772,7 @@ def _check_rate_limiting(file_contents: dict, scan_path: str) -> List[CodeFindin
 def _check_retry_logic(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     patterns = [r'retry', r'backoff', r'tenacity', r'max_retries', r'exponential_backoff', r'with_retry', r'Retry\(']
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=15, name="Retry / backoff logic", status="pass", evidence=f"Retry/backoff patterns found in {len(hits)} file(s)")]
     return [CodeFinding(article=15, name="Retry / backoff logic", status="warn",
@@ -519,9 +807,9 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
     ]
     strong_combined = "|".join(strong_patterns)
     moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE, js=_JS_INJECTION_DEFENSE)]
     moderate_hits = [fp for fp, content in file_contents.items()
-                     if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
+                     if has(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
     hits = strong_hits + moderate_hits
     # Build danger patterns dynamically to avoid self-matching
     _fstr_pat = r'f".*\{.*' + "inp" + r"ut" + r'.*\}.*"'
@@ -529,7 +817,7 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
     _msg_pat = r'user_message.*=.*' + "inp" + r"ut\("
     danger_patterns = [_fstr_pat, _fmt_pat, _msg_pat]
     danger_combined = "|".join(danger_patterns)
-    danger_hits = [fp for fp, content in file_contents.items() if re.search(danger_combined, content)]
+    danger_hits = [fp for fp, content in file_contents.items() if has(danger_combined, content, js=_JS_PROMPT_INTERPOLATION)]
     findings = []
     if hits:
         findings.append(CodeFinding(article=15, name="Prompt injection defense", status="pass", evidence=f"Injection defense patterns found in {len(hits)} file(s)"))
@@ -554,12 +842,15 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
         r'expected_output',  # CrewAI task output spec
     ]
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_OUTPUT_VALIDATION)]
     if hits:
         return [CodeFinding(article=15, name="LLM output validation", status="pass", evidence=f"Output parsing/validation found in {len(hits)} file(s)")]
     return [CodeFinding(article=15, name="LLM output validation", status="warn",
         evidence="No structured output validation detected",
-        fix_hint="Use output parsers (Pydantic, JSON schema) to validate LLM responses before acting on them")]
+        fix_hint=_wording(file_contents,
+            "Use output parsers (Pydantic, JSON schema) to validate LLM responses before acting on them",
+            "Validate LLM responses against a schema before acting on them (Zod, generateObject, JSON schema)",
+            "Use output parsers (Pydantic, Zod, JSON schema) to validate LLM responses before acting on them"))]
 
 
 # ─────────────────────────────────────────────
@@ -579,10 +870,11 @@ HIRING_CONTEXT_PATTERNS = [
 
 def _has_hiring_context(file_contents: dict) -> bool:
     """Check if the codebase is related to hiring/employment AI."""
-    all_code = "\n".join(file_contents.values())
     matches = 0
     for p in HIRING_CONTEXT_PATTERNS:
-        if re.search(p, all_code, re.IGNORECASE):
+        # Per file rather than over the joined text: equivalent (no pattern
+        # spans a newline) and keeps each file's snake_case view.
+        if any(has(p, content, re.IGNORECASE) for content in file_contents.values()):
             matches += 1
             if matches >= 2:
                 return True
@@ -603,13 +895,13 @@ def _check_zip_proxy(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     scoring_combined = "|".join(scoring_patterns)
 
     files_with_zip = [fp for fp, content in file_contents.items()
-                      if re.search(zip_combined, content, re.IGNORECASE)]
+                      if has(zip_combined, content, re.IGNORECASE)]
     if not files_with_zip:
         return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="Illinois HB 3773: ZIP code as proxy",
             status="pass", evidence="No ZIP/postal code usage detected in hiring scoring context")]
 
     files_with_zip_scoring = [fp for fp in files_with_zip
-                              if re.search(scoring_combined, file_contents[fp], re.IGNORECASE)]
+                              if has(scoring_combined, file_contents[fp], re.IGNORECASE)]
     if files_with_zip_scoring:
         return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="Illinois HB 3773: ZIP code as proxy",
             status="fail",
@@ -632,7 +924,7 @@ def _check_bias_audit(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     ]
     combined = "|".join(bias_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="NYC LL144: Bias audit framework",
             status="pass", evidence=f"Bias audit or fairness metrics detected in {len(hits)} file(s)")]
@@ -653,7 +945,7 @@ def _check_hiring_retention(file_contents: dict, scan_path: str) -> List[CodeFin
     ]
     combined = "|".join(retention_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=None, framework=FRAMEWORK_US_HIRING, name="California FEHA: Data retention",
             status="pass", evidence=f"Data retention policy detected in {len(hits)} file(s)")]
@@ -691,9 +983,9 @@ def _check_oauth_delegation(file_contents: dict, scan_path: str) -> List[CodeFin
     ]
     strong_combined = "|".join(strong_patterns)
     moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE)]
     moderate_hits = [fp for fp, content in file_contents.items()
-                     if re.search(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
+                     if has(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
     if strong_hits:
         return [CodeFinding(article=14, name="Agent-to-user identity binding",
             status="pass", evidence=f"Delegation/identity binding found in {len(strong_hits)} file(s) (agent identity, delegation tokens)")]
@@ -720,7 +1012,7 @@ def _check_token_scope_validation(file_contents: dict, scan_path: str) -> List[C
         r'granted_permissions', r'check_permission',
     ]
     combined = "|".join(scope_patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=14, name="Token scope / permission validation",
             status="pass", evidence=f"Scope or permission validation found in {len(hits)} file(s)")]
@@ -749,8 +1041,8 @@ def _check_token_expiry_revocation(file_contents: dict, scan_path: str) -> List[
     ]
     strong_combined = "|".join(strong_patterns)
     weak_combined = "|".join(weak_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if re.search(strong_combined, content, re.IGNORECASE)]
-    weak_hits = [fp for fp, content in file_contents.items() if re.search(weak_combined, content, re.IGNORECASE)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE)]
+    weak_hits = [fp for fp, content in file_contents.items() if has(weak_combined, content, re.IGNORECASE)]
     if strong_hits:
         return [CodeFinding(article=14, name="Token expiry / execution bounding",
             status="pass", evidence=f"Token expiry or execution timeout found in {len(strong_hits)} file(s)")]
@@ -780,7 +1072,7 @@ def _check_action_audit_trail(file_contents: dict, scan_path: str) -> List[CodeF
         r'emit_event', r'on_event', r'event_handler',  # Generic event bus patterns
     ]
     combined = "|".join(action_log_patterns)
-    hits = [fp for fp, content in file_contents.items() if re.search(combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
     if hits:
         return [CodeFinding(article=12, name="Agent action audit trail",
             status="pass", evidence=f"Action-level audit logging found in {len(hits)} file(s)")]
@@ -806,7 +1098,7 @@ def _check_action_boundaries(file_contents: dict, scan_path: str) -> List[CodeFi
     combined = "|".join(boundary_patterns)
     # Exclude serialization files - is_allowed in serialization is deserialization safety, not action boundaries
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)
+            if has(combined, content, re.IGNORECASE)
             and 'serializ' not in os.path.basename(fp).lower()]
     if hits:
         return [CodeFinding(article=14, name="Agent action boundaries",

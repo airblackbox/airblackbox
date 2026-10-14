@@ -169,6 +169,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
         console.print(f"  [yellow]●[/] No traffic data found")
     console.print(f"  [dim]Scanning: {scan}[/]\n")
     articles, detected_frameworks, rec_pkg, crosswalk_hint = run_all_checks(status, scan, standard=standard)
+    from air_blackbox.compliance.engine import GATEWAY_HINT_JS, _is_js_only
+    from air_blackbox.compliance.sources import PYTHON, project_languages
+    scanned_languages = project_languages(scan)
+    js_only = _is_js_only(scan)
 
     # Hybrid mode: auto-run LLM analysis unless --no-llm
     deep_findings = []
@@ -177,7 +181,12 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
         import os
         if _ollama_available() and _model_available(model):
             console.print(f"[bold]Running hybrid analysis (regex + AI model)...[/]\n")
-            # Collect all Python files (supports single-file and directory scanning)
+            # Collect all Python files (supports single-file and directory scanning).
+            # The model has only been validated on Python, so TypeScript and
+            # JavaScript stay with the pattern checks and the user is told.
+            if any(lang != PYTHON for lang in scanned_languages):
+                console.print("  [dim]AI model analysis covers Python files only; TypeScript/JavaScript "
+                              "files are covered by the pattern checks.[/]\n")
             py_files = []
             if os.path.isfile(scan) and scan.endswith(".py"):
                 py_files = [os.path.abspath(scan)]
@@ -498,7 +507,10 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
         deep_warn = sum(1 for f in deep_findings if f.get("status") == "warn")
         parts += f"\n  [magenta]AI model[/]:          [bold]{deep_pass}[/] pass, [bold]{deep_warn}[/] warn, [bold]{deep_fail}[/] fail (supplementary, not counted above)"
     if r_total > 0 and r_pass < r_total:
-        parts += f"\n\n  [dim]Unlock runtime checks: pip install {rec_pkg}[/]"
+        if js_only:
+            parts += "\n\n  [dim]Unlock runtime checks: route model calls through the AIR gateway (see fix hints)[/]"
+        else:
+            parts += f"\n\n  [dim]Unlock runtime checks: pip install {rec_pkg}[/]"
     if verbose:
         auto = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "auto")
         hybrid = sum(1 for a in articles for c in a["checks"] if c.get("detection") == "hybrid")
@@ -521,9 +533,18 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
             console.print("[dim]Add trust layers for runtime compliance:[/]")
             for line in rec_lines:
                 console.print(f"[bold green]{line}[/]")
+        else:
+            # npm frameworks only: the trust layers are Python packages.
+            console.print(f"\n[bold yellow]Detected frameworks:[/] {', '.join(detected_frameworks)}")
+            console.print(f"[dim]For runtime compliance: {GATEWAY_HINT_JS}[/]")
+    elif js_only:
+        console.print(f"\n[dim]For runtime compliance: {GATEWAY_HINT_JS}[/]")
     else:
         console.print(f"\n[dim]Add a trust layer for runtime compliance: pip install {rec_pkg}[/]")
-    console.print(f"[dim]All 10 trust layer packages: https://airblackbox.ai[/]\n")
+    if not js_only:
+        console.print(f"[dim]All 10 trust layer packages: https://airblackbox.ai[/]\n")
+    else:
+        console.print()
 
     # --- Crosswalk teaser ---
     if crosswalk_hint:
@@ -1828,8 +1849,8 @@ def test(gateway, verbose):
             with open(os.path.join(dep_dir, "old.py"), "w") as f:
                 f.write("import logging\nlogging.getLogger(__name__)\n")
             findings = scan_codebase(tmpdir)
-            # Should find no Python files (only deprecated dir has them)
-            no_files = [f for f in findings if "No Python files" in f.evidence]
+            # Should find no source files (only deprecated dir has them)
+            no_files = [f for f in findings if f.name == "Source files" and f.status == "warn"]
             assert len(no_files) >= 1, "Should skip deprecated directory"
         return True, "Deprecated directories correctly skipped"
 

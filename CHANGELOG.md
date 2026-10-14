@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The compliance scanner reads TypeScript and JavaScript (`.ts`, `.tsx`,
+  `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`) alongside Python, across all
+  code checks, GDPR, the US state-law checks and bias. camelCase and
+  kebab-case names are matched through a snake_case view, so
+  `requireApproval` counts as `require_approval`; try/catch, JSDoc, TS and
+  JSDoc types, npm loggers, Zod/Ajv, the Vercel AI SDK and npm guardrail and
+  rate-limit packages have their own adapters. Declaration files, minified
+  bundles, tool configs, JS build output and JS test conventions
+  (`*.test.ts`, `__tests__/`) are handled. Python results are byte-for-byte
+  unchanged.
+- `eval/scanner/parity_corpus.json` and `run_parity.py`: 144 labelled
+  programs written in Python, TypeScript and JavaScript; every check gives the
+  same status in all three (enforced in the test suite).
+- npm framework detection (LangChain.js, OpenAI Node SDK, Anthropic
+  TypeScript SDK, Vercel AI SDK, OpenAI Agents SDK, Mastra, LlamaIndex.TS,
+  Google Gen AI, MCP TypeScript SDK). Projects with no Python are pointed at
+  the gateway instead of a `pip install` trust layer.
+
 ### Fixed
 - `air-blackbox comply --scan file.py` crashed with `AttributeError` when
   given a single file. The bias scanner returns a report dict and the engine

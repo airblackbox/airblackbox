@@ -123,10 +123,18 @@ before you believe any of the above.
 
 ## Quickstart
 
+The scanner reads Python, TypeScript and JavaScript (`.py`, `.ts`, `.tsx`,
+`.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts`). Equivalent code gets the same
+result in each: [`eval/scanner/run_parity.py`](eval/scanner/run_parity.py)
+runs 144 labelled programs written in all three languages and fails if any
+check disagrees. The optional AI-model pass (run when a local Ollama model is
+installed) still reads Python only; TypeScript and JavaScript get the pattern
+checks.
+
 ```bash
 pip install air-blackbox
 
-# Run your first gap analysis - works on any Python AI project
+# Run your first gap analysis - Python, TypeScript and JavaScript projects
 air-blackbox comply --scan . -v
 
 # Inventory runtime AI use and static AI-related dependencies
