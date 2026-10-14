@@ -35,6 +35,71 @@ def _finding_to_dict(finding) -> dict:
             "tier": "static"}
 
 
+_BIAS_CHECK_NAMES = {
+    "protected_attribute_reference": "Protected attribute references",
+    "gender_reference": "Gender term references",
+    "race_reference": "Race/ethnicity term references",
+    "unvalidated_threshold": "Decision thresholds without fairness validation",
+}
+
+
+def _bias_checks(scan_path: str) -> list[dict]:
+    """Run the per-file bias scanner over every source file and merge by type.
+
+    scan_bias reads one file and returns a report dict. It used to be handed
+    the scan path directly, which raised IsADirectoryError on directories (so
+    the section never appeared) and, on a single file, iterated the report's
+    keys as if they were findings, crashing the whole comply run.
+    """
+    from air_blackbox.compliance.bias_scanner import scan_bias
+    from air_blackbox.compliance.code_scanner import (
+        _find_python_files, _has_hiring_context, _is_test_file)
+
+    root = scan_path if os.path.isdir(scan_path) else os.path.dirname(os.path.abspath(scan_path))
+    sources = {}
+    for path in sorted(_find_python_files(scan_path)):
+        rel = os.path.relpath(path, root)
+        if os.path.isdir(scan_path) and _is_test_file(rel):
+            continue  # fixtures mention protected attributes on purpose
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                sources[path] = fh.read()
+        except OSError:
+            continue
+
+    # The term lists match words like "white", "black" and "age" wherever they
+    # appear (colour names, log text), so outside code that makes decisions
+    # about people they are noise. Same gate as the US hiring checks.
+    if not _has_hiring_context(sources):
+        return []
+
+    merged = {}  # finding type -> (reference count, [relative paths])
+    for path in sources:
+        rel = os.path.relpath(path, root)
+        for f in scan_bias(path).get("findings", []):
+            count, files = merged.setdefault(f["type"], (0, []))
+            merged[f["type"]] = (count + f["count"], files + [rel])
+
+    checks = []
+    for kind, (count, files) in merged.items():
+        shown = ", ".join(files[:5]) + (f" (+{len(files) - 5} more)" if len(files) > 5 else "")
+        if kind == "unvalidated_threshold":
+            hint = ("Validate hardcoded score cutoffs for disparate impact across "
+                    "protected groups, or document why they are fair.")
+        else:
+            hint = ("Review whether these terms feed a decision. If they do, add "
+                    "bias testing; if they are incidental, no action is needed.")
+        checks.append({
+            "name": _BIAS_CHECK_NAMES.get(kind, kind),
+            "status": "warn",
+            "evidence": f"{count} match(es) in {len(files)} file(s): {shown}",
+            "detection": "auto",
+            "fix_hint": hint,
+            "tier": "static",
+        })
+    return checks
+
+
 TRUST_LAYER_MAP = {
     "langchain": "air-langchain-trust",
     "crewai": "air-crewai-trust",
@@ -131,10 +196,9 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
             pass
 
     # Run bias/fairness scan (universal)
-    bias_findings = []
+    bias_checks = []
     try:
-        from air_blackbox.compliance.bias_scanner import scan_bias
-        bias_findings = scan_bias(scan_path)
+        bias_checks = _bias_checks(scan_path)
     except Exception:
         pass
 
@@ -234,8 +298,7 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
             })
 
     # ── Bias/fairness checks (universal) ──
-    if bias_findings:
-        bias_checks = [_finding_to_dict(f) for f in bias_findings]
+    if bias_checks:
         results.append({
             "number": "BIAS",
             "title": "Bias and Fairness",

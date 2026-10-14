@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `air-blackbox comply --scan file.py` crashed with `AttributeError` when
+  given a single file. The bias scanner returns a report dict and the engine
+  iterated its keys as findings. On directories the same call raised and was
+  swallowed, so the Bias and Fairness section never appeared at all. It now
+  runs per source file (tests excluded), merges findings by type as warnings,
+  and only appears for code that makes decisions about people (the same gate
+  as the US hiring checks), because its term lists also match colour names.
+
 ## [1.16.0] - 2026-09-26
 
 ### Added
