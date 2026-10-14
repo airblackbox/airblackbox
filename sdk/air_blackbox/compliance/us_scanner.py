@@ -22,6 +22,8 @@ import re
 from dataclasses import dataclass, field
 from typing import List
 
+from air_blackbox.compliance.sources import has, is_scannable, language_of, read_sources
+
 
 @dataclass
 class USFinding:
@@ -65,7 +67,7 @@ def check_colorado_disclosure(file_contents: dict, scan_path: str) -> USFinding:
     combined = "|".join(disclosure_patterns)
 
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -106,7 +108,7 @@ def check_colorado_adverse_explanation(file_contents: dict, scan_path: str) -> U
     ]
     combined = "|".join(explain_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -146,7 +148,7 @@ def check_colorado_correction_rights(file_contents: dict, scan_path: str) -> USF
     ]
     combined = "|".join(report_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -193,7 +195,7 @@ def check_illinois_employee_notification(file_contents: dict, scan_path: str) ->
     ]
     combined = "|".join(notify_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -242,7 +244,7 @@ def check_california_feha_ads(file_contents: dict, scan_path: str) -> USFinding:
     ]
     combined = "|".join(feha_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -290,7 +292,7 @@ def check_california_sb942_transparency(file_contents: dict, scan_path: str) -> 
     ]
     combined = "|".join(transparency_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -336,7 +338,7 @@ def check_california_admt(file_contents: dict, scan_path: str) -> USFinding:
     ]
     combined = "|".join(admt_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     if hits:
         return USFinding(
@@ -380,7 +382,7 @@ def check_texas_registration(file_contents: dict, scan_path: str) -> USFinding:
     ]
     combined = "|".join(inventory_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     # Also check for AI-BOM or model card docs
     inv_docs = [
@@ -425,7 +427,7 @@ def check_texas_risk_management(file_contents: dict, scan_path: str) -> USFindin
     ]
     combined = "|".join(governance_patterns)
     hits = [fp for fp, content in file_contents.items()
-            if re.search(combined, content, re.IGNORECASE)]
+            if has(combined, content, re.IGNORECASE)]
 
     gov_docs = [
         "AI_GOVERNANCE.md", "ai_governance.md",
@@ -465,14 +467,10 @@ def scan_us_laws(scan_path: str) -> List[USFinding]:
     Always returns all 9 checks (3 CO, 1 IL, 3 CA, 2 TX) regardless of
     codebase content.
     """
-    # Read Python files
+    # Read source files (Python, TypeScript, JavaScript)
     file_contents = {}
-    if os.path.isfile(scan_path) and scan_path.endswith(".py"):
-        try:
-            with open(scan_path, "r", encoding="utf-8", errors="ignore") as f:
-                file_contents[scan_path] = f.read()
-        except Exception:
-            pass
+    if os.path.isfile(scan_path) and language_of(scan_path):
+        file_contents.update(read_sources([scan_path]))
     elif os.path.isdir(scan_path):
         skip_dirs = {
             "node_modules", ".git", "__pycache__", ".venv", "venv",
@@ -482,13 +480,9 @@ def scan_us_laws(scan_path: str) -> List[USFinding]:
         for root, dirs, files in os.walk(scan_path):
             dirs[:] = [d for d in dirs if d not in skip_dirs and not d.endswith(".egg-info")]
             for fname in files:
-                if fname.endswith(".py"):
-                    fp = os.path.join(root, fname)
-                    try:
-                        with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                            file_contents[fp] = f.read(16000)
-                    except Exception:
-                        pass
+                fp = os.path.join(root, fname)
+                if is_scannable(fp, scan_path):
+                    file_contents.update(read_sources([fp], limit=16000))
             if len(file_contents) >= 200:
                 break
 

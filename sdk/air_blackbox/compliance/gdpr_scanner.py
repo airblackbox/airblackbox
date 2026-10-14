@@ -1,7 +1,7 @@
 """
 GDPR-specific compliance scanner for AI agent codebases.
 
-Checks Python code for GDPR-relevant patterns:
+Checks Python, TypeScript and JavaScript code for GDPR-relevant patterns:
   - Data Processing Records (Art. 30)
   - Consent Management (Art. 6/7)
   - Right to Erasure (Art. 17)
@@ -20,24 +20,19 @@ from typing import List
 
 from air_blackbox.compliance.code_scanner import (
     CodeFinding,
-    _find_python_files,
+    _find_source_files,
     _rel,
 )
+from air_blackbox.compliance.sources import has, read_sources
 
 
 def scan_gdpr(scan_path: str) -> List[CodeFinding]:
-    """Run all GDPR checks against a codebase."""
-    py_files = _find_python_files(scan_path)
-    if not py_files:
+    """Run all GDPR checks against a codebase (Python, TypeScript, JavaScript)."""
+    source_files = _find_source_files(scan_path)
+    if not source_files:
         return []
 
-    file_contents = {}
-    for fp in py_files:
-        try:
-            with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                file_contents[fp] = f.read()
-        except Exception:
-            continue
+    file_contents = read_sources(source_files)
 
     findings: List[CodeFinding] = []
     findings.extend(_check_consent_management(file_contents, scan_path))
@@ -70,11 +65,11 @@ def _check_consent_management(
     moderate = "|".join(moderate_patterns)
     strong_hits = [
         fp for fp, c in file_contents.items()
-        if re.search(strong, c, re.IGNORECASE)
+        if has(strong, c, re.IGNORECASE)
     ]
     moderate_hits = [
         fp for fp, c in file_contents.items()
-        if re.search(moderate, c, re.IGNORECASE) and fp not in strong_hits
+        if has(moderate, c, re.IGNORECASE) and fp not in strong_hits
     ]
     if strong_hits:
         return [CodeFinding(
@@ -111,7 +106,7 @@ def _check_data_minimization(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     if hits:
         return [CodeFinding(
@@ -141,7 +136,7 @@ def _check_right_to_erasure(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     if hits:
         return [CodeFinding(
@@ -170,7 +165,7 @@ def _check_data_retention(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     if hits:
         return [CodeFinding(
@@ -200,7 +195,7 @@ def _check_cross_border_transfer(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     # Also check for cloud provider region configs
     region_patterns = [
@@ -210,7 +205,7 @@ def _check_cross_border_transfer(
     region_combined = "|".join(region_patterns)
     region_hits = [
         fp for fp, c in file_contents.items()
-        if re.search(region_combined, c, re.IGNORECASE) and fp not in hits
+        if has(region_combined, c, re.IGNORECASE) and fp not in hits
     ]
     if hits:
         return [CodeFinding(
@@ -245,7 +240,7 @@ def _check_dpia_patterns(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     if hits:
         return [CodeFinding(
@@ -274,7 +269,7 @@ def _check_processing_records(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     if hits:
         return [CodeFinding(
@@ -303,7 +298,7 @@ def _check_breach_notification(
     combined = "|".join(patterns)
     hits = [
         fp for fp, c in file_contents.items()
-        if re.search(combined, c, re.IGNORECASE)
+        if has(combined, c, re.IGNORECASE)
     ]
     if hits:
         return [CodeFinding(

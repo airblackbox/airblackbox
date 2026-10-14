@@ -3,6 +3,7 @@ Compliance engine - maps gateway traffic data to EU AI Act articles.
 Detection types: AUTO, HYBRID, MANUAL
 """
 import os
+import re
 from dataclasses import dataclass
 from typing import Literal
 from air_blackbox.gateway_client import GatewayStatus
@@ -35,6 +36,93 @@ def _finding_to_dict(finding) -> dict:
             "tier": "static"}
 
 
+_BIAS_CHECK_NAMES = {
+    "protected_attribute_reference": "Protected attribute references",
+    "gender_reference": "Gender term references",
+    "race_reference": "Race/ethnicity term references",
+    "unvalidated_threshold": "Decision thresholds without fairness validation",
+}
+
+
+# Term lists that also match colour names. In JSX/TSX components those words
+# are almost always styling, so these two are not counted there.
+_COLOUR_PRONE = {"race_reference", "gender_reference"}
+
+
+def _bias_checks(scan_path: str) -> list[dict]:
+    """Run the per-file bias scanner over every source file and merge by type.
+
+    scan_bias reads one file and returns a report dict. It used to be handed
+    the scan path directly, which raised IsADirectoryError on directories (so
+    the section never appeared) and, on a single file, iterated the report's
+    keys as if they were findings, crashing the whole comply run.
+    """
+    from air_blackbox.compliance.bias_scanner import scan_bias
+    from air_blackbox.compliance.code_scanner import (
+        _find_source_files, _has_hiring_context, _is_test_file)
+    from air_blackbox.compliance.sources import read_sources
+
+    root = scan_path if os.path.isdir(scan_path) else os.path.dirname(os.path.abspath(scan_path))
+    keep = [path for path in sorted(_find_source_files(scan_path))
+            # fixtures mention protected attributes on purpose
+            if not (os.path.isdir(scan_path) and _is_test_file(os.path.relpath(path, root)))]
+    sources = read_sources(keep)
+
+    # The term lists match words like "white", "black" and "age" wherever they
+    # appear (colour names, log text), so outside code that makes decisions
+    # about people they are noise. Same gate as the US hiring checks.
+    if not _has_hiring_context(sources):
+        return []
+
+    merged = {}  # finding type -> (reference count, [relative paths])
+    for path in sources:
+        rel = os.path.relpath(path, root)
+        for f in scan_bias(path, code=str(sources[path])).get("findings", []):
+            if f["type"] in _COLOUR_PRONE and path.endswith((".tsx", ".jsx")):
+                continue  # UI components: text-white, bg-black, fill="white"
+            count, files = merged.setdefault(f["type"], (0, []))
+            merged[f["type"]] = (count + f["count"], files + [rel])
+
+    checks = []
+    for kind, (count, files) in merged.items():
+        shown = ", ".join(files[:5]) + (f" (+{len(files) - 5} more)" if len(files) > 5 else "")
+        if kind == "unvalidated_threshold":
+            hint = ("Validate hardcoded score cutoffs for disparate impact across "
+                    "protected groups, or document why they are fair.")
+        else:
+            hint = ("Review whether these terms feed a decision. If they do, add "
+                    "bias testing; if they are incidental, no action is needed.")
+        checks.append({
+            "name": _BIAS_CHECK_NAMES.get(kind, kind),
+            "status": "warn",
+            "evidence": f"{count} match(es) in {len(files)} file(s): {shown}",
+            "detection": "auto",
+            "fix_hint": hint,
+            "tier": "static",
+        })
+    return checks
+
+
+#: Runtime-check advice for projects with no Python: the trust layers are pip
+#: packages, but the gateway is an OpenAI-compatible proxy any SDK can use.
+GATEWAY_HINT_JS = ("Start the AIR gateway (docker compose up) and point your SDK client's "
+                   "base URL at http://localhost:8080/v1")
+
+
+def _runtime_hint(rec_pkg: str, js_only: bool) -> str:
+    if js_only:
+        return GATEWAY_HINT_JS
+    return f"pip install {rec_pkg}  # or start gateway: docker compose up"
+
+
+def _is_js_only(scan_path: str) -> bool:
+    """True when the scan found source files and none of them Python
+    (TypeScript, JavaScript, Java): the pip trust layers do not apply."""
+    from air_blackbox.compliance.sources import PYTHON, project_languages
+    langs = project_languages(scan_path)
+    return bool(langs) and PYTHON not in langs
+
+
 TRUST_LAYER_MAP = {
     "langchain": "air-langchain-trust",
     "crewai": "air-crewai-trust",
@@ -54,21 +142,75 @@ FRAMEWORK_IMPORTS = {
 }
 
 
+#: npm packages, matched against import/require specifiers, named as a JS
+#: developer knows them. None has an AIR trust layer (those are Python
+#: packages), so they never produce a `pip install` recommendation.
+JS_FRAMEWORK_IMPORTS = {
+    "LangChain.js": r"^(?:@langchain/|langchain(?:/|$))",
+    "OpenAI Node SDK": r"^openai(?:/|$)",
+    "Anthropic TypeScript SDK": r"^@anthropic-ai/sdk(?:/|$)",
+    "Vercel AI SDK": r"^(?:ai(?:/|$)|@ai-sdk/)",
+    "OpenAI Agents SDK (JS)": r"^@openai/agents",
+    "Mastra": r"^@mastra/",
+    "LlamaIndex.TS": r"^(?:llamaindex(?:/|$)|@llamaindex/)",
+    "Google Gen AI (JS)": r"^@google/(?:genai|generative-ai|adk)(?:/|$)",
+    "MCP TypeScript SDK": r"^@modelcontextprotocol/sdk(?:/|$)",
+}
+#: Java packages, matched against import statements.
+JAVA_FRAMEWORK_IMPORTS = {
+    "LangChain4j": r"^dev\.langchain4j\.",
+    "Spring AI": r"^org\.springframework\.ai\.",
+    "OpenAI Java SDK": r"^com\.openai\.",
+    "Anthropic Java SDK": r"^com\.anthropic\.",
+    "Google ADK (Java)": r"^com\.google\.adk\.",
+    "Google Gen AI (Java)": r"^com\.google\.genai\.",
+    "Azure OpenAI (Java)": r"^com\.azure\.ai\.openai\.",
+    "MCP Java SDK": r"^io\.modelcontextprotocol\.",
+    "LangGraph4j": r"^org\.bsc\.langgraph4j\.",
+}
+_JAVA_IMPORT = re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+)", re.M)
+_JS_MODULE_SPECIFIER = re.compile(
+    r"""(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']([^"'\n]+)["']""")
+
+
 def detect_frameworks(scan_path: str) -> list[str]:
     """Detect which AI frameworks are used in the scanned codebase."""
+    from air_blackbox.compliance.code_scanner import SOURCE_SKIP_DIRS
+    from air_blackbox.compliance.sources import (
+        JAVA, JS_FAMILY, is_notebook, is_scannable, language_of, read_text)
     detected = set()
     py_files = []
-    if os.path.isfile(scan_path) and scan_path.endswith(".py"):
+    if os.path.isfile(scan_path) and language_of(scan_path):
         py_files = [scan_path]
     elif os.path.isdir(scan_path):
         for root, _dirs, files in os.walk(scan_path):
+            # Python files have always been collected from everywhere; JS
+            # files are never read from node_modules or build output.
+            rel_parts = os.path.relpath(root, scan_path).replace("\\", "/").split("/")
+            js_ok = not any(p in SOURCE_SKIP_DIRS for p in rel_parts)
             for f in files:
-                if f.endswith(".py"):
-                    py_files.append(os.path.join(root, f))
+                fp = os.path.join(root, f)
+                if f.endswith(".py") or (js_ok and is_scannable(fp, scan_path)):
+                    py_files.append(fp)
     for fp in py_files[:200]:  # cap to avoid scanning huge repos
         try:
-            with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
-                content = fh.read(16000)  # first 16KB is enough
+            if is_notebook(fp):
+                content = read_text(fp, 16000) or ""
+            else:
+                with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read(16000)  # first 16KB is enough
+            if language_of(fp) == JAVA:
+                imports = _JAVA_IMPORT.findall(content)
+                for framework, pattern in JAVA_FRAMEWORK_IMPORTS.items():
+                    if framework not in detected and any(re.match(pattern, m) for m in imports):
+                        detected.add(framework)
+                continue
+            if language_of(fp) in JS_FAMILY:
+                modules = _JS_MODULE_SPECIFIER.findall(content)
+                for framework, pattern in JS_FRAMEWORK_IMPORTS.items():
+                    if framework not in detected and any(re.match(pattern, m) for m in modules):
+                        detected.add(framework)
+                continue
             for framework, patterns in FRAMEWORK_IMPORTS.items():
                 if framework not in detected:
                     for pattern in patterns:
@@ -82,10 +224,9 @@ def detect_frameworks(scan_path: str) -> list[str]:
 
 def get_trust_layer_recommendation(scan_path: str) -> str:
     """Return the best pip install command based on detected frameworks."""
-    detected = detect_frameworks(scan_path)
+    detected = [fw for fw in detect_frameworks(scan_path) if fw in TRUST_LAYER_MAP]
     if detected:
-        first = detected[0]
-        return TRUST_LAYER_MAP.get(first, "air-langchain-trust")
+        return TRUST_LAYER_MAP[detected[0]]
     return "air-langchain-trust"
 
 
@@ -131,16 +272,20 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
             pass
 
     # Run bias/fairness scan (universal)
-    bias_findings = []
+    bias_checks = []
     try:
-        from air_blackbox.compliance.bias_scanner import scan_bias
-        bias_findings = scan_bias(scan_path)
+        bias_checks = _bias_checks(scan_path)
     except Exception:
         pass
 
     # Detect frameworks for smart trust layer recommendations
     detected = detect_frameworks(scan_path)
-    rec_pkg = TRUST_LAYER_MAP.get(detected[0], "air-langchain-trust") if detected else "air-langchain-trust"
+    # Python framework names are all in TRUST_LAYER_MAP, so on a Python-only
+    # scan this is detected[0] exactly as before. npm frameworks have no
+    # trust layer and are skipped.
+    mapped = [fw for fw in detected if fw in TRUST_LAYER_MAP]
+    rec_pkg = TRUST_LAYER_MAP[mapped[0]] if mapped else "air-langchain-trust"
+    js_only = _is_js_only(scan_path)
 
     # Group code findings by article number. Only EU AI Act findings carry an
     # article; everything else is selected by framework so that a non-EU
@@ -156,12 +301,12 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
     eu_count = 0
     if standard in ("eu", "all"):
         eu_results = [
-            _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg),
-            _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg),
-            _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg),
-            _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg),
-            _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg),
-            _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg),
+            _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg, js_only),
+            _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg, js_only),
+            _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg, js_only),
+            _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg, js_only),
+            _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg, js_only),
+            _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg, js_only),
         ]
         results.extend(eu_results)
         eu_count = sum(len(a.get("checks", [])) for a in eu_results)
@@ -234,8 +379,7 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
             })
 
     # ── Bias/fairness checks (universal) ──
-    if bias_findings:
-        bias_checks = [_finding_to_dict(f) for f in bias_findings]
+    if bias_checks:
         results.append({
             "number": "BIAS",
             "title": "Bias and Fairness",
@@ -248,12 +392,12 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
         # Run a quick count of what EU checks would find
         try:
             eu_preview = [
-                _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg),
-                _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg),
-                _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg),
-                _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg),
-                _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg),
-                _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg),
+                _check_article_9(status, doc_path, code_by_article.get(9, []), rec_pkg, js_only),
+                _check_article_10(status, doc_path, code_by_article.get(10, []), rec_pkg, js_only),
+                _check_article_11(status, doc_path, code_by_article.get(11, []), rec_pkg, js_only),
+                _check_article_12(status, doc_path, code_by_article.get(12, []), rec_pkg, js_only),
+                _check_article_14(status, doc_path, code_by_article.get(14, []), rec_pkg, js_only),
+                _check_article_15(status, doc_path, code_by_article.get(15, []), rec_pkg, js_only),
             ]
             eu_finding_count = sum(len(a.get("checks", [])) for a in eu_preview)
             if eu_finding_count > 0:
@@ -275,7 +419,7 @@ def run_all_checks(status: GatewayStatus, scan_path: str = ".", standard: str = 
     return results, detected, rec_pkg, crosswalk_hint
 
 
-def _check_article_9(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
+def _check_article_9(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust", js_only=False):
     checks = []
     risk_files = ["RISK_ASSESSMENT.md", "risk_assessment.md", "risk_register.json", "RISK_MANAGEMENT.md"]
     has_risk = any(os.path.exists(os.path.join(scan_path, f)) for f in risk_files)
@@ -301,7 +445,7 @@ def _check_article_9(status, scan_path, code_findings=None, rec_pkg="air-langcha
     return result
 
 
-def _check_article_10(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
+def _check_article_10(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust", js_only=False):
     checks = []
     if status.reachable or (status.total_runs > 0 and status.audit_chain_intact):
         src = "Gateway" if status.reachable else "Trust layer"
@@ -318,7 +462,7 @@ def _check_article_10(status, scan_path, code_findings=None, rec_pkg="air-langch
         checks.append(ComplianceCheck(name="PII detection in prompts", article=10, detection="auto",
             status="warn",
             evidence=f"Runtime check skipped - gateway not running. {'Found ' + str(status.total_runs) + ' logged runs.' if status.total_runs > 0 else 'Start it to enable this check.'}",
-            fix_hint=f"Start gateway or install a trust layer package (pip install {rec_pkg})",
+            fix_hint=(GATEWAY_HINT_JS if js_only else f"Start gateway or install a trust layer package (pip install {rec_pkg})"),
             tier="runtime"))
     dg_files = ["DATA_GOVERNANCE.md", "data_governance.md"]
     has_dg = any(os.path.exists(os.path.join(scan_path, f)) for f in dg_files)
@@ -338,7 +482,7 @@ def _check_article_10(status, scan_path, code_findings=None, rec_pkg="air-langch
     return result
 
 
-def _check_article_11(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
+def _check_article_11(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust", js_only=False):
     checks = []
     readme = os.path.exists(os.path.join(scan_path, "README.md"))
     checks.append(ComplianceCheck(name="System description (README)", article=11, detection="hybrid",
@@ -355,7 +499,7 @@ def _check_article_11(status, scan_path, code_findings=None, rec_pkg="air-langch
     else:
         checks.append(ComplianceCheck(name="Runtime system inventory (AI-BOM data)", article=11, detection="auto", status="warn",
             evidence="Runtime check skipped - no traffic data yet. Route AI calls through the gateway or install a trust layer.",
-            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
+            fix_hint=_runtime_hint(rec_pkg, js_only),
             tier="runtime"))
     mc_files = ["MODEL_CARD.md", "model_card.md", "SYSTEM_CARD.md"]
     has_mc = any(os.path.exists(os.path.join(scan_path, f)) for f in mc_files)
@@ -379,7 +523,7 @@ def _check_article_11(status, scan_path, code_findings=None, rec_pkg="air-langch
     return result
 
 
-def _check_article_12(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
+def _check_article_12(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust", js_only=False):
     checks = []
     if status.reachable and status.total_runs > 0:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="pass",
@@ -396,7 +540,7 @@ def _check_article_12(status, scan_path, code_findings=None, rec_pkg="air-langch
     else:
         checks.append(ComplianceCheck(name="Automatic event logging", article=12, detection="auto", status="warn",
             evidence=f"Runtime check skipped - gateway not running. Install a trust layer for inline logging.",
-            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
+            fix_hint=_runtime_hint(rec_pkg, js_only),
             tier="runtime"))
     if status.audit_chain_intact and status.audit_chain_length > 0:
         checks.append(ComplianceCheck(name="Tamper-evident audit chain", article=12, detection="auto", status="pass",
@@ -441,7 +585,7 @@ def _check_article_12(status, scan_path, code_findings=None, rec_pkg="air-langch
     return result
 
 
-def _check_article_14(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
+def _check_article_14(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust", js_only=False):
     checks = []
     if status.total_runs > 0:
         checks.append(ComplianceCheck(name="Human-in-the-loop mechanism", article=14, detection="auto", status="warn",
@@ -463,7 +607,7 @@ def _check_article_14(status, scan_path, code_findings=None, rec_pkg="air-langch
     else:
         checks.append(ComplianceCheck(name="Kill switch / stop mechanism", article=14, detection="auto", status="warn",
             evidence="Runtime check skipped - gateway not running. Kill switch requires the gateway.",
-            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
+            fix_hint=_runtime_hint(rec_pkg, js_only),
             tier="runtime"))
     op_files = ["OPERATOR_GUIDE.md", "operator_guide.md", "RUNBOOK.md"]
     has_ops = any(os.path.exists(os.path.join(scan_path, f)) for f in op_files)
@@ -478,7 +622,7 @@ def _check_article_14(status, scan_path, code_findings=None, rec_pkg="air-langch
     return result
 
 
-def _check_article_15(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust"):
+def _check_article_15(status, scan_path, code_findings=None, rec_pkg="air-langchain-trust", js_only=False):
     checks = []
     if status.reachable:
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="pass",
@@ -492,7 +636,7 @@ def _check_article_15(status, scan_path, code_findings=None, rec_pkg="air-langch
     else:
         checks.append(ComplianceCheck(name="Prompt injection protection", article=15, detection="auto", status="fail",
             evidence="No runtime injection protection. Install a trust layer for inline scanning.",
-            fix_hint=f"pip install {rec_pkg}  # or start gateway: docker compose up",
+            fix_hint=_runtime_hint(rec_pkg, js_only),
             tier="runtime"))
     if status.total_runs > 0:
         er = (status.error_count / status.total_runs * 100)

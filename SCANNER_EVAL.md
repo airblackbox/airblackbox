@@ -35,8 +35,26 @@ Reproduce: `PYTHONPATH=sdk python3 eval/scanner/run_eval.py`
 On first run the scanner missed NVIDIA NeMo Guardrails: the detector pattern was `nemo_guardrails` (underscore) but the library is imported as `nemoguardrails`. That false negative was invisible until the corpus measured it, and the fix (`nemo_?guardrails`) is the kind of gap an eval exists to surface. The headline value of this harness is not the score, it is that regressions and missed libraries now show up as numbers.
 
 
+## Other languages and notebooks
+
+The scanner also reads TypeScript, JavaScript, Java and Jupyter notebooks. Every fixture above, plus cases for the checks this corpus does not cover (documentation, unsafe input, OAuth and delegation, US hiring, GDPR, US state laws), is written in each language by a developer idiomatic in it, and every Python program is also run as a notebook (`eval/scanner/parity_corpus.json`). Translations were written without access to the scanner's patterns.
+
+**Parity: 144/144 cases get the same status in every language they can be written in** (38 checks). Java cannot express untyped code, so the type-annotation cases without type hints have no Java version. Reproduce: `PYTHONPATH=sdk python3 eval/scanner/run_parity.py`
+
+| Language | Agrees with label |
+|----------|------------------:|
+| Python | 138/144 (96%) |
+| TypeScript | 138/144 (96%) |
+| JavaScript | 138/144 (96%) |
+| Java | 135/141 (96%) |
+| Jupyter notebook | 138/144 (96%) |
+
+The 6 misses are identical in every language, so they are gaps in those checks rather than in language support: code-05 (Unsafe input handling), code-13 (Token scope / permission validation), code-25 (Agent action boundaries), laws-08 (GDPR cross-border transfer safeguards), laws-18 (CO: Adverse-decision explanation), laws-22 (IL: Employee AI notification).
+
+
 ## Honest limitations
 
 - The corpus is a starting instrument, not exhaustive. It covers the code-pattern checks, not the static file-existence checks (which are deterministic) or the runtime checks (which need a live gateway).
 - These are heuristic detectors. High recall with imperfect precision means the scanner errs toward surfacing a control for human review rather than silently passing. The scanner is a starting point to identify potential gaps, not a certified compliance test.
+- Patterns are line-scoped in every language: a prompt template that spans lines is not inspected as a whole, in Python or in JavaScript.
 

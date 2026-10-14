@@ -194,13 +194,15 @@ class BiasScanner:
 
 # Module-level convenience function for MCP server compatibility.
 
-def scan_bias(file_path: str) -> dict:
-    """Scan a Python file for bias and fairness issues.
+def scan_bias(file_path: str, code: Optional[str] = None) -> dict:
+    """Scan a source file for bias and fairness issues.
 
     Module-level function that wraps BiasScanner for the MCP server.
 
     Args:
-        file_path: Path to a Python file to scan.
+        file_path: Path to the file to scan.
+        code: The file's text as the scanners see it (e.g. a notebook's code
+            cells). Read from file_path when not given.
 
     Returns:
         Bias analysis report dict.
@@ -208,11 +210,12 @@ def scan_bias(file_path: str) -> dict:
     import re
     import os
 
-    if not os.path.exists(file_path):
-        return {"error": f"File not found: {file_path}", "findings": []}
+    if code is None:
+        if not os.path.exists(file_path):
+            return {"error": f"File not found: {file_path}", "findings": []}
 
-    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-        code = f.read()
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            code = f.read()
 
     findings = []
 

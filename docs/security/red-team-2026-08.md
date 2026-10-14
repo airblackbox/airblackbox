@@ -224,10 +224,14 @@ beyond that comparison.
 
 Two things would close it further, and neither is a verifier change:
 
-- **Anchor by default everywhere.** The MCP export already anchors on every
-  run. The CLI does not anchor at all, and does not produce the v1 format that
-  has an anchor slot — so a CLI user cannot get an externally witnessed bundle
-  today, whatever they pass to the verifier. That is a producer gap.
+- **Anchor by default everywhere.** ~~The CLI does not anchor at all, and does
+  not produce the v1 format that has an anchor slot.~~ **Closed.**
+  `air-blackbox export --format air-evidence` produces a signed v1 bundle and
+  anchors by default; `--no-anchor` opts out and says what was given up. Key
+  persistence, anchoring and assembly are shared with the MCP server so the two
+  cannot drift. An unreachable authority is recorded as a gap in the signed
+  manifest rather than failing the export, because refusing to export offline
+  would only teach people to pass `--no-anchor`.
 - **Sigstore keyless signing** (OIDC identity via Fulcio) for bundles issued
   through the hosted connector, so attribution stops depending on out-of-band
   key exchange. Self-hosted exports keep the local-key path and the caveat.

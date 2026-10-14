@@ -137,6 +137,34 @@ def main():
               "measured it, and the fix (`nemo_?guardrails`) is the kind of gap an eval "
               "exists to surface. The headline value of this harness is not the score, it "
               "is that regressions and missed libraries now show up as numbers.\n")
+    # ---- cross-language parity (Python / TypeScript / JavaScript) ----
+    import run_parity
+    pcorpus, mismatches, agree, shared = run_parity.run()
+    pn = len(pcorpus)
+    md.append("\n## Other languages and notebooks\n")
+    md.append("The scanner also reads TypeScript, JavaScript, Java and Jupyter notebooks. "
+              "Every fixture above, plus cases for the checks this corpus does not cover "
+              "(documentation, unsafe input, OAuth and delegation, US hiring, GDPR, US state "
+              "laws), is written in each language by a developer idiomatic in it, and every "
+              "Python program is also run as a notebook (`eval/scanner/parity_corpus.json`). "
+              "Translations were written without access to the scanner's patterns.\n")
+    md.append(f"**Parity: {pn - len(mismatches)}/{pn} cases get the same status in every "
+              f"language they can be written in** "
+              f"({len({c['check'] for c in pcorpus})} checks). Java cannot express untyped "
+              "code, so the type-annotation cases without type hints have no Java version. "
+              "Reproduce: `PYTHONPATH=sdk python3 eval/scanner/run_parity.py`\n")
+    md.append("| Language | Agrees with label |")
+    md.append("|----------|------------------:|")
+    names = {"python": "Python", "typescript": "TypeScript", "javascript": "JavaScript",
+             "java": "Java", "notebook": "Jupyter notebook"}
+    for lang in run_parity.LANGUAGES:
+        ok, total = agree[lang]
+        md.append(f"| {names[lang]} | {ok}/{total} ({ok / total:.0%}) |")
+    if shared:
+        md.append(f"\nThe {len(shared)} misses are identical in every language, so "
+                  "they are gaps in those checks rather than in language support: "
+                  + ", ".join(f"{cid} ({check})" for cid, check in shared) + ".\n")
+
     md.append("\n## Honest limitations\n")
     md.append("- The corpus is a starting instrument, not exhaustive. It covers the "
               "code-pattern checks, not the static file-existence checks (which are "
@@ -144,7 +172,9 @@ def main():
               "- These are heuristic detectors. High recall with imperfect precision means "
               "the scanner errs toward surfacing a control for human review rather than "
               "silently passing. The scanner is a starting point to identify potential "
-              "gaps, not a certified compliance test.\n")
+              "gaps, not a certified compliance test.\n"
+              "- Patterns are line-scoped in every language: a prompt template that "
+              "spans lines is not inspected as a whole, in Python or in JavaScript.\n")
     with open(os.path.join(REPO, "SCANNER_EVAL.md"), "w") as f:
         f.write("\n".join(md) + "\n")
     print("wrote SCANNER_EVAL.md")

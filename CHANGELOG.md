@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The compliance scanner reads TypeScript and JavaScript (`.ts`, `.tsx`,
+  `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`) alongside Python, across all
+  code checks, GDPR, the US state-law checks and bias. camelCase and
+  kebab-case names are matched through a snake_case view, so
+  `requireApproval` counts as `require_approval`; try/catch, JSDoc, TS and
+  JSDoc types, npm loggers, Zod/Ajv, the Vercel AI SDK and npm guardrail and
+  rate-limit packages have their own adapters. Declaration files, minified
+  bundles, tool configs, JS build output and JS test conventions
+  (`*.test.ts`, `__tests__/`) are handled. Python results are byte-for-byte
+  unchanged.
+- Java (`.java`): LangChain4j, Spring AI and the official OpenAI/Anthropic
+  Java SDKs as model calls; try/catch, Javadoc (prose required), SLF4J/Log4j
+  (System.out excluded), Bean Validation and JSON Schema validators,
+  Resilience4j/Spring Retry, Bucket4j, Micrometer/OTel tracing, Spring AI
+  `.entity()` structured output, Google Cloud DLP. Maven/Gradle output,
+  generated sources and JUnit naming (`FooTest`, `FooIT`) are handled.
+  Constructors are not counted as methods, like `__init__`. Java is
+  statically typed, so its methods always count as typed.
+- Jupyter notebooks (`.ipynb`) are read as Python: code cells in order, with
+  IPython `%magic` and `!shell` lines commented out, and non-Python kernels
+  and `.ipynb_checkpoints` skipped. A notebook gets exactly the result its
+  code gets as a `.py` file. Python projects that contain notebooks will see
+  them counted from this release on.
+- `eval/scanner/parity_corpus.json` and `run_parity.py`: 144 labelled
+  programs written in Python, TypeScript, JavaScript and Java, each Python
+  one also run as a notebook; every check gives the same status in every
+  form (enforced in the test suite). Java cannot express untyped code, so
+  three type-annotation cases have no Java version.
+- npm and Java framework detection (LangChain.js, OpenAI Node SDK, Anthropic
+  TypeScript SDK, Vercel AI SDK, OpenAI Agents SDK, Mastra, LlamaIndex.TS,
+  Google Gen AI, MCP TypeScript SDK; LangChain4j, Spring AI, OpenAI and
+  Anthropic Java SDKs, Google ADK/Gen AI, Azure OpenAI, MCP Java SDK,
+  LangGraph4j). Projects with no Python are pointed at the gateway instead
+  of a `pip install` trust layer.
+
+### Fixed
+- Ordinary AI code was treated as a hiring system, so it got the US hiring
+  checks (NYC LL144, California FEHA, Illinois ZIP proxy), often as FAILs.
+  `ats` was matched as a suffix ("chats", "formats", "stats") and words like
+  "resume" (a stream), "candidate" (reranking, Gemini responses) and
+  "screening" were enough on their own. Hiring context now needs at least
+  one hiring-specific signal (applicant, recruiting, interview, job title,
+  years of experience...) and ignores test fixtures. On this repository's
+  own files, `recorder.py` no longer reports a false NYC LL144 failure.
+- `air-blackbox comply --scan file.py` crashed with `AttributeError` when
+  given a single file. The bias scanner returns a report dict and the engine
+  iterated its keys as findings. On directories the same call raised and was
+  swallowed, so the Bias and Fairness section never appeared at all. It now
+  runs per source file (tests excluded), merges findings by type as warnings,
+  and only appears for code that makes decisions about people (the same gate
+  as the US hiring checks), because its term lists also match colour names.
+
 ## [1.16.0] - 2026-09-26
 
 ### Added
