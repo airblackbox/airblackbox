@@ -44,6 +44,11 @@ _BIAS_CHECK_NAMES = {
 }
 
 
+# Term lists that also match colour names. In JSX/TSX components those words
+# are almost always styling, so these two are not counted there.
+_COLOUR_PRONE = {"race_reference", "gender_reference"}
+
+
 def _bias_checks(scan_path: str) -> list[dict]:
     """Run the per-file bias scanner over every source file and merge by type.
 
@@ -73,6 +78,8 @@ def _bias_checks(scan_path: str) -> list[dict]:
     for path in sources:
         rel = os.path.relpath(path, root)
         for f in scan_bias(path).get("findings", []):
+            if f["type"] in _COLOUR_PRONE and path.endswith((".tsx", ".jsx")):
+                continue  # UI components: text-white, bg-black, fill="white"
             count, files = merged.setdefault(f["type"], (0, []))
             merged[f["type"]] = (count + f["count"], files + [rel])
 

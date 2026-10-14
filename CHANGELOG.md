@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the gateway instead of a `pip install` trust layer.
 
 ### Fixed
+- Ordinary AI code was treated as a hiring system, so it got the US hiring
+  checks (NYC LL144, California FEHA, Illinois ZIP proxy), often as FAILs.
+  `ats` was matched as a suffix ("chats", "formats", "stats") and words like
+  "resume" (a stream), "candidate" (reranking, Gemini responses) and
+  "screening" were enough on their own. Hiring context now needs at least
+  one hiring-specific signal (applicant, recruiting, interview, job title,
+  years of experience...) and ignores test fixtures. On this repository's
+  own files, `recorder.py` no longer reports a false NYC LL144 failure.
 - `air-blackbox comply --scan file.py` crashed with `AttributeError` when
   given a single file. The bias scanner returns a report dict and the engine
   iterated its keys as findings. On directories the same call raised and was

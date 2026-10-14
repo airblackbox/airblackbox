@@ -82,7 +82,9 @@ def scan_codebase(scan_path: str) -> List[CodeFinding]:
 
     # === Hiring AI Compliance (US) ===
     # Only fires when the codebase looks like a hiring/employment AI system
-    if _has_hiring_context(file_contents):
+    # Test fixtures talk about interviews and candidates without the code
+    # being a hiring system, so only source files decide the context.
+    if _has_hiring_context(_source_files_only(file_contents)):
         findings.extend(_check_zip_proxy(file_contents, scan_path))
         findings.extend(_check_bias_audit(file_contents, scan_path))
         findings.extend(_check_hiring_retention(file_contents, scan_path))
@@ -859,26 +861,39 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
 # AI context is detected in the codebase.
 # ─────────────────────────────────────────────
 
-HIRING_CONTEXT_PATTERNS = [
-    r"candidate", r"applicant", r"hiring", r"screening",
-    r"resume", r"interview", r"recruitment", r"job_posting",
-    r"job_application", r"talent_acquisition", r"ats\b",
-    r"applicant_tracking", r"shortlist", r"reject.*candidate",
-    r"rank.*candidate", r"score.*candidate", r"evaluate.*candidate",
+# Strong signals only occur in hiring code. Weak ones also occur all over
+# ordinary AI code: "resume" a stream, rerank "candidate" passages, Gemini's
+# response.candidates, content "screening". "ats" used to be matched as a
+# suffix, so "chats", "formats" and "stats" counted, and any chat app with a
+# resumable stream was treated as a hiring system and failed NYC LL144.
+HIRING_CONTEXT_STRONG = [
+    r"applicant", r"hiring", r"recruit", r"job_posting",
+    r"job_application", r"talent_acquisition", r"\bats\b",
+    r"applicant_tracking", r"interview", r"shortlist",
+    # features only a hiring model scores on
+    r"years_(?:of_)?experience", r"job_(?:title|description|requirement|opening)",
+    r"cover_letter", r"work_history", r"\bhire[ds]?\b",
 ]
+HIRING_CONTEXT_WEAK = [
+    r"candidate", r"resume", r"screening",
+    r"reject.*candidate", r"rank.*candidate", r"score.*candidate",
+    r"evaluate.*candidate",
+]
+HIRING_CONTEXT_PATTERNS = HIRING_CONTEXT_STRONG + HIRING_CONTEXT_WEAK
 
 
 def _has_hiring_context(file_contents: dict) -> bool:
-    """Check if the codebase is related to hiring/employment AI."""
-    matches = 0
-    for p in HIRING_CONTEXT_PATTERNS:
+    """Check if the codebase is related to hiring/employment AI: two signals,
+    at least one of them specific to hiring."""
+    def seen(p):
         # Per file rather than over the joined text: equivalent (no pattern
         # spans a newline) and keeps each file's snake_case view.
-        if any(has(p, content, re.IGNORECASE) for content in file_contents.values()):
-            matches += 1
-            if matches >= 2:
-                return True
-    return False
+        return any(has(p, content, re.IGNORECASE) for content in file_contents.values())
+
+    strong = sum(1 for p in HIRING_CONTEXT_STRONG if seen(p))
+    if strong == 0:
+        return False
+    return strong + sum(1 for p in HIRING_CONTEXT_WEAK if seen(p)) >= 2
 
 
 def _check_zip_proxy(file_contents: dict, scan_path: str) -> List[CodeFinding]:
