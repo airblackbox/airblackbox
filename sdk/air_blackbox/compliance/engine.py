@@ -77,7 +77,7 @@ def _bias_checks(scan_path: str) -> list[dict]:
     merged = {}  # finding type -> (reference count, [relative paths])
     for path in sources:
         rel = os.path.relpath(path, root)
-        for f in scan_bias(path).get("findings", []):
+        for f in scan_bias(path, code=str(sources[path])).get("findings", []):
             if f["type"] in _COLOUR_PRONE and path.endswith((".tsx", ".jsx")):
                 continue  # UI components: text-white, bg-black, fill="white"
             count, files = merged.setdefault(f["type"], (0, []))
@@ -106,7 +106,7 @@ def _bias_checks(scan_path: str) -> list[dict]:
 #: Runtime-check advice for projects with no Python: the trust layers are pip
 #: packages, but the gateway is an OpenAI-compatible proxy any SDK can use.
 GATEWAY_HINT_JS = ("Start the AIR gateway (docker compose up) and point your SDK client's "
-                   "baseURL at http://localhost:8080/v1")
+                   "base URL at http://localhost:8080/v1")
 
 
 def _runtime_hint(rec_pkg: str, js_only: bool) -> str:
@@ -116,7 +116,8 @@ def _runtime_hint(rec_pkg: str, js_only: bool) -> str:
 
 
 def _is_js_only(scan_path: str) -> bool:
-    """True when the scan found TypeScript/JavaScript and no Python."""
+    """True when the scan found source files and none of them Python
+    (TypeScript, JavaScript, Java): the pip trust layers do not apply."""
     from air_blackbox.compliance.sources import PYTHON, project_languages
     langs = project_languages(scan_path)
     return bool(langs) and PYTHON not in langs
@@ -155,6 +156,19 @@ JS_FRAMEWORK_IMPORTS = {
     "Google Gen AI (JS)": r"^@google/(?:genai|generative-ai|adk)(?:/|$)",
     "MCP TypeScript SDK": r"^@modelcontextprotocol/sdk(?:/|$)",
 }
+#: Java packages, matched against import statements.
+JAVA_FRAMEWORK_IMPORTS = {
+    "LangChain4j": r"^dev\.langchain4j\.",
+    "Spring AI": r"^org\.springframework\.ai\.",
+    "OpenAI Java SDK": r"^com\.openai\.",
+    "Anthropic Java SDK": r"^com\.anthropic\.",
+    "Google ADK (Java)": r"^com\.google\.adk\.",
+    "Google Gen AI (Java)": r"^com\.google\.genai\.",
+    "Azure OpenAI (Java)": r"^com\.azure\.ai\.openai\.",
+    "MCP Java SDK": r"^io\.modelcontextprotocol\.",
+    "LangGraph4j": r"^org\.bsc\.langgraph4j\.",
+}
+_JAVA_IMPORT = re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+)", re.M)
 _JS_MODULE_SPECIFIER = re.compile(
     r"""(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']([^"'\n]+)["']""")
 
@@ -162,7 +176,8 @@ _JS_MODULE_SPECIFIER = re.compile(
 def detect_frameworks(scan_path: str) -> list[str]:
     """Detect which AI frameworks are used in the scanned codebase."""
     from air_blackbox.compliance.code_scanner import SOURCE_SKIP_DIRS
-    from air_blackbox.compliance.sources import JS_FAMILY, is_scannable, language_of
+    from air_blackbox.compliance.sources import (
+        JAVA, JS_FAMILY, is_notebook, is_scannable, language_of, read_text)
     detected = set()
     py_files = []
     if os.path.isfile(scan_path) and language_of(scan_path):
@@ -179,8 +194,17 @@ def detect_frameworks(scan_path: str) -> list[str]:
                     py_files.append(fp)
     for fp in py_files[:200]:  # cap to avoid scanning huge repos
         try:
-            with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
-                content = fh.read(16000)  # first 16KB is enough
+            if is_notebook(fp):
+                content = read_text(fp, 16000) or ""
+            else:
+                with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read(16000)  # first 16KB is enough
+            if language_of(fp) == JAVA:
+                imports = _JAVA_IMPORT.findall(content)
+                for framework, pattern in JAVA_FRAMEWORK_IMPORTS.items():
+                    if framework not in detected and any(re.match(pattern, m) for m in imports):
+                        detected.add(framework)
+                continue
             if language_of(fp) in JS_FAMILY:
                 modules = _JS_MODULE_SPECIFIER.findall(content)
                 for framework, pattern in JS_FRAMEWORK_IMPORTS.items():

@@ -18,13 +18,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bundles, tool configs, JS build output and JS test conventions
   (`*.test.ts`, `__tests__/`) are handled. Python results are byte-for-byte
   unchanged.
+- Java (`.java`): LangChain4j, Spring AI and the official OpenAI/Anthropic
+  Java SDKs as model calls; try/catch, Javadoc (prose required), SLF4J/Log4j
+  (System.out excluded), Bean Validation and JSON Schema validators,
+  Resilience4j/Spring Retry, Bucket4j, Micrometer/OTel tracing, Spring AI
+  `.entity()` structured output, Google Cloud DLP. Maven/Gradle output,
+  generated sources and JUnit naming (`FooTest`, `FooIT`) are handled.
+  Constructors are not counted as methods, like `__init__`. Java is
+  statically typed, so its methods always count as typed.
+- Jupyter notebooks (`.ipynb`) are read as Python: code cells in order, with
+  IPython `%magic` and `!shell` lines commented out, and non-Python kernels
+  and `.ipynb_checkpoints` skipped. A notebook gets exactly the result its
+  code gets as a `.py` file. Python projects that contain notebooks will see
+  them counted from this release on.
 - `eval/scanner/parity_corpus.json` and `run_parity.py`: 144 labelled
-  programs written in Python, TypeScript and JavaScript; every check gives the
-  same status in all three (enforced in the test suite).
-- npm framework detection (LangChain.js, OpenAI Node SDK, Anthropic
+  programs written in Python, TypeScript, JavaScript and Java, each Python
+  one also run as a notebook; every check gives the same status in every
+  form (enforced in the test suite). Java cannot express untyped code, so
+  three type-annotation cases have no Java version.
+- npm and Java framework detection (LangChain.js, OpenAI Node SDK, Anthropic
   TypeScript SDK, Vercel AI SDK, OpenAI Agents SDK, Mastra, LlamaIndex.TS,
-  Google Gen AI, MCP TypeScript SDK). Projects with no Python are pointed at
-  the gateway instead of a `pip install` trust layer.
+  Google Gen AI, MCP TypeScript SDK; LangChain4j, Spring AI, OpenAI and
+  Anthropic Java SDKs, Google ADK/Gen AI, Azure OpenAI, MCP Java SDK,
+  LangGraph4j). Projects with no Python are pointed at the gateway instead
+  of a `pip install` trust layer.
 
 ### Fixed
 - Ordinary AI code was treated as a hiring system, so it got the US hiring

@@ -182,11 +182,12 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
         if _ollama_available() and _model_available(model):
             console.print(f"[bold]Running hybrid analysis (regex + AI model)...[/]\n")
             # Collect all Python files (supports single-file and directory scanning).
-            # The model has only been validated on Python, so TypeScript and
-            # JavaScript stay with the pattern checks and the user is told.
+            # The model has only been validated on Python files, so other
+            # languages and notebooks stay with the pattern checks and the
+            # user is told.
             if any(lang != PYTHON for lang in scanned_languages):
-                console.print("  [dim]AI model analysis covers Python files only; TypeScript/JavaScript "
-                              "files are covered by the pattern checks.[/]\n")
+                console.print("  [dim]AI model analysis covers .py files only; other languages "
+                              "are covered by the pattern checks.[/]\n")
             py_files = []
             if os.path.isfile(scan) and scan.endswith(".py"):
                 py_files = [os.path.abspath(scan)]
@@ -534,7 +535,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
             for line in rec_lines:
                 console.print(f"[bold green]{line}[/]")
         else:
-            # npm frameworks only: the trust layers are Python packages.
+            # npm/Java frameworks only: the trust layers are Python packages.
             console.print(f"\n[bold yellow]Detected frameworks:[/] {', '.join(detected_frameworks)}")
             console.print(f"[dim]For runtime compliance: {GATEWAY_HINT_JS}[/]")
     elif js_only:

@@ -251,7 +251,7 @@ def test_typescript_only_project_is_never_told_to_pip_install(tmp_path):
     results, _fw, _rec, _hint = run_all_checks(GatewayStatus(), str(tmp_path), standard="all")
     hints = [c.get("fix_hint", "") for a in results for c in a["checks"]]
     assert not any("pip install" in h for h in hints)
-    assert any("baseURL" in h for h in hints)
+    assert any("base URL" in h for h in hints)
 
 
 def test_mixed_project_recommends_the_python_trust_layer(tmp_path):

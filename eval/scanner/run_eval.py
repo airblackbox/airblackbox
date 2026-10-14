@@ -141,24 +141,27 @@ def main():
     import run_parity
     pcorpus, mismatches, agree, shared = run_parity.run()
     pn = len(pcorpus)
-    md.append("\n## TypeScript and JavaScript\n")
-    md.append("The scanner also reads TypeScript and JavaScript. Every fixture above, "
-              "plus cases for the checks this corpus does not cover (documentation, "
-              "unsafe input, OAuth and delegation, US hiring, GDPR, US state laws), "
-              "is written three times by a developer idiomatic in each language "
-              "(`eval/scanner/parity_corpus.json`). Translations were written without "
-              "access to the scanner's patterns.\n")
-    md.append(f"**Parity: {pn - len(mismatches)}/{pn} cases get the same status in "
-              f"Python, TypeScript and JavaScript** "
-              f"({len({c['check'] for c in pcorpus})} checks). "
+    md.append("\n## Other languages and notebooks\n")
+    md.append("The scanner also reads TypeScript, JavaScript, Java and Jupyter notebooks. "
+              "Every fixture above, plus cases for the checks this corpus does not cover "
+              "(documentation, unsafe input, OAuth and delegation, US hiring, GDPR, US state "
+              "laws), is written in each language by a developer idiomatic in it, and every "
+              "Python program is also run as a notebook (`eval/scanner/parity_corpus.json`). "
+              "Translations were written without access to the scanner's patterns.\n")
+    md.append(f"**Parity: {pn - len(mismatches)}/{pn} cases get the same status in every "
+              f"language they can be written in** "
+              f"({len({c['check'] for c in pcorpus})} checks). Java cannot express untyped "
+              "code, so the type-annotation cases without type hints have no Java version. "
               "Reproduce: `PYTHONPATH=sdk python3 eval/scanner/run_parity.py`\n")
     md.append("| Language | Agrees with label |")
     md.append("|----------|------------------:|")
+    names = {"python": "Python", "typescript": "TypeScript", "javascript": "JavaScript",
+             "java": "Java", "notebook": "Jupyter notebook"}
     for lang in run_parity.LANGUAGES:
-        label = {"python": "Python", "typescript": "TypeScript", "javascript": "JavaScript"}[lang]
-        md.append(f"| {label} | {agree[lang]}/{pn} ({agree[lang] / pn:.0%}) |")
+        ok, total = agree[lang]
+        md.append(f"| {names[lang]} | {ok}/{total} ({ok / total:.0%}) |")
     if shared:
-        md.append(f"\nThe {len(shared)} misses are identical in all three languages, so "
+        md.append(f"\nThe {len(shared)} misses are identical in every language, so "
                   "they are gaps in those checks rather than in language support: "
                   + ", ".join(f"{cid} ({check})" for cid, check in shared) + ".\n")
 

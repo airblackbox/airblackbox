@@ -11,8 +11,10 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from air_blackbox.compliance.sources import (
+    JAVA,
     JS_FAMILY,
     PYTHON,
+    is_java_test_file,
     has,
     is_js,
     is_js_test_file,
@@ -157,17 +159,21 @@ def _is_test_file(filepath: str) -> bool:
         return True
     if language_of(filepath) in JS_FAMILY and is_js_test_file(filepath):
         return True
+    if language_of(filepath) == JAVA and is_java_test_file(filepath):
+        return True
     return False
 
 
-def _wording(file_contents: dict, python: str, js: str, both: str) -> str:
+def _wording(file_contents: dict, python: str, js: str, both: str, java: str) -> str:
     """Pick user-facing text by the languages scanned. A Python-only scan
-    always gets the original Python wording."""
+    always gets the original Python wording; `both` is for mixed projects."""
     langs = languages_in(file_contents)
     if langs == [PYTHON] or not langs:
         return python
-    if PYTHON not in langs:
+    if set(langs) <= set(JS_FAMILY):
         return js
+    if langs == [JAVA]:
+        return java
     return both
 
 
@@ -257,6 +263,95 @@ def _jsdoc_has_prose(doc: str) -> bool:
     return False
 
 
+# ── Java adapters ──
+# Official OpenAI/Anthropic Java SDKs, LangChain4j and Spring AI. The client
+# builders count like `OpenAI(` / `Anthropic(` do in Python.
+_JAVA_LLM_CALL = (r'\.chat\(\)\s*\.completions\(\)\s*\.create\(|\.messages\(\)\s*\.create\('
+                  r'|\.responses\(\)\s*\.create\('
+                  r'|\b(?:OpenAIOkHttpClient|AnthropicOkHttpClient|OpenAiChatModel|AnthropicChatModel'
+                  r'|AzureOpenAiChatModel|VertexAiGeminiChatModel|GoogleAiGeminiChatModel|OllamaChatModel'
+                  r'|BedrockChatModel|MistralAiChatModel)\b'
+                  # LangChain4j `model.chat(...)`, as broad as Python's `.invoke(`
+                  r'|\bchatClient\s*\.\s*prompt\(|\.chat\(')
+_JAVA_ERROR_HANDLING = r'\btry\s*[({].*?\bcatch\b'
+_JAVA_STRONG_VALIDATION = (r'\bJsonSchemaFactory\b|\bSchemaLoader\.load\b'
+                           r'|\b[vV]alidator\s*\.\s*validate\(')
+# Bean Validation constraints are the Pydantic equivalent; a record is the
+# dataclass equivalent. Both count only next to a model call, as in Python.
+_JAVA_WEAK_VALIDATION = (r'\b(?:jakarta|javax)\.validation\b|@Valid\b|@NotNull\b|@NotBlank\b'
+                         r'|@NotEmpty\b|@Size\(|@Pattern\(|@Email\b|\brecord\s+[A-Z]\w*\s*[(<]')
+# System.out.println does not count, like print().
+_JAVA_LOGGING = (r'\borg\.slf4j\b|\bLoggerFactory\.getLogger\(|@Slf4j\b|@Log4j2?\b'
+                 r'|\borg\.apache\.logging\.log4j\b|\bLogManager\.getLogger\(|\bjava\.util\.logging\b'
+                 r'|\b(?:log|logger|LOG|LOGGER)\.(?:trace|debug|info|warn|error)\(')
+_JAVA_RATE_LIMIT = r'\bbucket4j\b|\bBucket4j\b|\bBandwidth\.(?:classic|simple|builder)\('
+_JAVA_PROMPT_INTERPOLATION = r'\.formatted\([^)\n]*input'
+_JAVA_OUTPUT_VALIDATION = (r'\.entity\(\s*(?:new\s+)?[\w.<>]+(?:\.class|\(\))|\bBeanOutputConverter\b'
+                           r'|\bResponseFormatJsonSchema\b|\bStructuredOutput\w*\b')
+# Cloud PII services' Java clients (Amazon Comprehend's detectPiiEntities is
+# already matched as detect_pii by the snake_case view).
+_JAVA_PII = r'\bDlpServiceClient\b|\bdeidentifyContent\b|\bDeidentifyConfig\b'
+_JAVA_TRACING = r'\bio\.micrometer\.(?:tracing|observation)\b|\bObservationRegistry\b|@Observed\b|@WithSpan\b'
+
+_JAVA_CLASS = re.compile(
+    r'^((?:(?:public|protected|private|abstract|final|static|sealed|non-sealed|strictfp)\s+)*)'
+    r'(?:class|interface|enum|record|@interface)\s+([A-Za-z_$][\w$]*)')
+_JAVA_METHOD = re.compile(
+    r'^((?:(?:public|protected|private|static|final|abstract|synchronized|native|default'
+    r'|strictfp)\s+)*)(?:<[^>]+>\s+)?([\w$.]+(?:<[^()]*>)?(?:\[\])*)\s+([A-Za-z_$][\w$]*)\s*\(')
+_JAVA_LEADING_ANNOTATIONS = re.compile(r'^(?:@[\w.]+(?:\([^()]*\))?\s+)+')
+_JAVA_NOT_A_TYPE = {"return", "new", "throw", "else", "case", "yield", "await", "assert",
+                    "import", "package", "goto",
+                    # a modifier in the type slot means a constructor: `public Foo() {`
+                    "public", "protected", "private", "static", "final", "abstract",
+                    "synchronized", "native", "default", "strictfp"}
+
+
+def _java_definitions(content: str) -> List["_JsDef"]:
+    """Method and type definitions in a Java file, counted like Python's
+    `def`/`class`: methods with a body (abstract and interface declarations,
+    like TS overloads, have none), classes/interfaces/enums/records.
+    Constructors are not counted (like __init__). Private means the `private`
+    modifier. Java is statically typed, so every method is typed."""
+    lines = content.split("\n")
+    found = []
+    for i, raw in enumerate(lines):
+        # `@Override public String toString() {`: drop leading annotations
+        s = _JAVA_LEADING_ANNOTATIONS.sub("", raw.strip())
+        if not s or s.startswith(("//", "/*", "*", "@")):
+            continue
+        cls = _JAVA_CLASS.match(s)
+        if cls:
+            doc = _jsdoc_above(lines, i)
+            found.append(_JsDef("class", cls.group(2), "private" in cls.group(1).split(),
+                                doc is not None and _jsdoc_has_prose(doc), False))
+            continue
+        m = _JAVA_METHOD.match(s)
+        if not m or m.group(2) in _JAVA_NOT_A_TYPE or m.group(3) in _JS_NOT_A_METHOD:
+            continue
+        full, j = s, i + 1
+        while j < len(lines) and full.count("(") > full.count(")") and j - i < 40:
+            full += " " + lines[j].strip()
+            j += 1
+        close = _matching_paren(full, m.end() - 1)
+        if close < 0:
+            continue
+        rest = full[close + 1:]
+        if not re.match(r'\s*(?:throws\s+[\w$.,\s<>]+?)?\s*\{', rest):
+            if not (rest.strip() == "" and j < len(lines) and lines[j].strip().startswith("{")):
+                continue  # declaration without a body, or not a method at all
+        doc = _jsdoc_above(lines, i)
+        found.append(_JsDef("function", m.group(3), "private" in m.group(1).split(),
+                            doc is not None and _jsdoc_has_prose(doc), True))
+    return found
+
+
+def _definitions(content: str) -> List["_JsDef"]:
+    if getattr(content, "language", "") == JAVA:
+        return _java_definitions(content)
+    return _js_definitions(content)
+
+
 @dataclass
 class _JsDef:
     kind: str        # "function" | "class"
@@ -278,11 +373,16 @@ def _matching_paren(text: str, open_idx: int) -> int:
     return -1
 
 
+# A decorator/annotation line with nothing after it: `@Injectable()`,
+# `@Transactional(readOnly = true)`. `@Override public void f() {` is code.
+_ANNOTATION_ONLY = re.compile(r'^@[\w.]+(?:\(.*\))?\s*$')
+
+
 def _jsdoc_above(lines: List[str], i: int) -> Optional[str]:
     """The /** ... */ block directly above line i (decorators and blank lines
     in between are allowed), or None."""
     j = i - 1
-    while j >= 0 and (not lines[j].strip() or lines[j].strip().startswith("@")):
+    while j >= 0 and (not lines[j].strip() or _ANNOTATION_ONLY.match(lines[j].strip())):
         j -= 1
     if j < 0 or not lines[j].rstrip().endswith("*/"):
         return None
@@ -391,9 +491,9 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
     files_with_llm_calls = []
     files_with_error_handling = []
     for fp, content in file_contents.items():
-        if has(combined, content, js=_JS_LLM_CALL):
+        if has(combined, content, js=_JS_LLM_CALL, java=_JAVA_LLM_CALL):
             files_with_llm_calls.append(fp)
-            if has(r'\btry\b.*?\bexcept\b', content, re.DOTALL, js=_JS_ERROR_HANDLING) or has(framework_combined, content, re.IGNORECASE):
+            if has(r'\btry\b.*?\bexcept\b', content, re.DOTALL, js=_JS_ERROR_HANDLING, java=_JAVA_ERROR_HANDLING) or has(framework_combined, content, re.IGNORECASE):
                 files_with_error_handling.append(fp)
     if not files_with_llm_calls:
         return [CodeFinding(article=9, name="LLM call error handling",
@@ -406,7 +506,8 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
             status="pass", evidence=_wording(file_contents,
                 f"All {total} files with LLM calls have try/except blocks",
                 f"All {total} files with LLM calls have try/catch blocks",
-                f"All {total} files with LLM calls have try/except or try/catch blocks"))]
+                f"All {total} files with LLM calls have try/except or try/catch blocks",
+                f"All {total} files with LLM calls have try/catch blocks"))]
     else:
         return [CodeFinding(article=9, name="LLM call error handling",
             status="fail" if covered == 0 else "warn",
@@ -414,7 +515,8 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
             fix_hint=_wording(file_contents,
                 "Wrap LLM API calls in try/except to handle failures gracefully",
                 "Wrap LLM API calls in try/catch (or .catch() on the promise) to handle failures gracefully",
-                "Wrap LLM API calls in try/except (Python) or try/catch (TypeScript/JavaScript) to handle failures gracefully"))]
+                "Wrap LLM API calls in try/except (Python) or try/catch (other languages) to handle failures gracefully",
+                "Wrap LLM API calls in try/catch to handle failures gracefully"))]
 
 
 def _check_fallback_patterns(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -449,9 +551,10 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
 
     hits = []
     for fp, content in file_contents.items():
-        if has(strong_combined, content, js=_JS_STRONG_VALIDATION):
+        if has(strong_combined, content, js=_JS_STRONG_VALIDATION, java=_JAVA_STRONG_VALIDATION):
             hits.append(fp)
-        elif has(weak_combined, content, js=_JS_WEAK_VALIDATION) and has(llm_combined, content, js=_JS_LLM_CALL):
+        elif (has(weak_combined, content, js=_JS_WEAK_VALIDATION, java=_JAVA_WEAK_VALIDATION)
+              and has(llm_combined, content, js=_JS_LLM_CALL, java=_JAVA_LLM_CALL)):
             hits.append(fp)
 
     total = len(file_contents)
@@ -460,16 +563,19 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
             evidence=_wording(file_contents,
                 f"Input validation found in {len(hits)}/{total} Python files (Pydantic, dataclass, or similar)",
                 f"Input validation found in {len(hits)}/{total} source files (Zod, Ajv, or similar)",
-                f"Input validation found in {len(hits)}/{total} source files (Pydantic, Zod, or similar)"))]
+                f"Input validation found in {len(hits)}/{total} source files (Pydantic, Zod, Bean Validation, or similar)",
+                f"Input validation found in {len(hits)}/{total} source files (Bean Validation, JSON Schema, or similar)"))]
     return [CodeFinding(article=10, name="Input validation / schema enforcement", status="warn",
         evidence=_wording(file_contents,
             "No structured input validation detected (Pydantic, dataclass, TypedDict)",
             "No structured input validation detected (Zod, Ajv, Valibot)",
-            "No structured input validation detected (Pydantic, dataclass, Zod, Ajv)"),
+            "No structured input validation detected (Pydantic, Zod, Bean Validation, JSON Schema)",
+            "No structured input validation detected (Bean Validation, JSON Schema)"),
         fix_hint=_wording(file_contents,
             "Use Pydantic models or dataclasses to validate inputs before LLM calls",
             "Use Zod schemas (or Ajv with a JSON Schema) to validate inputs before LLM calls",
-            "Validate inputs before LLM calls: Pydantic in Python, Zod or Ajv in TypeScript/JavaScript"))]
+            "Validate inputs before LLM calls: Pydantic in Python, Zod or Ajv in TypeScript/JavaScript, Bean Validation in Java",
+            "Validate inputs before LLM calls with Jakarta Bean Validation (@Valid, @NotBlank) or a JSON Schema validator"))]
 
 
 def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -490,7 +596,7 @@ def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding
     ]
     strong_combined = "|".join(strong_patterns)
     moderate_combined = "|".join(moderate_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE, java=_JAVA_PII)]
     moderate_hits = [fp for fp, content in file_contents.items()
                      if has(moderate_combined, content, re.IGNORECASE) and fp not in strong_hits]
     if strong_hits:
@@ -502,13 +608,15 @@ def _check_pii_handling(file_contents: dict, scan_path: str) -> List[CodeFinding
             fix_hint=_wording(file_contents,
                 "Add actual PII detection (e.g., presidio, scrubadub) instead of just naming patterns",
                 "Add actual PII detection (e.g., redact-pii, or a Presidio analyzer service) instead of just naming patterns",
-                "Add actual PII detection (e.g., presidio, scrubadub, redact-pii) instead of just naming patterns"))]
+                "Add actual PII detection (e.g., presidio, scrubadub, redact-pii) instead of just naming patterns",
+                "Add actual PII detection (e.g., a Presidio analyzer service, Google Cloud DLP, Amazon Comprehend) instead of just naming patterns"))]
     return [CodeFinding(article=10, name="PII handling in code", status="warn",
         evidence="No PII detection, redaction, or masking patterns found in code",
         fix_hint=_wording(file_contents,
             "Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub)",
             "Add PII detection before sending data to LLM providers (e.g., redact-pii, or a Presidio analyzer service)",
-            "Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub, redact-pii)"))]
+            "Add PII detection before sending data to LLM providers (e.g., presidio, scrubadub, redact-pii)",
+            "Add PII detection before sending data to LLM providers (e.g., a Presidio analyzer service, Google Cloud DLP, Amazon Comprehend)"))]
 
 
 def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -520,8 +628,8 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     total_defs = 0
     documented_defs = 0
     for fp, content in source_files.items():
-        if is_js(content):
-            for d in _js_definitions(content):
+        if getattr(content, "language", PYTHON) != PYTHON:
+            for d in _definitions(content):
                 if d.kind != "class" and d.private:
                     continue  # mirrors skipping `def _x` (classes are always counted)
                 total_defs += 1
@@ -571,11 +679,13 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         evidence=_wording(file_contents,
             f"{documented_defs}/{total_defs} public functions/classes have docstrings ({pct:.0f}%)",
             f"{documented_defs}/{total_defs} public functions/classes have JSDoc comments ({pct:.0f}%)",
-            f"{documented_defs}/{total_defs} public functions/classes have docstrings or JSDoc comments ({pct:.0f}%)"),
+            f"{documented_defs}/{total_defs} public functions/classes have docstrings or doc comments ({pct:.0f}%)",
+            f"{documented_defs}/{total_defs} public methods/classes have Javadoc comments ({pct:.0f}%)"),
         fix_hint=_wording(file_contents,
             "Add docstrings to public functions and classes explaining purpose and parameters",
             "Add JSDoc comments (/** ... */) to public functions and classes explaining purpose and parameters",
-            "Add docstrings (Python) or JSDoc comments (TypeScript/JavaScript) to public functions and classes explaining purpose and parameters"))]
+            "Add docstrings (Python) or /** ... */ doc comments (JSDoc, Javadoc) to public functions and classes explaining purpose and parameters",
+            "Add Javadoc comments (/** ... */) to public methods and classes explaining purpose and parameters"))]
 
 
 def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -602,8 +712,8 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     total_defs = 0
     typed_defs = 0
     for fp, content in source_files.items():
-        if is_js(content):
-            for d in _js_definitions(content):
+        if getattr(content, "language", PYTHON) != PYTHON:
+            for d in _definitions(content):
                 if d.kind == "class" or d.private:
                     continue  # mirrors counting public `def` only
                 total_defs += 1
@@ -641,11 +751,13 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         evidence=_wording(file_contents,
             f"{typed_defs}/{total_defs} public functions have type hints ({pct:.0f}%)",
             f"{typed_defs}/{total_defs} public functions have type annotations (TypeScript or JSDoc types) ({pct:.0f}%)",
-            f"{typed_defs}/{total_defs} public functions have type hints or type annotations ({pct:.0f}%)"),
+            f"{typed_defs}/{total_defs} public functions have type hints or type annotations ({pct:.0f}%)",
+            f"{typed_defs}/{total_defs} public methods are statically typed (Java) ({pct:.0f}%)"),
         fix_hint=_wording(file_contents,
             "Add type hints to function signatures for better documentation and tooling",
             "Add parameter and return types (TypeScript, or JSDoc @param/@returns types in JavaScript)",
-            "Add type hints (Python) and parameter/return types (TypeScript or JSDoc) to function signatures"))]
+            "Add type hints (Python) and parameter/return types (TypeScript or JSDoc) to function signatures",
+            "Java is statically typed; no action needed"))]
 
 
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -654,18 +766,20 @@ def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         r'logging\.(?:debug|info|warning|error|critical)\(',
         r'structlog', r'loguru', r'logger\.(?:debug|info|warning|error)\(']
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_LOGGING)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_LOGGING, java=_JAVA_LOGGING)]
     total = len(file_contents)
     if not hits:
         return [CodeFinding(article=12, name="Application logging", status="fail",
             evidence=_wording(file_contents,
                 "No logging framework detected (logging, structlog, loguru)",
                 "No logging framework detected (pino, winston, bunyan)",
-                "No logging framework detected (logging, structlog, loguru, pino, winston)"),
+                "No logging framework detected (logging, structlog, loguru, pino, winston, SLF4J)",
+                "No logging framework detected (SLF4J, Log4j, java.util.logging)"),
             fix_hint=_wording(file_contents,
                 "Add import logging and log key decisions, errors, and LLM interactions",
                 "Add a structured logger (pino or winston) and log key decisions, errors, and LLM interactions",
-                "Add a logger (logging in Python, pino or winston in TypeScript/JavaScript) and log key decisions, errors, and LLM interactions"))]
+                "Add a logger (logging in Python, pino or winston in TypeScript/JavaScript, SLF4J in Java) and log key decisions, errors, and LLM interactions",
+                "Add SLF4J (LoggerFactory.getLogger) and log key decisions, errors, and LLM interactions"))]
     pct = len(hits) / total * 100 if total > 0 else 0
     return [CodeFinding(article=12, name="Application logging", status="pass" if pct >= 20 else "warn",
         evidence=f"Logging found in {len(hits)}/{total} files ({pct:.0f}%)")]
@@ -693,8 +807,10 @@ def _check_tracing(file_contents: dict, scan_path: str) -> List[CodeFinding]:
     ]
     combined = "|".join(patterns)
     prod_combined = "|".join(production_tracing)
-    hits = [fp for fp, content in file_contents.items() if has(combined, content, re.IGNORECASE)]
-    prod_hits = [fp for fp, content in file_contents.items() if has(prod_combined, content, re.IGNORECASE)]
+    hits = [fp for fp, content in file_contents.items()
+            if has(combined, content, re.IGNORECASE, java=_JAVA_TRACING)]
+    prod_hits = [fp for fp, content in file_contents.items()
+                 if has(prod_combined, content, re.IGNORECASE, java=_JAVA_TRACING)]
     if hits:
         evidence = f"Tracing patterns found in {len(hits)} file(s)"
         if prod_hits:
@@ -757,7 +873,7 @@ def _check_rate_limiting(file_contents: dict, scan_path: str) -> List[CodeFindin
     ]
     strong_combined = "|".join(strong_patterns)
     weak_combined = "|".join(weak_patterns)
-    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE, js=_JS_RATE_LIMIT)]
+    strong_hits = [fp for fp, content in file_contents.items() if has(strong_combined, content, re.IGNORECASE, js=_JS_RATE_LIMIT, java=_JAVA_RATE_LIMIT)]
     weak_hits = [fp for fp, content in file_contents.items() if has(weak_combined, content, re.IGNORECASE)]
     if strong_hits:
         return [CodeFinding(article=14, name="Usage limits / budget controls", status="pass",
@@ -819,7 +935,7 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
     _msg_pat = r'user_message.*=.*' + "inp" + r"ut\("
     danger_patterns = [_fstr_pat, _fmt_pat, _msg_pat]
     danger_combined = "|".join(danger_patterns)
-    danger_hits = [fp for fp, content in file_contents.items() if has(danger_combined, content, js=_JS_PROMPT_INTERPOLATION)]
+    danger_hits = [fp for fp, content in file_contents.items() if has(danger_combined, content, js=_JS_PROMPT_INTERPOLATION, java=_JAVA_PROMPT_INTERPOLATION)]
     findings = []
     if hits:
         findings.append(CodeFinding(article=15, name="Prompt injection defense", status="pass", evidence=f"Injection defense patterns found in {len(hits)} file(s)"))
@@ -844,7 +960,7 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
         r'expected_output',  # CrewAI task output spec
     ]
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_OUTPUT_VALIDATION)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_OUTPUT_VALIDATION, java=_JAVA_OUTPUT_VALIDATION)]
     if hits:
         return [CodeFinding(article=15, name="LLM output validation", status="pass", evidence=f"Output parsing/validation found in {len(hits)} file(s)")]
     return [CodeFinding(article=15, name="LLM output validation", status="warn",
@@ -852,7 +968,8 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
         fix_hint=_wording(file_contents,
             "Use output parsers (Pydantic, JSON schema) to validate LLM responses before acting on them",
             "Validate LLM responses against a schema before acting on them (Zod, generateObject, JSON schema)",
-            "Use output parsers (Pydantic, Zod, JSON schema) to validate LLM responses before acting on them"))]
+            "Use output parsers (Pydantic, Zod, JSON schema) to validate LLM responses before acting on them",
+            "Map LLM responses onto typed classes before acting on them (Spring AI .entity(), LangChain4j AI Services, JSON schema)"))]
 
 
 # ─────────────────────────────────────────────
