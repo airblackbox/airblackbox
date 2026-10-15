@@ -31,6 +31,22 @@ scanning engine shared by the CLI, the [web console](https://airblackbox.ai/cons
 and the [MCP server](https://github.com/airblackbox/air-blackbox-mcp)
 ([changelog](CHANGELOG.md)).
 
+**How it compares.** We ran AIR and three other open-source EU AI Act
+scanners (ArkForge, Systima Comply and Asqav) on the same 144 hand-labelled
+programs, in six languages and forms. In Python, TypeScript and JavaScript the
+tools are close. Most of the difference is Java, Kotlin and notebooks, which
+the others mostly cannot read, and how many code practices each one checks.
+The method, the mapping between tools, the caveats and every single verdict
+are in [eval/competitors](eval/competitors/README.md).
+
+**Your keys stay with you.** Signing keys are generated in your own process
+and never leave your machine. There is no account, no API key and no hosted
+signing service, and ML-DSA-65 post-quantum signing (with the `pqc` extra)
+runs locally too. The CLI's `comply`, `replay`, `export` and `demo` commands
+each send one anonymous usage event (counts, versions and OS, never code or
+file names); set `AIR_BLACKBOX_TELEMETRY=off` to turn it off. CI runs send
+nothing.
+
 ## Try it in five minutes
 
 When your agent does something, can someone else check what happened without
