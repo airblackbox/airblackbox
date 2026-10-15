@@ -61,6 +61,38 @@ test("evalCondition mirrors the Python tri-state", () => {
   assert.equal(evalCondition("garbage", { x: 1 }), null);
 });
 
+// Tool arguments a model wrote reach evalCondition as context values, so a
+// long input must not make number parsing quadratic.
+test("evalCondition is linear on long values", () => {
+  const start = Date.now();
+  assert.equal(evalCondition("amount > 5", { amount: "9".repeat(200_000) + "x" }), null);
+  assert.equal(evalCondition("a > " + " ".repeat(200_000) + "\nx\ny", { a: 1 }), null);
+  assert.ok(Date.now() - start < 1000, `took ${Date.now() - start} ms`);
+});
+
+const CONDITIONS: [string, Record<string, unknown>][] = [
+  ["amount > 5", { amount: "1_000" }], ["amount > 5", { amount: "1__0" }], ["amount > 5", { amount: "_1" }],
+  ["amount > 5", { amount: "inf" }], ["amount > 5", { amount: "-Infinity" }], ["amount > 5", { amount: "nan" }],
+  ["amount != 5", { amount: "NaN" }], ["amount == 5", { amount: "nan" }], ["amount > 5", { amount: "0x10" }],
+  ["amount > 5", { amount: " 7 " }], ["amount > 5", { amount: "1." }], ["amount > 5", { amount: ".5e1_0" }],
+  ["amount > 5", { amount: "" }], ["amount > 5", { amount: "." }], ["amount > 5", { amount: "1e" }],
+  ["amount >= 1e400", { amount: "inf" }], ["amount > 5", { amount: true }], ["amount > 5", { amount: null }],
+  ["amount>5", { amount: 7 }], ["amount > 5\nrest", { amount: 7 }], ["amount > 5\rx", { amount: 7 }],
+  [`region == "'EU'"`, { region: "EU" }], [`region == ""EU""`, { region: "EU" }], [`region == '"EU"'`, { region: '"EU"' }],
+  ["region != EU", { region: "US" }], ["region > EU", { region: "US" }], ["flag == True", { flag: true }],
+  ["amount > ", { amount: 1 }], ["garbage", { x: 1 }],
+];
+
+test("differential: the Python SDK evaluates conditions to the same tri-state", { skip: !hasAirSdk() && "air_blackbox SDK not importable" }, () => {
+  const out = python(`
+import json, sys
+from air_blackbox.gate.covenant import _eval_condition
+print(json.dumps([_eval_condition(c, ctx) for c, ctx in json.load(sys.stdin)]))`, JSON.stringify(CONDITIONS));
+  const theirs = JSON.parse(out) as (boolean | null)[];
+  const ours = CONDITIONS.map(([c, ctx]) => evalCondition(c, ctx));
+  CONDITIONS.forEach(([c, ctx], i) => assert.equal(ours[i], theirs[i], `${JSON.stringify(c)} with ${JSON.stringify(ctx)}`));
+});
+
 test("hash is stable and version is a string", () => {
   const c = Covenant.fromYamlString("agent: a\nversion: 2\nrules:\n  - permit: x\n");
   assert.equal(c.version, "2");

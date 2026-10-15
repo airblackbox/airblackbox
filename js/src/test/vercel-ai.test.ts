@@ -159,11 +159,13 @@ test("detailLimit 0 stores only hashes of the tool input", async () => {
   const dir = tmpdir();
   const rec = record("vercel-agent", { runsDir: dir, anchor: false });
   const t = airTools(tools(), rec, { detailLimit: 0 });
-  await (t.lookupOrder.execute as (i: unknown, o: unknown) => Promise<unknown>)({ id: "991" }, { toolCallId: "x", messages: [] });
+  // The value has letters outside hex, so it can't turn up by chance inside
+  // a hash, run id or timestamp the way a short number can.
+  await (t.lookupOrder.execute as (i: unknown, o: unknown) => Promise<unknown>)({ id: "ORDER-QZX" }, { toolCallId: "x", messages: [] });
   const r = records(dir)[0]!;
   assert.equal(r["detail"], "");
   assert.match(r["context"]["input_hash"], /^[0-9a-f]{64}$/);
-  assert.equal(JSON.stringify(r).includes("991"), false, "the input value appears nowhere in the record");
+  assert.equal(JSON.stringify(r).includes("QZX"), false, "the input value appears nowhere in the record");
 });
 
 test("a failing tool is recorded as an error", async () => {

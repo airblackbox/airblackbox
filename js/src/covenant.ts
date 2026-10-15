@@ -169,10 +169,13 @@ function optString(v: unknown): string | undefined {
  * != are meaningful and an ordering comparison is indeterminate.
  */
 export function evalCondition(condition: string, context: Context): boolean | null {
-  const m = /^(\w+)\s*(>=|<=|!=|==|>|<)\s*(.+)$/.exec(condition.trim());
+  // Python's re.match(r"(\w+)\s*(op)\s*(.+)"): anchored at the start only, and
+  // the value runs from the first non-space character to the end of the line.
+  // \s and \S don't overlap, so the match can't backtrack quadratically.
+  const m = /^(\w+)\s*(>=|<=|!=|==|>|<)\s*(\S[^\n]*)/.exec(condition.trim());
   if (!m) return null;
   const [, field, op, rawValue] = m;
-  const want = rawValue!.trim().replace(/^["']|["']$/g, "");
+  const want = stripChar(stripChar(rawValue!.trim(), '"'), "'");
   const got = context[field!];
   if (got === undefined || got === null) return null;
   const gotNum = toNumber(got);
@@ -193,15 +196,37 @@ export function evalCondition(condition: string, context: Context): boolean | nu
   return null;
 }
 
-/** Python float(x) semantics for the values a context can carry. */
+/** Python str.strip(c) for a single character. */
+function stripChar(s: string, c: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === c) start++;
+  while (end > start && s[end - 1] === c) end--;
+  return s.slice(start, end);
+}
+
+// Python float() syntax: digits may be separated by single underscores. Each
+// repetition consumes exactly one digit, so matching is linear (context values
+// can come from tool arguments a model wrote).
+const DIGITS = String.raw`\d(?:_?\d)*`;
+const DECIMAL = new RegExp(`^[+-]?(?:${DIGITS}(?:\\.(?:${DIGITS})?)?|\\.${DIGITS})(?:[eE][+-]?${DIGITS})?$`);
+const SPECIAL = /^([+-]?)(inf|infinity|nan)$/i;
+
+/**
+ * Python float(x) semantics for the values a context can carry, or null where
+ * float() would raise. NaN is a number here, as in Python: every ordering and
+ * == comparison with it is false and != is true.
+ */
 function toNumber(v: unknown): number | null {
-  if (typeof v === "number") return Number.isNaN(v) ? null : v;
+  if (typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
   if (typeof v === "string") {
     const t = v.trim();
-    if (t === "" || !/^[+-]?(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?|inf(?:inity)?|nan)$/i.test(t)) return null;
-    const n = Number(t);
-    return Number.isNaN(n) ? null : n;
+    if (DECIMAL.test(t)) return Number(t.replace(/_/g, ""));
+    const special = SPECIAL.exec(t);
+    if (!special) return null;
+    if (special[2]!.toLowerCase() === "nan") return NaN;
+    return special[1] === "-" ? -Infinity : Infinity;
   }
   return null;
 }
