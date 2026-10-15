@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `eval/competitors/`: a head-to-head of AIR Blackbox 1.17.0 against three
+  other open-source EU AI Act scanners (ArkForge, Systima Comply, Asqav) on
+  the 144-case parity corpus. Each tool is scored only on the practices it
+  claims, with the mapping, caveats and every verdict published. It also
+  found two gaps in AIR's own framework detection (LangGraph-only Python, and
+  `@openai/guardrails` in TypeScript and JavaScript).
+
 ### Fixed
 - `air-blackbox test` failed 5 of 25 on a clean install. Two assertions had
   gone stale: the compliance-engine test expected exactly six groups from a
