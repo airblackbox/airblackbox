@@ -195,7 +195,28 @@ func redactMessagesJSON(messagesRaw json.RawMessage, original, redacted string) 
 	return result
 }
 
-// filterToolsJSON keeps only tools whose function.name is in the allowed list.
+// ToolName returns a tool definition's name in any API shape: chat
+// completions nest it as function.name; the Responses API and the Anthropic
+// Messages API put it at the top level. The proxy's tool extraction and the
+// tool filter both use this, so they can never disagree about a name (if
+// they did, the filter would drop tools it was never asked to remove).
+func ToolName(toolRaw json.RawMessage) string {
+	var tool struct {
+		Name     string `json:"name"`
+		Function struct {
+			Name string `json:"name"`
+		} `json:"function"`
+	}
+	if err := json.Unmarshal(toolRaw, &tool); err != nil {
+		return ""
+	}
+	if tool.Function.Name != "" {
+		return tool.Function.Name
+	}
+	return tool.Name
+}
+
+// filterToolsJSON keeps only tools whose name is in the allowed list.
 func filterToolsJSON(toolsRaw json.RawMessage, allowed []string) json.RawMessage {
 	allowSet := make(map[string]bool, len(allowed))
 	for _, t := range allowed {
@@ -207,17 +228,9 @@ func filterToolsJSON(toolsRaw json.RawMessage, allowed []string) json.RawMessage
 		return toolsRaw
 	}
 
-	var filtered []json.RawMessage
+	filtered := []json.RawMessage{}
 	for _, toolRaw := range tools {
-		var tool struct {
-			Function struct {
-				Name string `json:"name"`
-			} `json:"function"`
-		}
-		if err := json.Unmarshal(toolRaw, &tool); err != nil {
-			continue
-		}
-		if allowSet[tool.Function.Name] {
+		if allowSet[ToolName(toolRaw)] {
 			filtered = append(filtered, toolRaw)
 		}
 	}

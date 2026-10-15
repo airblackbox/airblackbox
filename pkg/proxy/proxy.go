@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/airblackbox/gateway/pkg/guardrails"
 	"github.com/airblackbox/gateway/pkg/recorder"
 	"github.com/airblackbox/gateway/pkg/trust"
 	"github.com/airblackbox/gateway/pkg/vault"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -33,17 +33,21 @@ var upstreamClient = &http.Client{
 	Timeout: 120 * time.Second, // LLM calls can be slow; 2 min is generous but safe.
 }
 
+// DefaultAnthropicURL is where /v1/messages is forwarded when AnthropicURL is unset.
+const DefaultAnthropicURL = "https://api.anthropic.com"
+
 // Config holds proxy configuration.
 type Config struct {
-	ProviderURL string           // e.g. https://api.openai.com
-	Vault       *vault.Client    // S3 vault for content (nil = disabled)
-	Recorder    *recorder.Writer // AIR file writer (nil = disabled)
-	GatewayKey  string           // optional API key required to use the gateway
-	Guardrails  *guardrails.Config  // guardrails configuration (nil = disabled)
-	Sessions    *guardrails.Manager // session state for guardrails (nil = disabled)
-	Analytics   *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
-	AuditChain  *trust.AuditChain  // cryptographic audit chain (nil = disabled)
-	ConfigHash  string             // agent config bundle hash stamped into records ("" = unset)
+	ProviderURL  string                         // e.g. https://api.openai.com (chat completions, responses)
+	AnthropicURL string                         // upstream for /v1/messages ("" = DefaultAnthropicURL)
+	Vault        *vault.Client                  // S3 vault for content (nil = disabled)
+	Recorder     *recorder.Writer               // AIR file writer (nil = disabled)
+	GatewayKey   string                         // optional API key required to use the gateway
+	Guardrails   *guardrails.Config             // guardrails configuration (nil = disabled)
+	Sessions     *guardrails.Manager            // session state for guardrails (nil = disabled)
+	Analytics    *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
+	AuditChain   *trust.AuditChain              // cryptographic audit chain (nil = disabled)
+	ConfigHash   string                         // agent config bundle hash stamped into records ("" = unset)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -62,6 +66,17 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 		handleProxy(w, r, cfg, "/v1/responses")
+	})
+
+	// Anthropic Messages API. The Anthropic SDK sends its API key as
+	// x-api-key, so the gateway key may only come from X-Gateway-Key here:
+	// accepting x-api-key would compare (and, if it matched, forward) the
+	// wrong secret.
+	mux.HandleFunc("/v1/messages", func(w http.ResponseWriter, r *http.Request) {
+		if !authenticateGatewayHeader(w, r, cfg.GatewayKey, false) {
+			return
+		}
+		handleProxy(w, r, cfg, "/v1/messages")
 	})
 
 	mux.HandleFunc("/v1/analytics", func(w http.ResponseWriter, r *http.Request) {
@@ -96,11 +111,18 @@ func Handler(cfg Config) http.Handler {
 // authenticateGateway checks the x-gateway-key header if a key is configured.
 // Returns true if auth passes (or no key is configured), false if rejected.
 func authenticateGateway(w http.ResponseWriter, r *http.Request, gatewayKey string) bool {
+	return authenticateGatewayHeader(w, r, gatewayKey, true)
+}
+
+// authenticateGatewayHeader is authenticateGateway with control over the
+// X-Api-Key fallback, which must be off for APIs that use x-api-key as the
+// provider credential (Anthropic).
+func authenticateGatewayHeader(w http.ResponseWriter, r *http.Request, gatewayKey string, allowAPIKeyHeader bool) bool {
 	if gatewayKey == "" {
 		return true // no gateway auth configured
 	}
 	provided := r.Header.Get("X-Gateway-Key")
-	if provided == "" {
+	if provided == "" && allowAPIKeyHeader {
 		provided = r.Header.Get("X-Api-Key")
 	}
 	if subtle.ConstantTimeCompare([]byte(provided), []byte(gatewayKey)) != 1 {
@@ -130,13 +152,43 @@ func (r chatRequest) promptText() string {
 
 // chatResponse is the minimal response structure for token extraction.
 type chatResponse struct {
-	ID    string `json:"id"`
-	Model string `json:"model"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
+	ID    string     `json:"id"`
+	Model string     `json:"model"`
+	Usage *usageJSON `json:"usage"`
+}
+
+// usageJSON reads token usage in any of the three API shapes: chat
+// completions (prompt_tokens / completion_tokens / total_tokens), the
+// Responses API (input_tokens / output_tokens / total_tokens) and the
+// Anthropic Messages API (input_tokens / output_tokens, no total; cache
+// reads and writes are counted separately and are part of the input).
+type usageJSON struct {
+	PromptTokens             int `json:"prompt_tokens"`
+	CompletionTokens         int `json:"completion_tokens"`
+	TotalTokens              int `json:"total_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+}
+
+func (u *usageJSON) tokens() recorder.Tokens {
+	if u == nil {
+		return recorder.Tokens{}
+	}
+	prompt := u.PromptTokens
+	if prompt == 0 {
+		prompt = u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
+	}
+	completion := u.CompletionTokens
+	if completion == 0 {
+		completion = u.OutputTokens
+	}
+	total := u.TotalTokens
+	if total == 0 {
+		total = prompt + completion
+	}
+	return recorder.Tokens{Prompt: prompt, Completion: completion, Total: total}
 }
 
 func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint string) {
@@ -180,7 +232,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 
 	// Determine provider from model name.
-	provider := inferProvider(req.Model, cfg.ProviderURL)
+	provider := inferProvider(req.Model, upstreamBase(cfg, endpoint))
 	span.SetAttributes(
 		attribute.String("gen_ai.system", provider),
 		attribute.String("gen_ai.provider.name", provider),
@@ -287,7 +339,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 
 	// Forward to upstream provider.
-	upstream := cfg.ProviderURL + endpoint
+	upstream := upstreamBase(cfg, endpoint) + endpoint
 	proxyReq, err := http.NewRequestWithContext(ctx, "POST", upstream, bytes.NewReader(reqBody))
 	if err != nil {
 		http.Error(w, `{"error":"failed to create upstream request"}`, http.StatusInternalServerError)
@@ -298,6 +350,15 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	proxyReq.Header.Set("Content-Type", "application/json")
 	if auth := r.Header.Get("Authorization"); auth != "" {
 		proxyReq.Header.Set("Authorization", auth)
+	}
+	if endpoint == "/v1/messages" {
+		// Anthropic's credential and protocol headers. Never the gateway key:
+		// /v1/messages authenticates the gateway with X-Gateway-Key only.
+		for _, h := range []string{"X-Api-Key", "Anthropic-Version", "Anthropic-Beta"} {
+			if v := r.Header.Get(h); v != "" {
+				proxyReq.Header.Set(h, v)
+			}
+		}
 	}
 
 	resp, err := upstreamClient.Do(proxyReq)
@@ -321,7 +382,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 
 	// Set run_id header early so the client gets it even for streaming responses.
 	w.Header().Set("x-run-id", runID)
-	for _, h := range []string{"x-request-id", "openai-organization"} {
+	for _, h := range []string{"x-request-id", "openai-organization", "request-id"} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
@@ -437,11 +498,7 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	var tokens recorder.Tokens
 	var respParsed chatResponse
 	if err := json.Unmarshal(respBody, &respParsed); err == nil && respParsed.Usage != nil {
-		tokens = recorder.Tokens{
-			Prompt:     respParsed.Usage.PromptTokens,
-			Completion: respParsed.Usage.CompletionTokens,
-			Total:      respParsed.Usage.TotalTokens,
-		}
+		tokens = respParsed.Usage.tokens()
 		span.SetAttributes(
 			attribute.Int("gen_ai.usage.prompt_tokens", tokens.Prompt),
 			attribute.Int("gen_ai.usage.completion_tokens", tokens.Completion),
@@ -513,11 +570,7 @@ func backgroundRecord(cfg Config, runID string, span trace.Span,
 	if respBody != nil {
 		var respParsed chatResponse
 		if err := json.Unmarshal(respBody, &respParsed); err == nil && respParsed.Usage != nil {
-			tokens = recorder.Tokens{
-				Prompt:     respParsed.Usage.PromptTokens,
-				Completion: respParsed.Usage.CompletionTokens,
-				Total:      respParsed.Usage.TotalTokens,
-			}
+			tokens = respParsed.Usage.tokens()
 		} else {
 			// Try extracting from SSE stream.
 			tokens = extractStreamTokens(respBody)
@@ -543,35 +596,86 @@ func backgroundRecord(cfg Config, runID string, span trace.Span,
 	}
 }
 
-// extractStreamTokens attempts to extract token usage from the last SSE data chunk.
-// OpenAI includes usage when the request has stream_options.include_usage=true.
+// extractStreamTokens extracts token usage from an SSE stream in any of the
+// three API shapes:
+//   - chat completions: usage on the last data chunk (when the request set
+//     stream_options.include_usage=true)
+//   - Responses API: response.usage on the response.completed event
+//   - Anthropic Messages: input tokens on message_start's message.usage,
+//     the final output count on the last message_delta's usage
 func extractStreamTokens(data []byte) recorder.Tokens {
-	lines := strings.Split(string(data), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(line, "data: ") {
+	var anthropicIn *usageJSON
+	var anthropicOut *usageJSON
+	var last recorder.Tokens
+	found := false
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
-		payload := strings.TrimPrefix(line, "data: ")
-		if payload == "[DONE]" {
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" || payload == "[DONE]" {
 			continue
 		}
 		var chunk struct {
-			Usage *struct {
-				PromptTokens     int `json:"prompt_tokens"`
-				CompletionTokens int `json:"completion_tokens"`
-				TotalTokens      int `json:"total_tokens"`
-			} `json:"usage"`
+			Type    string     `json:"type"`
+			Usage   *usageJSON `json:"usage"`
+			Message *struct {
+				Usage *usageJSON `json:"usage"`
+			} `json:"message"`
+			Response *struct {
+				Usage *usageJSON `json:"usage"`
+			} `json:"response"`
 		}
-		if err := json.Unmarshal([]byte(payload), &chunk); err == nil && chunk.Usage != nil {
-			return recorder.Tokens{
-				Prompt:     chunk.Usage.PromptTokens,
-				Completion: chunk.Usage.CompletionTokens,
-				Total:      chunk.Usage.TotalTokens,
-			}
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			continue
+		}
+		switch {
+		case chunk.Type == "message_start" && chunk.Message != nil && chunk.Message.Usage != nil:
+			anthropicIn = chunk.Message.Usage
+		case chunk.Type == "message_delta" && chunk.Usage != nil:
+			anthropicOut = chunk.Usage
+		case chunk.Response != nil && chunk.Response.Usage != nil:
+			last, found = chunk.Response.Usage.tokens(), true
+		case chunk.Usage != nil:
+			last, found = chunk.Usage.tokens(), true
 		}
 	}
+	if anthropicIn != nil || anthropicOut != nil {
+		merged := &usageJSON{}
+		if anthropicIn != nil {
+			*merged = *anthropicIn
+		}
+		if anthropicOut != nil {
+			// message_delta carries the cumulative output count; when it also
+			// repeats input counts, they match message_start's.
+			merged.OutputTokens = anthropicOut.OutputTokens
+			if anthropicOut.InputTokens > 0 {
+				merged.InputTokens = anthropicOut.InputTokens
+			}
+		}
+		return merged.tokens()
+	}
+	if found {
+		return last
+	}
 	return recorder.Tokens{}
+}
+
+// upstreamBase is where an endpoint is forwarded: /v1/messages to the
+// Anthropic upstream, everything else to ProviderURL.
+func upstreamBase(cfg Config, endpoint string) string {
+	if endpoint == "/v1/messages" {
+		return anthropicURL(cfg)
+	}
+	return cfg.ProviderURL
+}
+
+func anthropicURL(cfg Config) string {
+	if cfg.AnthropicURL != "" {
+		return strings.TrimRight(cfg.AnthropicURL, "/")
+	}
+	return DefaultAnthropicURL
 }
 
 func vaultStore(ctx context.Context, vc *vault.Client, runID, name string, data []byte) (vault.Ref, error) {
@@ -709,23 +813,20 @@ func extractResponsesInput(input json.RawMessage) string {
 	return ""
 }
 
-// extractToolNames pulls tool/function names from the request body.
+// extractToolNames pulls tool names from the request body. Chat completions
+// nest the name under "function"; the Responses API and the Anthropic
+// Messages API put it at the top level of each tool.
 func extractToolNames(body []byte) []string {
 	var req struct {
-		Tools []struct {
-			Function struct {
-				Name string `json:"name"`
-			} `json:"function"`
-		} `json:"tools"`
-		ToolChoice interface{} `json:"tool_choice"`
+		Tools []json.RawMessage `json:"tools"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil
 	}
 	var names []string
-	for _, t := range req.Tools {
-		if t.Function.Name != "" {
-			names = append(names, t.Function.Name)
+	for _, raw := range req.Tools {
+		if name := guardrails.ToolName(raw); name != "" {
+			names = append(names, name)
 		}
 	}
 	return names
@@ -769,7 +870,6 @@ func inferProvider(model, providerURL string) string {
 		return "unknown"
 	}
 }
-
 
 // handleAnalytics returns per-model performance stats as JSON.
 // GET /v1/analytics — returns all models.
@@ -831,8 +931,8 @@ func handleAudit(w http.ResponseWriter, r *http.Request, cfg Config) {
 	valid, brokenAt, verifyErr := cfg.AuditChain.Verify()
 
 	result := map[string]interface{}{
-		"chain_length":   cfg.AuditChain.Len(),
-		"chain_valid":    valid,
+		"chain_length":    cfg.AuditChain.Len(),
+		"chain_valid":     valid,
 		"chain_broken_at": brokenAt,
 	}
 	if verifyErr != nil {
