@@ -6,7 +6,7 @@ run.
 
 This is the TypeScript side of [AIR Blackbox](https://github.com/airblackbox/airblackbox).
 It writes the same records, receipts and `.air-evidence` bundles as the
-Python SDK, byte for byte. The Python verifier (`air-blackbox verify`) and the
+Python SDK, byte for byte. The Python verifier (`air-evidence verify`) and the
 browser verifier at <https://airblackbox.ai/verify> read bundles from either
 language, and a Node process and a Python process can take turns writing one
 chain.
@@ -54,7 +54,7 @@ tool body never runs.
 ### Vercel AI SDK
 
 ```ts
-import { generateText, wrapLanguageModel } from "ai";
+import { generateText, stepCountIs, wrapLanguageModel } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { record } from "air-blackbox";
 import { airMiddleware, airTools } from "air-blackbox/vercel-ai";
@@ -63,7 +63,7 @@ const rec = record("support-agent", { covenant: "covenant.yaml" });
 const model = wrapLanguageModel({ model: openai("gpt-4o"), middleware: airMiddleware(rec) });
 const tools = airTools({ lookupOrder, issueRefund }, rec, { enforce: true });
 
-await generateText({ model, tools, prompt: "Refund order 991" });
+await generateText({ model, tools, prompt: "Refund order 991", stopWhen: stepCountIs(5) });
 await rec.export();
 ```
 
@@ -74,6 +74,7 @@ model as a tool error, so the model can explain instead of the run crashing.
 
 ```ts
 import { Agent, run, tool } from "@openai/agents";
+import { z } from "zod";
 import { record } from "air-blackbox";
 import { installAirTracing, airTool } from "air-blackbox/openai-agents";
 
@@ -90,11 +91,15 @@ await run(new Agent({ name: "support", tools: [issueRefund] }), "Refund order 99
 
 The tracing processor observes after the fact, so on its own it records a
 forbidden tool as having run against policy. Wrap a tool's `execute` with
-`airTool` to stop it beforehand. The processor reads tool arguments from the
-SDK's spans, which carry them by default; if you set
-`traceIncludeSensitiveData: false`, records keep tool names and outcomes but
-covenant rules that test argument values cannot see them. The SDK disables
-tracing when `NODE_ENV=test` unless you call `setTracingDisabled(false)`.
+`airTool` to stop it beforehand. `airTool` returns the refusal to the model
+as the tool's result, so the model can explain it; a thrown error would
+reach the model as the SDK's generic "Please try again".
+
+The processor reads tool arguments from the SDK's spans, which carry them by
+default; if you set `traceIncludeSensitiveData: false`, records keep tool
+names and outcomes but covenant rules that test argument values cannot see
+them. The SDK disables tracing when `NODE_ENV=test` unless you call
+`setTracingDisabled(false)`.
 
 ### LangChain.js and LangGraph.js
 
@@ -140,6 +145,10 @@ rules:
 Precedence is forbid, then require_approval, then permit, and anything not
 named is forbidden. A guard that cannot be evaluated (a missing field, a
 non-number compared with `>`) never grants and never lifts a forbid.
+
+The framework hooks have no one to ask, so with `enforce` they block a
+`require_approval` action the same way as a forbidden one. To put a person
+in the loop, use the gate below with `onApprovalNeeded`.
 
 For two-phase receipts (authorize, then seal with the result), use the gate
 directly:

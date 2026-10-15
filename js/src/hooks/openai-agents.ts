@@ -20,7 +20,12 @@
 import type { Span, Trace, TracingProcessor } from "@openai/agents";
 
 import type { Recorder } from "../recorder.js";
-import { ActionGate } from "./common.js";
+import { ActionGate, CovenantViolation } from "./common.js";
+
+// Function spans of calls airTool refused, per recorder. airTool records the
+// blocked attempt itself, so the processor skips these spans rather than
+// record the refusal a second time as a call that ran.
+const refusedSpans = new WeakMap<Recorder, Set<string>>();
 
 export interface OpenAiAgentsOptions {
   detailLimit?: number;
@@ -63,6 +68,7 @@ export class AirTraceProcessor implements TracingProcessor {
     const ms = durationMs(span);
     switch (d.type) {
       case "function": {
+        if (refusedSpans.get(this.gate.recorder)?.delete(span.spanId)) return;
         const input = parseMaybeJson(d["input"]);
         const output = parseMaybeJson(d["output"]);
         this.gate.after({
@@ -178,19 +184,42 @@ export async function installAirTracing(recorder: Recorder, options: OpenAiAgent
  *     tool({ name: "issue_refund", execute: airTool("issue_refund", rec, async (args) => ...) })
  *
  * The tracing processor records the execution; this only stops it when the
- * covenant says so, recording the blocked attempt.
+ * covenant says so, recording the blocked attempt. The refusal is returned
+ * to the model as the tool's result: thrown, it would reach the model as the
+ * SDK's generic "An error occurred while running the tool. Please try
+ * again.", which invites the model to retry.
  */
 export function airTool<A extends unknown[], R>(
   name: string,
   recorder: Recorder,
   execute: (...args: A) => R,
   options: { detailLimit?: number } = {},
-): (...args: A) => R {
+): (...args: A) => R | Promise<string> {
   const gate = new ActionGate(recorder, { framework: "openai-agents", enforce: true, detailLimit: options.detailLimit });
-  return (...args: A): R => {
-    gate.before(name, args[0]);
+  return (...args: A): R | Promise<string> => {
+    try {
+      gate.before(name, args[0]);
+    } catch (e) {
+      if (!(e instanceof CovenantViolation)) throw e;
+      return refuse(recorder, e);
+    }
     return execute(...args);
   };
+}
+
+async function refuse(recorder: Recorder, violation: CovenantViolation): Promise<string> {
+  try {
+    const { getCurrentSpan } = await import("@openai/agents");
+    const id = getCurrentSpan()?.spanId;
+    if (id && id !== "no-op") {
+      let ids = refusedSpans.get(recorder);
+      if (!ids) refusedSpans.set(recorder, (ids = new Set()));
+      ids.add(id);
+    }
+  } catch {
+    // No tracing to de-duplicate against.
+  }
+  return violation.message;
 }
 
 export { CovenantViolation } from "./common.js";

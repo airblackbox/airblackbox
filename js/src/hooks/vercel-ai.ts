@@ -50,6 +50,15 @@ function tokens(usage: Usage | undefined): { promptTokens?: number; completionTo
   return out;
 }
 
+/**
+ * The AI SDK names providers by API ("openai.chat", "openai.responses",
+ * "anthropic.messages"); records use the provider alone, as the gateway and
+ * the other hooks do.
+ */
+function providerName(provider: string): string {
+  return provider.split(".")[0] || provider;
+}
+
 /** Middleware that records each generate/stream call as an `llm_call`. */
 export function airMiddleware(recorder: Recorder, options: VercelAiOptions = {}): LanguageModelMiddleware {
   const gate = new ActionGate(recorder, { framework: "vercel-ai", ...options });
@@ -60,7 +69,7 @@ export function airMiddleware(recorder: Recorder, options: VercelAiOptions = {})
         const result = await doGenerate();
         gate.model({
           model: model.modelId,
-          provider: model.provider,
+          provider: providerName(model.provider),
           ...tokens(result.usage),
           durationMs: elapsedMs(start),
           status: "success",
@@ -68,7 +77,7 @@ export function airMiddleware(recorder: Recorder, options: VercelAiOptions = {})
         });
         return result;
       } catch (e) {
-        gate.model({ model: model.modelId, provider: model.provider, durationMs: elapsedMs(start), status: "error", error: errorText(e) });
+        gate.model({ model: model.modelId, provider: providerName(model.provider), durationMs: elapsedMs(start), status: "error", error: errorText(e) });
         throw e;
       }
     },
@@ -78,7 +87,7 @@ export function airMiddleware(recorder: Recorder, options: VercelAiOptions = {})
       try {
         result = await doStream();
       } catch (e) {
-        gate.model({ model: model.modelId, provider: model.provider, durationMs: elapsedMs(start), status: "error", error: errorText(e), stream: true });
+        gate.model({ model: model.modelId, provider: providerName(model.provider), durationMs: elapsedMs(start), status: "error", error: errorText(e), stream: true });
         throw e;
       }
       let usage: Usage | undefined;
@@ -94,7 +103,7 @@ export function airMiddleware(recorder: Recorder, options: VercelAiOptions = {})
         flush() {
           gate.model({
             model: model.modelId,
-            provider: model.provider,
+            provider: providerName(model.provider),
             ...tokens(usage),
             durationMs: elapsedMs(start),
             status: failed ? "error" : "success",

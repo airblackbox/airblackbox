@@ -133,7 +133,7 @@ export class Recorder {
 
   /**
    * The short identity an auditor pins, e.g. `ed25519:10ba682c8ad13513`:
-   * what `air-blackbox verify --expect-key` and the browser verifier show.
+   * what `air-evidence verify --expect-key` and the browser verifier show.
    */
   get fingerprint(): string {
     const pub = this.publicKeyHex;

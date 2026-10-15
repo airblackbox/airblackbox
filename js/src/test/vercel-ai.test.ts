@@ -65,7 +65,7 @@ test("middleware records generate calls with tokens and tool-call names; tools r
   assert.deepEqual(recs.map((r) => r["type"]), ["llm_call", "agent_action", "llm_call"]);
   assert.equal(recs[0]!["framework"], "vercel-ai");
   assert.equal(recs[0]!["model"], "gpt-4o-mini");
-  assert.equal(recs[0]!["provider"], "openai.chat");
+  assert.equal(recs[0]!["provider"], "openai", "the AI SDK's \"openai.chat\" is recorded as the provider alone");
   assert.deepEqual(recs[0]!["tokens"], { prompt: 12, completion: 7, total: 19 });
   assert.deepEqual(recs[0]!["tool_calls"], ["lookupOrder"]);
   assert.equal(recs[1]!["action"], "lookupOrder");

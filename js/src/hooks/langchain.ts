@@ -69,6 +69,15 @@ function providerFrom(llm: Serialized): string {
 }
 
 function usageFrom(output: LLMResult): { promptTokens?: number; completionTokens?: number; totalTokens?: number } {
+  // LangChain's own usage_metadata first: it is normalised across providers
+  // and counts cached prompt tokens, which Anthropic's raw input_tokens
+  // (what llmOutput carries) leaves out.
+  const gen = output.generations?.[0]?.[0] as { message?: { usage_metadata?: Record<string, unknown> } } | undefined;
+  const um = gen?.message?.usage_metadata;
+  if (um) {
+    const n = (k: string): number | undefined => (typeof um[k] === "number" ? (um[k] as number) : undefined);
+    return { promptTokens: n("input_tokens"), completionTokens: n("output_tokens"), totalTokens: n("total_tokens") };
+  }
   const lo = (output.llmOutput ?? {}) as Record<string, unknown>;
   const tu = (lo["tokenUsage"] ?? lo["usage"] ?? lo["token_usage"]) as Record<string, unknown> | undefined;
   if (tu) {
@@ -77,12 +86,6 @@ function usageFrom(output: LLMResult): { promptTokens?: number; completionTokens
     const completion = n("completionTokens") ?? n("completion_tokens") ?? n("output_tokens") ?? n("outputTokens");
     const total = n("totalTokens") ?? n("total_tokens");
     if (prompt !== undefined || completion !== undefined || total !== undefined) return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
-  }
-  const gen = output.generations?.[0]?.[0] as { message?: { usage_metadata?: Record<string, unknown> } } | undefined;
-  const um = gen?.message?.usage_metadata;
-  if (um) {
-    const n = (k: string): number | undefined => (typeof um[k] === "number" ? (um[k] as number) : undefined);
-    return { promptTokens: n("input_tokens"), completionTokens: n("output_tokens"), totalTokens: n("total_tokens") };
   }
   return {};
 }

@@ -2,7 +2,7 @@
  * `.air-evidence` bundle v1: the signed, self-verifying export.
  *
  * Layout and manifest are the Python SDK's, member for member, so the
- * Python verifier (`air-blackbox verify`) and the browser verifier at
+ * Python verifier (`air-evidence verify`) and the browser verifier at
  * https://airblackbox.ai/verify read bundles from either SDK:
  *
  *     manifest.json                 counts, period, anchor, per-file digests, signature

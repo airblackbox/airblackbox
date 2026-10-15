@@ -94,6 +94,8 @@ test("a real run(): tool executions and model calls land in the chain; airTool b
   setTraceProcessors([]);
   assert.equal(result.finalOutput, "I could not issue that refund.");
   assert.equal(refunded, false, "the forbidden tool body never ran");
+  const refusal = result.history.find((i) => i.type === "function_call_result" && i.callId === "c2");
+  assert.match(JSON.stringify(refusal), /issue_refund\\" is forbidden by the covenant and was not run/, "the model is told why, not asked to retry");
 
   const recs = records(dir);
   const actions = recs.filter((r) => r["type"] === "agent_action");
@@ -101,21 +103,22 @@ test("a real run(): tool executions and model calls land in the chain; airTool b
   assert.ok(lookup, "the permitted tool's execution is recorded");
   assert.equal(lookup["covenant_decision"], "permit");
   assert.ok(lookup["context"]["input_hash"], "tool arguments reach the processor (SDK default traceIncludeSensitiveData)");
-  assert.ok(actions.some((r) => r["action"] === "issue_refund" && r["status"] === "blocked"), "the blocked attempt is recorded");
+  const refunds = actions.filter((r) => r["action"] === "issue_refund");
+  assert.deepEqual(refunds.map((r) => r["status"]), ["blocked"], "the blocked attempt is recorded once, and not also as a call that ran");
   assert.ok(recs.some((r) => r["type"] === "agent_run" && r["agent"] === "support"));
   assert.equal(rec.verify().intact, true);
 });
 
-test("airTool enforces the covenant before the tool body runs", () => {
+test("airTool enforces the covenant before the tool body runs", async () => {
   const dir = tmpdir();
   const rec = record("agents-sdk", { runsDir: dir, anchor: false, covenant: Covenant.fromYamlString("agent: a\nrules:\n  - permit: lookup_order\n") });
-  let ran = false;
-  const ok = airTool("lookup_order", rec, async (_args: { id: string }) => { ran = true; return "x"; });
-  const forbidden = airTool("delete_records", rec, async () => { ran = true; return "x"; });
-  assert.doesNotThrow(() => ok({ id: "1" }));
-  assert.throws(() => forbidden(), (e: unknown) => e instanceof CovenantViolation);
+  const ran: string[] = [];
+  const ok = airTool("lookup_order", rec, async (_args: { id: string }) => { ran.push("lookup_order"); return "x"; });
+  const forbidden = airTool("delete_records", rec, async () => { ran.push("delete_records"); return "x"; });
+  assert.equal(await ok({ id: "1" }), "x");
+  assert.equal(await forbidden(), new CovenantViolation("delete_records", "forbid").message);
+  assert.deepEqual(ran, ["lookup_order"]);
   const recs = records(dir);
   assert.equal(recs.length, 1, "only the blocked attempt is recorded here; the processor records executions");
   assert.equal(recs[0]!["status"], "blocked");
-  assert.equal(ran, true);
 });

@@ -81,3 +81,17 @@ test("a tool error is recorded as an error", async () => {
   assert.equal(r["status"], "error");
   assert.match(r["context"]["error"], /kaboom/);
 });
+
+// With prompt caching, Anthropic's raw usage (llmOutput) counts only the
+// uncached prompt tokens; LangChain's usage_metadata counts them all.
+test("token counts come from usage_metadata, which includes cached prompt tokens", () => {
+  const dir = tmpdir();
+  const rec = record("lc-agent", { runsDir: dir, anchor: false });
+  const handler = new AirCallbackHandler(rec);
+  handler.handleChatModelStart({ lc: 1, type: "constructor", id: ["langchain", "chat_models", "anthropic", "ChatAnthropic"], kwargs: { model: "claude-sonnet-4-5" } }, [], "run-1");
+  handler.handleLLMEnd({
+    generations: [[{ text: "", message: { usage_metadata: { input_tokens: 47, output_tokens: 17, total_tokens: 64, input_token_details: { cache_read: 5 } } } } as never]],
+    llmOutput: { usage: { input_tokens: 42, output_tokens: 17, cache_creation_input_tokens: 0, cache_read_input_tokens: 5 } },
+  }, "run-1");
+  assert.deepEqual(records(dir)[0]!["tokens"], { prompt: 47, completion: 17, total: 64 });
+});
