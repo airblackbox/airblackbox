@@ -1531,10 +1531,19 @@ def test(gateway, verbose):
     start_time = time.time()
 
     def _run_test(name, fn):
-        """Run a single test, catch exceptions, record result."""
+        """Run a single test, catch exceptions, record result.
+
+        A test returns (True, detail), (False, detail), or (None, detail)
+        for "could not run here" - the gateway tests use that when nothing
+        is listening, which is the normal state of a fresh install and must
+        not read as a failure.
+        """
         try:
             passed, detail = fn()
             results.append({"name": name, "passed": passed, "detail": detail})
+            if passed is None:
+                console.print(f"  [yellow]○[/]  {name}  [dim]skipped: {detail}[/]")
+                return
             icon = "[green]✅[/]" if passed else "[red]❌[/]"
             console.print(f"  {icon} {name}")
             if verbose and detail:
@@ -1653,13 +1662,19 @@ def test(gateway, verbose):
             recent_runs=[{"run_id": "test-1", "model": "gpt-4o", "timestamp": "2026-03-13", "status": "success"}]
         )
         with tempfile.TemporaryDirectory() as tmpdir:
-            articles, _, _, _ = run_all_checks(status, tmpdir)
-            assert len(articles) == 6, f"Should have 6 articles, got {len(articles)}"
+            # Scan real code, not an empty directory: the code-level groups
+            # (GDPR among them) only appear when there is something to read.
+            with open(os.path.join(tmpdir, "agent.py"), "w") as f:
+                f.write("import openai\nclient = openai.OpenAI()\n")
+            articles, _, _, _ = run_all_checks(status, tmpdir, standard="eu")
+            # EU AI Act articles carry integer numbers; GDPR and the US
+            # groups carry string keys and come alongside.
+            eu = [a["number"] for a in articles if isinstance(a["number"], int)]
+            assert eu == [9, 10, 11, 12, 14, 15], f"Wrong EU articles: {eu}"
+            assert any(a["number"] == "GDPR" for a in articles), "GDPR group missing from an EU scan"
             total_checks = sum(len(a["checks"]) for a in articles)
             assert total_checks > 0, "Should have checks"
-            article_nums = [a["number"] for a in articles]
-            assert article_nums == [9, 10, 11, 12, 14, 15], f"Wrong articles: {article_nums}"
-            return True, f"6 articles, {total_checks} checks executed"
+            return True, f"6 EU articles + GDPR, {total_checks} checks executed"
 
     _run_test("Compliance engine (Articles 9-15)", test_compliance_engine)
 
@@ -1758,19 +1773,26 @@ def test(gateway, verbose):
     def test_scanner_hitl_patterns():
         """Verify scanner detects HITL patterns from multiple frameworks."""
         from air_blackbox.compliance.code_scanner import scan_codebase
+        # CrewAI's human-oversight idiom is human_input=True on a Task.
+        # allow_delegation=True on an Agent is agent-to-agent delegation and
+        # must NOT count (a community-reported false positive); the earlier
+        # version of this test used it as the CrewAI fixture and failed
+        # once the scanner was fixed.
         patterns_to_test = [
-            ("haystack_hitl.py", "confirmation_strategy = 'always_ask'\n"),
-            ("crewai_hitl.py", "agent = Agent(allow_delegation=True)\n"),
-            ("langgraph_hitl.py", "workflow.add_node('human', interrupt_before=['action'])\n"),
+            ("haystack_hitl.py", "confirmation_strategy = 'always_ask'\n", "pass"),
+            ("crewai_hitl.py", "task = Task(description='review', agent=reviewer, human_input=True)\n", "pass"),
+            ("crewai_delegation.py", "agent = Agent(allow_delegation=True)\n", "warn"),
+            ("langgraph_hitl.py", "workflow.add_node('human', interrupt_before=['action'])\n", "pass"),
         ]
-        for fname, content in patterns_to_test:
+        for fname, content, expected in patterns_to_test:
             with tempfile.TemporaryDirectory() as tmpdir:
                 with open(os.path.join(tmpdir, fname), "w") as f:
                     f.write(content)
                 findings = scan_codebase(tmpdir)
                 hitl = [f for f in findings if f.name == "Human-in-the-loop patterns"]
-                assert len(hitl) == 1 and hitl[0].status == "pass", f"HITL should pass for {fname}, got {hitl[0].status if hitl else 'none'}"
-        return True, "Haystack, CrewAI, LangGraph HITL patterns all detected"
+                got = hitl[0].status if hitl else "none"
+                assert len(hitl) == 1 and got == expected, f"HITL should be {expected} for {fname}, got {got}"
+        return True, "Haystack, CrewAI, LangGraph HITL detected; CrewAI delegation correctly not counted"
 
     _run_test("Scanner: HITL patterns (Haystack, CrewAI, LangGraph)", test_scanner_hitl_patterns)
 
@@ -1921,8 +1943,7 @@ def test(gateway, verbose):
         status = client.get_status()
         if status.reachable:
             return True, f"Gateway reachable at {gateway}"
-        else:
-            return False, f"Gateway not reachable at {gateway} (start with: docker compose up)"
+        return None, f"no gateway at {gateway} (start one with: docker compose up)"
 
     _run_test("Gateway connectivity", test_gateway_health)
 
@@ -1936,7 +1957,7 @@ def test(gateway, verbose):
                 return True, f"Audit endpoint OK - chain length: {chain.get('length', 0)}, intact: {chain.get('intact', False)}"
             return False, f"Audit endpoint returned {r.status_code}"
         except Exception:
-            return False, f"Audit endpoint not reachable (gateway may not be running)"
+            return None, f"no gateway at {gateway}"
 
     _run_test("Gateway audit endpoint", test_gateway_audit_endpoint)
 
@@ -1952,43 +1973,36 @@ def test(gateway, verbose):
                 return True, "Proxy reached upstream (401 = API key needed, but proxy works)"
             return False, f"Proxy returned {r.status_code}"
         except Exception:
-            return False, "Proxy not reachable (gateway may not be running)"
+            return None, f"no gateway at {gateway}"
 
     _run_test("Gateway proxy forwarding", test_gateway_proxy)
 
     # ── Summary ──────────────────────────────────────────────────────
     elapsed = int((time.time() - start_time) * 1000)
     total = len(results)
-    passed = sum(1 for r in results if r["passed"])
-    failed = total - passed
+    passed = sum(1 for r in results if r["passed"] is True)
+    skipped = [r for r in results if r["passed"] is None]
+    failures = [r for r in results if r["passed"] is False]
+    ran = total - len(skipped)
 
     console.print()
-    if failed == 0:
-        console.print(Panel(
-            f"[bold green]{passed}/{total}[/] tests passing in {elapsed}ms\n\n"
-            f"Your AIR Blackbox stack is healthy.",
-            title="[bold green]All Tests Passed[/]",
-            border_style="green",
-        ))
+    if failures:
+        lines = f"[bold red]{len(failures)}[/] test(s) failed out of {ran} run ({elapsed}ms)\n"
+        for r in failures:
+            lines += f"\n  [red]●[/] {r['name']}: {r['detail']}"
+        if skipped:
+            lines += f"\n\n  [dim]{len(skipped)} skipped: {skipped[0]['detail']}[/]"
+        console.print(Panel(lines, title="[bold red]Tests Failed[/]", border_style="red"))
+        console.print()
+        # A self-test that reports failure and exits 0 cannot gate anything.
+        raise SystemExit(1)
+    body = f"[bold green]{passed}/{ran}[/] tests passing in {elapsed}ms\n\n"
+    if skipped:
+        body += (f"SDK tests: [bold green]all passing[/]\n"
+                 f"Gateway tests: [bold yellow]{len(skipped)} skipped[/] ({skipped[0]['detail']})")
     else:
-        # Separate SDK failures from gateway failures (gateway not running is expected)
-        sdk_failures = [r for r in results if not r["passed"] and "Gateway" not in r["name"] and "audit endpoint" not in r["name"] and "Proxy" not in r["name"]]
-        gw_failures = [r for r in results if not r["passed"] and r not in sdk_failures]
-
-        if sdk_failures:
-            lines = f"[bold red]{failed}[/] test(s) failed out of {total} ({elapsed}ms)\n"
-            for r in sdk_failures:
-                lines += f"\n  [red]●[/] {r['name']}: {r['detail']}"
-            console.print(Panel(lines, title="[bold red]Tests Failed[/]", border_style="red"))
-        else:
-            console.print(Panel(
-                f"[bold green]{passed}/{total}[/] tests passing in {elapsed}ms\n\n"
-                f"SDK tests: [bold green]all passing[/]\n"
-                f"Gateway tests: [bold yellow]{len(gw_failures)} skipped[/] (gateway not running)\n\n"
-                f"[dim]Start gateway with: docker compose up[/]",
-                title="[bold green]SDK Tests Passed[/]",
-                border_style="green",
-            ))
+        body += "Your AIR Blackbox stack is healthy."
+    console.print(Panel(body, title="[bold green]All Tests Passed[/]", border_style="green"))
     console.print()
 
 
