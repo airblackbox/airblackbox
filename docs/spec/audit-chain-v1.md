@@ -132,7 +132,12 @@ every `,` and `:`, non-ASCII characters escaped as lowercase `\uXXXX` (astral
 code points as surrogate pairs), and integers preserved without float
 conversion. The Go gateway's `pkg/recorder/canonical.go` is a conforming
 implementation, locked down against Python-generated golden vectors in
-`pkg/recorder/canonical_test.go`.
+`pkg/recorder/canonical_test.go`. The TypeScript package's
+`js/src/canonical.ts` is another, checked in CI against Python on randomly
+generated documents. JavaScript numbers have no int/float distinction, so it
+writes every integral value below 1e16 as an integer and everything else in
+Python's float repr, and writes record files with the same number forms it
+hashed.
 
 Pseudocode:
 

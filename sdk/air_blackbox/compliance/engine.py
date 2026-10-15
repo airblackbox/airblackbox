@@ -104,9 +104,13 @@ def _bias_checks(scan_path: str) -> list[dict]:
 
 
 #: Runtime-check advice for projects with no Python: the trust layers are pip
-#: packages, but the gateway is an OpenAI-compatible proxy any SDK can use.
-GATEWAY_HINT_JS = ("Start the AIR gateway (docker compose up) and point your SDK client's "
-                   "base URL at http://localhost:8080/v1")
+#: packages. TypeScript and JavaScript have their own recorder on npm; the
+#: gateway is a proxy any SDK can use (OpenAI-compatible routes plus the
+#: Anthropic Messages API).
+GATEWAY_HINT_JS = ("TypeScript/JavaScript: npm install air-blackbox (records tool calls and "
+                   "enforces a covenant). Any language: start the AIR gateway (docker compose up) "
+                   "and point your SDK client's base URL at http://localhost:8080/v1 "
+                   "(Anthropic SDK: http://localhost:8080)")
 
 
 def _runtime_hint(rec_pkg: str, js_only: bool) -> str:

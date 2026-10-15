@@ -71,6 +71,60 @@ jobs:
       - name: Test SDK (post-quantum)
         run: PYTHONPATH=sdk python -m pytest tests/ sdk/tests/ -q
 
+  # The TypeScript package. Its differential tests check that the Python SDK
+  # verifies what it writes and vice versa, so the SDK is installed and
+  # AIR_REQUIRE_PYTHON turns a missing Python into a failure, not a skip.
+  js:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the Python SDK (for differential tests)
+        working-directory: .
+        run: pip install -e .
+      - run: npm ci
+      - name: Test
+        env:
+          AIR_PYTHON: python
+          AIR_REQUIRE_PYTHON: "1"
+          PYTHONPATH: ${{ github.workspace }}/sdk
+        run: npm test
+
+  # The oldest framework majors the peer ranges claim, run through the hooks.
+  js-compat:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: ai@5.0.277
+            run: node scripts/compat-vercel-ai.mjs
+          - pkg: ai@6.0.308
+            run: node scripts/compat-vercel-ai.mjs
+          - pkg: "@langchain/core@0.3.80"
+            run: node --test dist/test/langchain.test.js
+          - pkg: "@openai/agents@0.17.2"
+            run: node --test dist/test/openai-agents.test.js
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci && npm run build
+      - run: npm install --no-save "${{ matrix.pkg }}"
+      - run: ${{ matrix.run }}
+
   fuzz:
     runs-on: ubuntu-latest
     # 4 targets x 30s of fuzzing is ~4 minutes with setup. A cap turns a

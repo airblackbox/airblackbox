@@ -15,9 +15,14 @@ AIR Blackbox is open-source infrastructure for AI agents whose decisions
 someone may later have to answer for. It does three things, and each one
 produces evidence a third party can check without trusting you:
 
-- **Records.** Every agent action goes into a tamper-evident chain, signed
-  with Ed25519, countersigned by an external timestamp authority, and
-  exported as a `.air-evidence` file that anyone can verify in a browser.
+- **Records.** Agent actions go into a tamper-evident chain, signed with
+  Ed25519, countersigned by an external timestamp authority, and exported as
+  a `.air-evidence` file that anyone can verify in a browser. Python agents
+  are recorded by trust layers for seven frameworks; TypeScript agents by the
+  [`air-blackbox` npm package](js/README.md) (Vercel AI SDK, OpenAI Agents
+  SDK, LangChain.js, MCP), which writes the same records. The gateway records
+  every model call from any language. A hook sees what its framework
+  reports: side effects a tool causes outside that are not recorded.
 - **Scans.** `air-blackbox comply` reads a codebase and reports gaps against
   the EU AI Act (Articles 9–15), GDPR and US state AI laws. It reads Python,
   Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, and equivalent
@@ -94,6 +99,26 @@ client = OpenAI(
 ```
 
 Every LLM call now generates a signed, tamper-evident, replayable audit record. No SDK changes. No refactoring. Measured overhead: ~3 ms per call, under 0.4% of a typical LLM request ([benchmarks](BENCHMARKS.md)).
+
+The gateway serves the OpenAI chat completions and Responses APIs (forwarded
+to `PROVIDER_URL`) and the Anthropic Messages API (forwarded to
+`ANTHROPIC_URL`, default `https://api.anthropic.com`), so one gateway covers
+both providers. For Anthropic, point the SDK at the gateway root and send the
+gateway key in `X-Gateway-Key`; the Anthropic key stays in `x-api-key` and is
+passed through:
+
+```ts
+const anthropic = new Anthropic({
+  baseURL: "http://localhost:8080",
+  defaultHeaders: { "X-Gateway-Key": "your-key" },
+});
+```
+
+The gateway sees model calls, never whether a tool then ran or what it did.
+Its records hold the model, provider, token counts and timing; with a vault
+configured, the full request and response (including any tool calls the model
+asked for) are stored there by reference. To record tool executions, use a
+trust layer (Python) or the npm package (TypeScript).
 
 ## Project status
 
@@ -539,6 +564,7 @@ Your AI Agent
 |---------|-------------|
 | [air-trust](https://github.com/airblackbox/air-trust) | Tamper-evident audit chain + Ed25519 signed handoffs |
 | [air-gate](https://github.com/airblackbox/air-gate) | Human-in-the-loop tool gating (Article 14) |
+| [air-blackbox (npm)](js/README.md) | TypeScript recorder and gate: hooks for the Vercel AI SDK, OpenAI Agents SDK, LangChain.js and MCP; same records and bundles as the Python SDK |
 | [air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp) | MCP server for Claude Desktop, Cursor, Claude Code; scans all six languages with `[full]` |
 | [air-platform](https://github.com/airblackbox/air-platform) | Docker Compose - full stack in one command |
 | [compliance-action](https://github.com/airblackbox/compliance-action) | GitHub Action - checks on every pull request |

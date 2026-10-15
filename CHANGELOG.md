@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **TypeScript package** (`js/`, npm `air-blackbox` 0.1.0, not yet
+  published). Records agent actions into the same HMAC chain, Ed25519
+  receipts and `.air-evidence` bundles as the Python SDK, byte for byte;
+  covenants with the same YAML, precedence and hash; a two-phase `Gate`; RFC
+  3161 anchoring on export. Hooks record model calls and tool executions for
+  the Vercel AI SDK (5+), the OpenAI Agents SDK (0.17+), LangChain.js /
+  LangGraph.js (core 0.3+) and the MCP TypeScript SDK, and with
+  `enforce: true` stop a tool the covenant forbids before it runs.
+  Differential tests in CI check that the Python SDK verifies this package's
+  chains, receipts, bundles and anchors, that this package verifies the
+  Python SDK's, and that both can write one chain; a TypeScript bundle also
+  passes the browser verifier.
+- **Gateway: Anthropic Messages API.** `POST /v1/messages` is forwarded to
+  `ANTHROPIC_URL` (default `https://api.anthropic.com`) with `x-api-key`,
+  `anthropic-version` and `anthropic-beta`, streamed or buffered, recorded
+  and chained like the OpenAI routes, so one gateway serves both providers.
+  On this route the gateway key is read only from `X-Gateway-Key`, never
+  from `x-api-key`, which carries the Anthropic credential.
 - `eval/competitors/`: a head-to-head of AIR Blackbox 1.17.0 against three
   other open-source EU AI Act scanners (ArkForge, Systima Comply, Asqav) on
   the 144-case parity corpus. Each tool is scored only on the practices it
@@ -16,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@openai/guardrails` in TypeScript and JavaScript).
 
 ### Fixed
+- Gateway recorded zero tokens for every Responses API call, buffered and
+  streamed: it only read chat-completions usage names. Usage is now read in
+  all three shapes (chat completions, Responses, Anthropic, where cache reads
+  and writes count as input).
+- Gateway tool filter ignored Responses API tools, which name a tool at the
+  top level rather than under `function`, so a blocklisted tool passed
+  through unfiltered. Tool extraction and filtering now share one name
+  reader, so they cannot disagree about a name again.
+- `air-blackbox comply` on a project with no Python now points TypeScript
+  and JavaScript at the npm package and gives the Anthropic base URL for the
+  gateway.
 - `air-blackbox test` failed 5 of 25 on a clean install. Two assertions had
   gone stale: the compliance-engine test expected exactly six groups from a
   report that has carried GDPR and US state-law groups for some time, and the
