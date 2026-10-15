@@ -9,6 +9,28 @@
 
 **The flight recorder for autonomous AI agents. Record, replay, enforce, audit.**
 
+## What it is
+
+AIR Blackbox is open-source infrastructure for AI agents whose decisions
+someone may later have to answer for. It does three things, and each one
+produces evidence a third party can check without trusting you:
+
+- **Records.** Every agent action goes into a tamper-evident chain, signed
+  with Ed25519, countersigned by an external timestamp authority, and
+  exported as a `.air-evidence` file that anyone can verify in a browser.
+- **Scans.** `air-blackbox comply` reads a codebase and reports gaps against
+  the EU AI Act (Articles 9–15), GDPR and US state AI laws. It reads Python,
+  Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, and equivalent
+  code gets the same verdict in each.
+- **Enforces.** A covenant declares what an agent may do; the gate decides
+  before each action runs and records the decision in the same chain.
+
+It runs locally, sends code nowhere, and is Apache 2.0. The newest release,
+**1.17.0**, added the five non-Python languages, notebooks, and a single
+scanning engine shared by the CLI, the [web console](https://airblackbox.ai/console/scan)
+and the [MCP server](https://github.com/airblackbox/air-blackbox-mcp)
+([changelog](CHANGELOG.md)).
+
 ## Try it in five minutes
 
 When your agent does something, can someone else check what happened without
@@ -59,7 +81,8 @@ Every LLM call now generates a signed, tamper-evident, replayable audit record. 
 
 ## Project status
 
-**Stable and maintained. Not currently adding features.**
+**Stable and maintained. Features land when they close a gap the project
+already claims to cover; there is no speculative roadmap.**
 
 AIR Blackbox does what this README says it does, and the claims here are the
 ones the code can back. It runs in production in a live hiring system, where it
@@ -68,13 +91,19 @@ candidacy-ending, none without a named human reviewer — in a chain anchored by
 an external timestamp authority and verifiable by a third party
 ([case study](https://airblackbox.ai/blog/ai-recruiting-compliance-case-study)).
 
-What that means in practice:
+An earlier version of this section said no new features were planned. That
+was written when the scanner read Python only, and it stopped being true the
+moment a TypeScript or Java team could install the tool and get an empty
+report. 1.17.0 fixed that gap; the posture is otherwise unchanged:
 
 - **Security and correctness fixes still land.** Report issues to
   jason@airblackbox.ai, subject `[SECURITY]`.
-- **New framework integrations and roadmap features are not planned.** Roadmap
-  issues have been closed rather than left open to rot; an empty backlog here
-  means "finished," not "abandoned."
+- **No roadmap backlog.** Roadmap issues were closed rather than left open to
+  rot; an empty backlog here means "finished," not "abandoned." Work that
+  closes a real gap (a language the scanner could not read, a check that gave
+  wrong answers) still happens, and ships with the evidence that it is right:
+  the [cross-language parity corpus](eval/scanner/run_parity.py) is the
+  example.
 - **Pull requests are welcome and will get an actual answer.** Historically some
   did not, which was a failure of maintenance rather than a judgement on the
   work.
@@ -115,7 +144,7 @@ before you believe any of the above.
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
-**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 14, 15. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report.
+**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 14, 15. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report. Reads Python, Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, with the same verdict for equivalent code in each ([measured](SCANNER_EVAL.md)).
 
 **Replay**: load any past episode from the audit chain, verify the HMAC signature, and replay every step with timestamps. Incident reconstruction without guesswork.
 
@@ -479,7 +508,7 @@ pip install air-blackbox[gate]   # includes Ed25519 via cryptography
 
 ## Ecosystem
 
-`air-blackbox` is the scanner. `air-trust` is the cryptographic proof layer. `gate` is pre-execution policy enforcement.
+`air-blackbox` is the scanner (six languages) and the recorder. `air-trust` is the cryptographic proof layer. `gate` is pre-execution policy enforcement.
 
 ```
 Your AI Agent
@@ -494,7 +523,7 @@ Your AI Agent
 |---------|-------------|
 | [air-trust](https://github.com/airblackbox/air-trust) | Tamper-evident audit chain + Ed25519 signed handoffs |
 | [air-gate](https://github.com/airblackbox/air-gate) | Human-in-the-loop tool gating (Article 14) |
-| [air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp) | MCP server for Claude Desktop, Cursor, Claude Code |
+| [air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp) | MCP server for Claude Desktop, Cursor, Claude Code; scans all six languages with `[full]` |
 | [air-platform](https://github.com/airblackbox/air-platform) | Docker Compose - full stack in one command |
 | [compliance-action](https://github.com/airblackbox/compliance-action) | GitHub Action - checks on every pull request |
 
