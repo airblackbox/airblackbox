@@ -13,6 +13,8 @@ from typing import List, Optional
 from air_blackbox.compliance.sources import (
     JAVA,
     JS_FAMILY,
+    JVM_FAMILY,
+    KOTLIN,
     PYTHON,
     is_java_test_file,
     has,
@@ -159,20 +161,24 @@ def _is_test_file(filepath: str) -> bool:
         return True
     if language_of(filepath) in JS_FAMILY and is_js_test_file(filepath):
         return True
-    if language_of(filepath) == JAVA and is_java_test_file(filepath):
+    if language_of(filepath) in JVM_FAMILY and is_java_test_file(filepath):
         return True
     return False
 
 
-def _wording(file_contents: dict, python: str, js: str, both: str, java: str) -> str:
+def _wording(file_contents: dict, python: str, js: str, both: str, java: str,
+             kotlin: Optional[str] = None) -> str:
     """Pick user-facing text by the languages scanned. A Python-only scan
-    always gets the original Python wording; `both` is for mixed projects."""
+    always gets the original Python wording; `both` is for mixed projects.
+    Kotlin shares the JVM (`java`) wording unless a check needs its own."""
     langs = languages_in(file_contents)
     if langs == [PYTHON] or not langs:
         return python
     if set(langs) <= set(JS_FAMILY):
         return js
-    if langs == [JAVA]:
+    if langs == [KOTLIN] and kotlin is not None:
+        return kotlin
+    if set(langs) <= set(JVM_FAMILY):
         return java
     return both
 
@@ -347,9 +353,85 @@ def _java_definitions(content: str) -> List["_JsDef"]:
 
 
 def _definitions(content: str) -> List["_JsDef"]:
-    if getattr(content, "language", "") == JAVA:
+    language = getattr(content, "language", "")
+    if language == JAVA:
         return _java_definitions(content)
+    if language == KOTLIN:
+        return _kotlin_definitions(content)
     return _js_definitions(content)
+
+
+# ── Kotlin adapters ──
+# Kotlin also gets every Java pattern above (same JVM libraries); these are
+# the Kotlin-only spellings.
+# JetBrains Koog agents/executors and aallam openai-kotlin. `OpenAI(` itself
+# is already matched by the Python constructor pattern.
+_KT_LLM_CALL = (r'\bAIAgent\s*[(<]|\bsimple\w*Executor\s*\(|\.chatCompletion\s*\('
+                r'|\bpromptExecutor\s*\.\s*execute\(')
+_KT_ERROR_HANDLING = r'\btry\s*\{.*?\bcatch\b|\brunCatching\s*\{|\.catch\s*\{'
+# Konform validation DSL: explicit validation, like field_validator.
+_KT_STRONG_VALIDATION = r'\bio\.konform\b|\bValidation\s*<\s*\w+\s*>\s*\{'
+# Use-site Bean Validation targets, and data classes (the dataclass analog).
+_KT_WEAK_VALIDATION = (r'@field:(?:NotBlank|NotNull|NotEmpty|Size|Email|Pattern|Valid)\b'
+                       r'|\bdata\s+class\s+[A-Z]')
+# println does not count, like print().
+_KT_LOGGING = r'\bKotlinLogging\b|\bio\.github\.oshai\.kotlinlogging\b|\bmu\.KotlinLogging\b'
+# String templates: "...$userInput" or "...${req.input}" on one line.
+_KT_PROMPT_INTERPOLATION = r'"[^"\n]*\$(?:\{[^}\n]*input|[a-z_]*input)'
+_KT_OUTPUT_VALIDATION = r'\.entity\s*<\s*[\w.]+\s*>\s*\(|\brequestLLMStructured\b'
+
+_KT_MODIFIERS = (r'(?:public|private|protected|internal|override|open|abstract|final|suspend|inline'
+                 r'|tailrec|operator|infix|external|actual|expect|data|sealed|enum|inner|value'
+                 r'|annotation|companion|fun)')
+_KT_CLASS = re.compile(rf'^((?:{_KT_MODIFIERS}\s+)*)(?:class|interface|object)\s+([A-Za-z_][\w]*)')
+_KT_FUN = re.compile(
+    rf'^((?:{_KT_MODIFIERS[:-5]})\s+)*)fun\s+(?:<[^>]+>\s+)?(?:[\w.<>?,\s]+?\.)?'
+    r'([A-Za-z_][\w]*)\s*\(')
+
+
+def _kotlin_definitions(content: str) -> List["_JsDef"]:
+    """Function and class definitions in a Kotlin file, counted like Python's
+    `def`/`class`: `fun` with a block or expression body (abstract and
+    interface declarations have none), classes, interfaces and named
+    objects. Constructors are not counted. Private means `private`.
+    Kotlin requires parameter types and infers return types, so a function
+    is typed when it has a parameter or declares its return type; `fun f()`
+    with neither is as untyped as Python's `def f():`."""
+    lines = content.split("\n")
+    found = []
+    for i, raw in enumerate(lines):
+        s = _JAVA_LEADING_ANNOTATIONS.sub("", raw.strip())
+        if not s or s.startswith(("//", "/*", "*", "@")):
+            continue
+        cls = _KT_CLASS.match(s)
+        if cls:
+            doc = _jsdoc_above(lines, i)
+            found.append(_JsDef("class", cls.group(2), "private" in cls.group(1).split(),
+                                doc is not None and _jsdoc_has_prose(doc), False))
+            continue
+        fn = _KT_FUN.match(s)
+        if not fn:
+            continue
+        full, j = s, i + 1
+        while j < len(lines) and full.count("(") > full.count(")") and j - i < 40:
+            full += " " + lines[j].strip()
+            j += 1
+        close = _matching_paren(full, fn.end() - 1)
+        if close < 0:
+            continue
+        params, rest = full[fn.end():close], full[close + 1:]
+        returns = re.match(r'\s*:\s*[^{=]+?\s*(?:where\s+[^{=]+)?(?=[{=]|$)', rest)
+        after = rest[returns.end():] if returns else rest
+        if not re.match(r'\s*[{=]', after):
+            if not (after.strip() == "" and j < len(lines) and lines[j].strip().startswith(("{", "="))):
+                continue  # abstract or interface declaration: no body
+        name = fn.group(2)
+        doc = _jsdoc_above(lines, i)
+        found.append(_JsDef("function", name,
+                            "private" in (fn.group(1) or "").split() or name.startswith("_"),
+                            doc is not None and _jsdoc_has_prose(doc),
+                            bool(params.strip()) or bool(returns)))
+    return found
 
 
 @dataclass
@@ -491,9 +573,9 @@ def _check_error_handling(file_contents: dict, scan_path: str) -> List[CodeFindi
     files_with_llm_calls = []
     files_with_error_handling = []
     for fp, content in file_contents.items():
-        if has(combined, content, js=_JS_LLM_CALL, java=_JAVA_LLM_CALL):
+        if has(combined, content, js=_JS_LLM_CALL, java=_JAVA_LLM_CALL, kotlin=_KT_LLM_CALL):
             files_with_llm_calls.append(fp)
-            if has(r'\btry\b.*?\bexcept\b', content, re.DOTALL, js=_JS_ERROR_HANDLING, java=_JAVA_ERROR_HANDLING) or has(framework_combined, content, re.IGNORECASE):
+            if has(r'\btry\b.*?\bexcept\b', content, re.DOTALL, js=_JS_ERROR_HANDLING, java=_JAVA_ERROR_HANDLING, kotlin=_KT_ERROR_HANDLING) or has(framework_combined, content, re.IGNORECASE):
                 files_with_error_handling.append(fp)
     if not files_with_llm_calls:
         return [CodeFinding(article=9, name="LLM call error handling",
@@ -551,10 +633,10 @@ def _check_input_validation(file_contents: dict, scan_path: str) -> List[CodeFin
 
     hits = []
     for fp, content in file_contents.items():
-        if has(strong_combined, content, js=_JS_STRONG_VALIDATION, java=_JAVA_STRONG_VALIDATION):
+        if has(strong_combined, content, js=_JS_STRONG_VALIDATION, java=_JAVA_STRONG_VALIDATION, kotlin=_KT_STRONG_VALIDATION):
             hits.append(fp)
-        elif (has(weak_combined, content, js=_JS_WEAK_VALIDATION, java=_JAVA_WEAK_VALIDATION)
-              and has(llm_combined, content, js=_JS_LLM_CALL, java=_JAVA_LLM_CALL)):
+        elif (has(weak_combined, content, js=_JS_WEAK_VALIDATION, java=_JAVA_WEAK_VALIDATION, kotlin=_KT_WEAK_VALIDATION)
+              and has(llm_combined, content, js=_JS_LLM_CALL, java=_JAVA_LLM_CALL, kotlin=_KT_LLM_CALL)):
             hits.append(fp)
 
     total = len(file_contents)
@@ -680,12 +762,14 @@ def _check_docstrings(file_contents: dict, scan_path: str) -> List[CodeFinding]:
             f"{documented_defs}/{total_defs} public functions/classes have docstrings ({pct:.0f}%)",
             f"{documented_defs}/{total_defs} public functions/classes have JSDoc comments ({pct:.0f}%)",
             f"{documented_defs}/{total_defs} public functions/classes have docstrings or doc comments ({pct:.0f}%)",
-            f"{documented_defs}/{total_defs} public methods/classes have Javadoc comments ({pct:.0f}%)"),
+            f"{documented_defs}/{total_defs} public methods/classes have Javadoc comments ({pct:.0f}%)",
+            f"{documented_defs}/{total_defs} public functions/classes have KDoc comments ({pct:.0f}%)"),
         fix_hint=_wording(file_contents,
             "Add docstrings to public functions and classes explaining purpose and parameters",
             "Add JSDoc comments (/** ... */) to public functions and classes explaining purpose and parameters",
             "Add docstrings (Python) or /** ... */ doc comments (JSDoc, Javadoc) to public functions and classes explaining purpose and parameters",
-            "Add Javadoc comments (/** ... */) to public methods and classes explaining purpose and parameters"))]
+            "Add Javadoc comments (/** ... */) to public methods and classes explaining purpose and parameters",
+            "Add KDoc comments (/** ... */) to public functions and classes explaining purpose and parameters"))]
 
 
 def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -752,12 +836,14 @@ def _check_type_hints(file_contents: dict, scan_path: str) -> List[CodeFinding]:
             f"{typed_defs}/{total_defs} public functions have type hints ({pct:.0f}%)",
             f"{typed_defs}/{total_defs} public functions have type annotations (TypeScript or JSDoc types) ({pct:.0f}%)",
             f"{typed_defs}/{total_defs} public functions have type hints or type annotations ({pct:.0f}%)",
-            f"{typed_defs}/{total_defs} public methods are statically typed (Java) ({pct:.0f}%)"),
+            f"{typed_defs}/{total_defs} public methods are statically typed (Java) ({pct:.0f}%)",
+            f"{typed_defs}/{total_defs} public functions declare parameter or return types ({pct:.0f}%)"),
         fix_hint=_wording(file_contents,
             "Add type hints to function signatures for better documentation and tooling",
             "Add parameter and return types (TypeScript, or JSDoc @param/@returns types in JavaScript)",
             "Add type hints (Python) and parameter/return types (TypeScript or JSDoc) to function signatures",
-            "Java is statically typed; no action needed"))]
+            "Java is statically typed; no action needed",
+            "Declare return types on public functions instead of relying on inference"))]
 
 
 def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
@@ -766,7 +852,7 @@ def _check_logging(file_contents: dict, scan_path: str) -> List[CodeFinding]:
         r'logging\.(?:debug|info|warning|error|critical)\(',
         r'structlog', r'loguru', r'logger\.(?:debug|info|warning|error)\(']
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_LOGGING, java=_JAVA_LOGGING)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_LOGGING, java=_JAVA_LOGGING, kotlin=_KT_LOGGING)]
     total = len(file_contents)
     if not hits:
         return [CodeFinding(article=12, name="Application logging", status="fail",
@@ -935,7 +1021,7 @@ def _check_injection_defense(file_contents: dict, scan_path: str) -> List[CodeFi
     _msg_pat = r'user_message.*=.*' + "inp" + r"ut\("
     danger_patterns = [_fstr_pat, _fmt_pat, _msg_pat]
     danger_combined = "|".join(danger_patterns)
-    danger_hits = [fp for fp, content in file_contents.items() if has(danger_combined, content, js=_JS_PROMPT_INTERPOLATION, java=_JAVA_PROMPT_INTERPOLATION)]
+    danger_hits = [fp for fp, content in file_contents.items() if has(danger_combined, content, js=_JS_PROMPT_INTERPOLATION, java=_JAVA_PROMPT_INTERPOLATION, kotlin=_KT_PROMPT_INTERPOLATION)]
     findings = []
     if hits:
         findings.append(CodeFinding(article=15, name="Prompt injection defense", status="pass", evidence=f"Injection defense patterns found in {len(hits)} file(s)"))
@@ -960,7 +1046,7 @@ def _check_output_validation(file_contents: dict, scan_path: str) -> List[CodeFi
         r'expected_output',  # CrewAI task output spec
     ]
     combined = "|".join(patterns)
-    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_OUTPUT_VALIDATION, java=_JAVA_OUTPUT_VALIDATION)]
+    hits = [fp for fp, content in file_contents.items() if has(combined, content, js=_JS_OUTPUT_VALIDATION, java=_JAVA_OUTPUT_VALIDATION, kotlin=_KT_OUTPUT_VALIDATION)]
     if hits:
         return [CodeFinding(article=15, name="LLM output validation", status="pass", evidence=f"Output parsing/validation found in {len(hits)} file(s)")]
     return [CodeFinding(article=15, name="LLM output validation", status="warn",

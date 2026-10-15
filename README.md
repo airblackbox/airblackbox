@@ -123,19 +123,21 @@ before you believe any of the above.
 
 ## Quickstart
 
-The scanner reads Python, Jupyter notebooks, TypeScript, JavaScript and Java
-(`.py`, `.ipynb`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts`,
-`.java`). Equivalent code gets the same result in each:
+The scanner reads Python, Jupyter notebooks, TypeScript, JavaScript, Java and
+Kotlin (`.py`, `.ipynb`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`,
+`.cts`, `.java`, `.kt`). Equivalent code gets the same result in each:
 [`eval/scanner/run_parity.py`](eval/scanner/run_parity.py) runs 144 labelled
 programs written in every language, plus each Python one as a notebook, and
 fails if any check disagrees. The optional AI-model pass (run when a local
 Ollama model is installed) still reads `.py` files only; everything else gets
-the pattern checks. Kotlin is not read yet.
+the pattern checks. To scan one pasted snippet from your own code, use
+`air_blackbox.compliance.snippet.scan_snippet(code)`; the language is
+detected, or state it with `language="kotlin"`.
 
 ```bash
 pip install air-blackbox
 
-# Run your first gap analysis - Python, notebooks, TypeScript, JavaScript, Java
+# Run your first gap analysis - Python, notebooks, TypeScript, JavaScript, Java, Kotlin
 air-blackbox comply --scan . -v
 
 # Inventory runtime AI use and static AI-related dependencies
