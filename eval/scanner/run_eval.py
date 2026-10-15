@@ -142,7 +142,7 @@ def main():
     pcorpus, mismatches, agree, shared = run_parity.run()
     pn = len(pcorpus)
     md.append("\n## Other languages and notebooks\n")
-    md.append("The scanner also reads TypeScript, JavaScript, Java and Jupyter notebooks. "
+    md.append("The scanner also reads TypeScript, JavaScript, Java, Kotlin and Jupyter notebooks. "
               "Every fixture above, plus cases for the checks this corpus does not cover "
               "(documentation, unsafe input, OAuth and delegation, US hiring, GDPR, US state "
               "laws), is written in each language by a developer idiomatic in it, and every "
@@ -150,13 +150,14 @@ def main():
               "Translations were written without access to the scanner's patterns.\n")
     md.append(f"**Parity: {pn - len(mismatches)}/{pn} cases get the same status in every "
               f"language they can be written in** "
-              f"({len({c['check'] for c in pcorpus})} checks). Java cannot express untyped "
-              "code, so the type-annotation cases without type hints have no Java version. "
+              f"({len({c['check'] for c in pcorpus})} checks). Java and Kotlin cannot express "
+              "untyped parameters, so the type-annotation cases without type hints have no "
+              "version in those languages. "
               "Reproduce: `PYTHONPATH=sdk python3 eval/scanner/run_parity.py`\n")
     md.append("| Language | Agrees with label |")
     md.append("|----------|------------------:|")
     names = {"python": "Python", "typescript": "TypeScript", "javascript": "JavaScript",
-             "java": "Java", "notebook": "Jupyter notebook"}
+             "java": "Java", "kotlin": "Kotlin", "notebook": "Jupyter notebook"}
     for lang in run_parity.LANGUAGES:
         ok, total = agree[lang]
         md.append(f"| {names[lang]} | {ok}/{total} ({ok / total:.0%}) |")

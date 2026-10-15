@@ -5,9 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.17.0] - 2026-10-15
 
 ### Added
+- Kotlin (`.kt`, `.kts`; Gradle build scripts excluded): shares the Java
+  library adapters (LangChain4j, Spring AI, SLF4J, Bean Validation,
+  Resilience4j...) and adds its own: Koog and openai-kotlin as model calls,
+  runCatching and `.catch {}`, KDoc, kotlin-logging (println excluded),
+  Konform and `@field:` constraints, data classes, string-template prompt
+  interpolation, Spring AI `entity<T>()`. Top-level functions, expression
+  bodies, extension functions and companion objects are counted as
+  definitions; constructors and bodiless declarations are not. A Kotlin
+  function counts as typed when it has parameters or declares its return
+  type (`fun run()` is as untyped as `def run():`).
+- `air_blackbox.compliance.snippet.scan_snippet(code, language=None,
+  filename=None)`: scan one pasted piece of code through the real scanners,
+  as a one-file project. The language is detected from syntax when not
+  stated (JSDoc types no longer make JavaScript look like TypeScript), and
+  on the parity corpus detection and a stated language give identical
+  results for all 642 single-file snippets. This is what the website console
+  and the MCP server call instead of carrying their own copies of the checks.
 - The compliance scanner reads TypeScript and JavaScript (`.ts`, `.tsx`,
   `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`) alongside Python, across all
   code checks, GDPR, the US state-law checks and bias. camelCase and
@@ -32,15 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code gets as a `.py` file. Python projects that contain notebooks will see
   them counted from this release on.
 - `eval/scanner/parity_corpus.json` and `run_parity.py`: 144 labelled
-  programs written in Python, TypeScript, JavaScript and Java, each Python
-  one also run as a notebook; every check gives the same status in every
-  form (enforced in the test suite). Java cannot express untyped code, so
-  three type-annotation cases have no Java version.
-- npm and Java framework detection (LangChain.js, OpenAI Node SDK, Anthropic
+  programs written in Python, TypeScript, JavaScript, Java and Kotlin, each
+  Python one also run as a notebook; every check gives the same status in
+  every form (enforced in the test suite). Java and Kotlin cannot express
+  untyped parameters, so three type-annotation cases have no version there.
+- npm and JVM framework detection (LangChain.js, OpenAI Node SDK, Anthropic
   TypeScript SDK, Vercel AI SDK, OpenAI Agents SDK, Mastra, LlamaIndex.TS,
   Google Gen AI, MCP TypeScript SDK; LangChain4j, Spring AI, OpenAI and
   Anthropic Java SDKs, Google ADK/Gen AI, Azure OpenAI, MCP Java SDK,
-  LangGraph4j). Projects with no Python are pointed at the gateway instead
+  LangGraph4j, Koog, openai-kotlin). Projects with no Python are pointed at the gateway instead
   of a `pip install` trust layer.
 
 ### Fixed

@@ -1,8 +1,8 @@
 """Which files the scanners read, and in which language.
 
 The checks are text patterns written against Python naming (``max_retries``,
-``require_approval``, ``detect_pii``). TypeScript, JavaScript and Java express
-the same practices in camelCase (``maxRetries``, ``requireApproval``,
+``require_approval``, ``detect_pii``). TypeScript, JavaScript, Java and Kotlin
+express the same practices in camelCase (``maxRetries``, ``requireApproval``,
 ``detectPii``), so every non-Python file also carries a snake_case view of its
 text, and a pattern counts as found if it matches either. Python files get no
 view, so their results are exactly what they were before other languages
@@ -29,21 +29,25 @@ PYTHON = "python"
 TYPESCRIPT = "typescript"
 JAVASCRIPT = "javascript"
 JAVA = "java"
+KOTLIN = "kotlin"
 
 #: Display order, and the order languages are reported in.
-ALL_LANGUAGES = (PYTHON, TYPESCRIPT, JAVASCRIPT, JAVA)
+ALL_LANGUAGES = (PYTHON, TYPESCRIPT, JAVASCRIPT, JAVA, KOTLIN)
 
 LANGUAGE_BY_EXTENSION = {
     ".py": PYTHON, ".ipynb": PYTHON,
     ".ts": TYPESCRIPT, ".tsx": TYPESCRIPT, ".mts": TYPESCRIPT, ".cts": TYPESCRIPT,
     ".js": JAVASCRIPT, ".jsx": JAVASCRIPT, ".mjs": JAVASCRIPT, ".cjs": JAVASCRIPT,
     ".java": JAVA,
+    ".kt": KOTLIN, ".kts": KOTLIN,
 }
 
 #: Languages whose files get the JS syntax adapters.
 JS_FAMILY = (TYPESCRIPT, JAVASCRIPT)
+#: JVM languages share Java's library adapters (LangChain4j, Spring AI, SLF4J...).
+JVM_FAMILY = (JAVA, KOTLIN)
 #: Languages whose files get the snake_case view (everything but Python).
-CAMEL_CASE_LANGUAGES = (TYPESCRIPT, JAVASCRIPT, JAVA)
+CAMEL_CASE_LANGUAGES = (TYPESCRIPT, JAVASCRIPT, JAVA, KOTLIN)
 
 # Compiled, bundled or declaration-only output: not code anyone wrote, and a
 # minified bundle would otherwise satisfy every check at once.
@@ -64,10 +68,10 @@ _JS_TEST_NAME = re.compile(r"\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$")
 
 # Maven/Gradle output and generated sources. Java-only, like the JS list.
 _JAVA_GENERATED_DIRS = {"target", ".gradle", ".mvn", "generated", "generated-sources",
-                        "generated-test-sources", "out", "bin"}
+                        "generated-test-sources", "out", "bin", ".kotlin"}
 _JAVA_NOT_SOURCE = {"module-info.java", "package-info.java"}
 # JUnit/TestNG naming; src/test/... is already a test directory.
-_JAVA_TEST_NAME = re.compile(r"(?:Tests?|IT|ITCase|TestCase)\.java$|^Test\w*\.java$")
+_JAVA_TEST_NAME = re.compile(r"(?:Tests?|IT|ITCase|TestCase)\.(?:java|kt)$|^Test\w*\.(?:java|kt)$")
 
 
 def language_of(path: str) -> Optional[str]:
@@ -82,6 +86,8 @@ def language_of(path: str) -> Optional[str]:
             return None
     if lang == JAVA and name in _JAVA_NOT_SOURCE:
         return None
+    if lang == KOTLIN and name.endswith(".gradle.kts"):
+        return None  # build script, not application code
     return lang
 
 
@@ -103,7 +109,7 @@ def is_scannable(path: str, scan_root: str = "") -> bool:
     parts = rel.replace("\\", "/").split("/")[:-1]
     if lang in JS_FAMILY and any(p in _JS_GENERATED_DIRS for p in parts):
         return False
-    if lang == JAVA and any(p in _JAVA_GENERATED_DIRS for p in parts):
+    if lang in JVM_FAMILY and any(p in _JAVA_GENERATED_DIRS for p in parts):
         return False
     if is_notebook(path) and ".ipynb_checkpoints" in parts:
         return False
@@ -119,7 +125,7 @@ def is_js_test_file(rel_path: str) -> bool:
 
 
 def is_java_test_file(rel_path: str) -> bool:
-    """JUnit/TestNG naming: FooTest.java, FooTests.java, FooIT.java, TestFoo.java."""
+    """JUnit/TestNG naming (Java and Kotlin): FooTest.java, FooTests.kt, FooIT.java."""
     return bool(_JAVA_TEST_NAME.search(os.path.basename(rel_path)))
 
 
@@ -183,18 +189,24 @@ def _lowercase_pattern(pattern: str) -> "re.Pattern":
 
 
 def has(pattern: str, content: str, flags: int = 0, js: Optional[str] = None,
-        java: Optional[str] = None) -> bool:
+        java: Optional[str] = None, kotlin: Optional[str] = None) -> bool:
     """re.search over a file, as the checks use it.
 
     Python files (and notebooks): exactly ``re.search(pattern, content, flags)``.
     Other languages: the pattern may also match the snake_case view, and
-    ``js`` / ``java`` is an extra pattern for idioms that only exist in that
-    language, searched in both texts.
+    ``js`` / ``java`` / ``kotlin`` is an extra pattern for idioms that only
+    exist there, searched in both texts. Kotlin also gets the ``java``
+    patterns: it uses the same JVM libraries.
     """
     alt = getattr(content, "alt", None)
     if alt is None:
         return bool(re.search(pattern, content, flags))
-    js = java if content.language == JAVA else (js if content.language in JS_FAMILY else None)
+    if content.language == JAVA:
+        js = java
+    elif content.language == KOTLIN:
+        js = "|".join(f"(?:{p})" for p in (java, kotlin) if p) or None
+    elif content.language not in JS_FAMILY:
+        js = None
     if flags & re.IGNORECASE and not flags & ~(re.IGNORECASE | re.DOTALL):
         rest = flags & re.DOTALL
         texts = (content.lowered, alt)  # both already lowercase

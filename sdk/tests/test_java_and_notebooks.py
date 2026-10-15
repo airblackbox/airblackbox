@@ -104,7 +104,8 @@ def test_frameworks_and_bias_read_notebook_code_not_json(tmp_path):
 
 @pytest.mark.parametrize("name, lang", [
     ("Agent.java", "java"), ("module-info.java", None), ("package-info.java", None),
-    ("agent.ipynb", "python"), ("Agent.kt", None),
+    ("agent.ipynb", "python"), ("Agent.kt", "kotlin"), ("main.kts", "kotlin"),
+    ("build.gradle.kts", None), ("settings.gradle.kts", None),
 ])
 def test_language_of(name, lang):
     assert language_of(name) == lang

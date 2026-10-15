@@ -2,15 +2,17 @@
 """Cross-language parity for the AIR Blackbox scanner.
 
 Every case in parity_corpus.json is one program written in Python,
-TypeScript, JavaScript and Java by a developer idiomatic in each (camelCase,
-the real npm and Maven libraries, try/catch, JSDoc and Javadoc). Each Python
+TypeScript, JavaScript, Java and Kotlin by a developer idiomatic in each
+(camelCase, the real npm and Maven libraries, try/catch, JSDoc, Javadoc and
+KDoc). Each Python
 program is also run as a Jupyter notebook (split into cells, with a markdown
 cell and an IPython magic). The claim under test: the scanner gives the
 labelled check the SAME status in every form.
 
-Java cannot express untyped code, so the "Type annotations" cases whose
-Python has no type hints have no Java version ("java": null) and are
-reported as not expressible rather than compared.
+Java and Kotlin cannot express untyped parameters, so the "Type annotations"
+cases whose Python has no type hints have no version in those languages
+("java": null, "kotlin": null) and are reported as not expressible rather
+than compared.
 
 The 72 cases of corpus.json are all here, translated, plus cases for the
 checks corpus.json does not cover (docstrings, unsafe input, the OAuth and
@@ -42,7 +44,7 @@ from air_blackbox.compliance.code_scanner import scan_codebase  # noqa: E402
 from air_blackbox.compliance.gdpr_scanner import scan_gdpr  # noqa: E402
 from air_blackbox.compliance.us_scanner import scan_us_laws  # noqa: E402
 
-LANGUAGES = ("python", "typescript", "javascript", "java", "notebook")
+LANGUAGES = ("python", "typescript", "javascript", "java", "kotlin", "notebook")
 
 #: Checks whose "positive" status is not "pass": the label marks the
 #: presence of a problem, which the scanner reports as warn/fail.

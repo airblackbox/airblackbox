@@ -156,8 +156,10 @@ JS_FRAMEWORK_IMPORTS = {
     "Google Gen AI (JS)": r"^@google/(?:genai|generative-ai|adk)(?:/|$)",
     "MCP TypeScript SDK": r"^@modelcontextprotocol/sdk(?:/|$)",
 }
-#: Java packages, matched against import statements.
+#: JVM packages (Java and Kotlin), matched against import statements.
 JAVA_FRAMEWORK_IMPORTS = {
+    "Koog": r"^ai\.koog\.",
+    "OpenAI Kotlin (aallam)": r"^com\.aallam\.openai\.",
     "LangChain4j": r"^dev\.langchain4j\.",
     "Spring AI": r"^org\.springframework\.ai\.",
     "OpenAI Java SDK": r"^com\.openai\.",
@@ -177,7 +179,7 @@ def detect_frameworks(scan_path: str) -> list[str]:
     """Detect which AI frameworks are used in the scanned codebase."""
     from air_blackbox.compliance.code_scanner import SOURCE_SKIP_DIRS
     from air_blackbox.compliance.sources import (
-        JAVA, JS_FAMILY, is_notebook, is_scannable, language_of, read_text)
+        JS_FAMILY, JVM_FAMILY, is_notebook, is_scannable, language_of, read_text)
     detected = set()
     py_files = []
     if os.path.isfile(scan_path) and language_of(scan_path):
@@ -199,7 +201,7 @@ def detect_frameworks(scan_path: str) -> list[str]:
             else:
                 with open(fp, "r", encoding="utf-8", errors="ignore") as fh:
                     content = fh.read(16000)  # first 16KB is enough
-            if language_of(fp) == JAVA:
+            if language_of(fp) in JVM_FAMILY:
                 imports = _JAVA_IMPORT.findall(content)
                 for framework, pattern in JAVA_FRAMEWORK_IMPORTS.items():
                     if framework not in detected and any(re.match(pattern, m) for m in imports):
