@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `air-blackbox test` failed 5 of 25 on a clean install. Two assertions had
+  gone stale: the compliance-engine test expected exactly six groups from a
+  report that has carried GDPR and US state-law groups for some time, and the
+  HITL test used `Agent(allow_delegation=True)` as its CrewAI fixture, which
+  the scanner deliberately stopped counting as human oversight (it is
+  agent-to-agent delegation). The fixture is now CrewAI's real idiom,
+  `Task(..., human_input=True)`, and the delegation case is asserted NOT to
+  count. The three gateway tests are reported as skipped when nothing is
+  listening, which is every fresh install, instead of as failures. The
+  command now exits 1 on a real failure; it exited 0 regardless before, so it
+  could not gate anything.
+
 ## [1.17.0] - 2026-10-15
 
 ### Added
