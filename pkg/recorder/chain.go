@@ -132,7 +132,7 @@ func (w *Writer) writeChained(r Record) error {
 		return err
 	}
 	path := filepath.Join(w.dir, r.RunID+".air.json")
-	if err := os.WriteFile(path, out, 0644); err != nil {
+	if err := writeFileAtomic(path, out, 0644); err != nil {
 		return err
 	}
 
