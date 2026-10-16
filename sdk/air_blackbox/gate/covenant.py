@@ -20,15 +20,26 @@ YAML format:
 Enforcement: forbid wins. If an action matches both a permit and a
 forbid rule, the forbid takes precedence. This matches the principle
 of least privilege.
+
+Loading is strict: an unknown key, a rule with no action or two, a
+non-string target or a condition that does not read as "field op value"
+raises CovenantError naming the rule, rather than loading a policy that
+says something other than what was written (a misspelled "wehn:" used to
+turn a guarded permit into an unconditional one).
 """
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 import yaml
+
+
+class CovenantError(ValueError):
+    """A covenant that cannot be loaded as written."""
 
 
 class RuleAction(str, Enum):
@@ -135,20 +146,23 @@ class Covenant:
 
     @classmethod
     def from_yaml(cls, path: str) -> "Covenant":
-        """Load a covenant from a YAML file."""
+        """Load a covenant from a YAML file. Raises CovenantError."""
         with open(path) as f:
-            data = yaml.safe_load(f)
-        return cls._from_dict(data)
+            return cls.from_yaml_string(f.read())
 
     @classmethod
     def from_yaml_string(cls, content: str) -> "Covenant":
-        """Load a covenant from a YAML string."""
-        data = yaml.safe_load(content)
+        """Load a covenant from a YAML string. Raises CovenantError."""
+        try:
+            data = yaml.load(content, Loader=_UniqueKeyLoader)
+        except yaml.YAMLError as e:
+            raise CovenantError(f"not valid YAML: {e}") from None
         return cls._from_dict(data)
 
     @classmethod
     def _from_dict(cls, data: dict) -> "Covenant":
-        """Parse a covenant dict into a Covenant object."""
+        """Parse a covenant dict into a Covenant object. Raises CovenantError."""
+        validate_covenant(data)
         rules = []
         for r in data.get("rules", []):
             # Each rule has exactly one of: permit, forbid, require_approval
@@ -185,6 +199,7 @@ class Covenant:
         context = context or {}
         matched_rules = []
 
+        uncertain_approval = False
         for rule in self.rules:
             if not rule.matches(action_name, context):
                 continue
@@ -196,22 +211,27 @@ class Covenant:
                 # so it can't be disabled by omitting or garbling the field.
                 if state is not False:
                     matched_rules.append(rule)
-            else:
-                # permit / require_approval grant only on a definitive True;
-                # an indeterminate guard never grants.
-                if state is True:
-                    matched_rules.append(rule)
+            elif state is True:
+                matched_rules.append(rule)
+            elif state is None and rule.action == RuleAction.REQUIRE_APPROVAL:
+                uncertain_approval = True
+            # An indeterminate permit never grants.
 
         if not matched_rules:
-            # Default deny - if no rule matches, forbid
+            # Default deny - if no rule matches, forbid. An approval rule
+            # that might apply cannot lift this: it would only loosen it.
             return RuleAction.FORBID
 
         # Forbid wins over everything
         if any(r.action == RuleAction.FORBID for r in matched_rules):
             return RuleAction.FORBID
 
-        # Require approval wins over permit
-        if any(r.action == RuleAction.REQUIRE_APPROVAL for r in matched_rules):
+        # Require approval wins over permit. An approval rule whose guard
+        # cannot be read counts here too: it can only make the decision
+        # stricter, so "amount > 1000" with an unreadable amount turns a
+        # permit into require_approval instead of letting it through.
+        if uncertain_approval or any(
+                r.action == RuleAction.REQUIRE_APPROVAL for r in matched_rules):
             return RuleAction.REQUIRE_APPROVAL
 
         return RuleAction.PERMIT
@@ -237,6 +257,103 @@ class Covenant:
     def to_yaml(self) -> str:
         """Serialize the covenant to YAML."""
         return yaml.dump(self.to_dict(), default_flow_style=False, sort_keys=False)
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """safe_load, refusing a key repeated in one mapping (PyYAML otherwise
+    keeps the last value silently, so a rule could carry two `when:`s)."""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    keys = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in keys:
+            raise CovenantError(
+                f"duplicate key '{key}' at line {key_node.start_mark.line + 1}")
+        keys.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
+
+_TOP_KEYS = ("agent", "version", "description", "rules")
+_ACTIONS = ("permit", "forbid", "require_approval")
+_RULE_KEYS = _ACTIONS + ("when", "unless", "category")
+# As _eval_condition reads it, with the value starting at its first
+# non-space character (so the space and value patterns cannot overlap).
+_CONDITION = re.compile(r"(\w+)\s*(>=|<=|!=|==|>|<)\s*(\S.*)")
+_DOTTED = re.compile(r"\w+(?:\.\w+)+\s*(?:>=|<=|!=|==|>|<)")
+_FIELD = re.compile(r"\w+")
+
+
+def validate_covenant(data) -> None:
+    """Raise CovenantError unless `data` is a covenant as the YAML format
+    defines it. The TypeScript package applies the same checks with the same
+    messages, so a file one SDK refuses the other refuses too."""
+    if not isinstance(data, dict):
+        raise CovenantError("a covenant must be a YAML mapping with agent and rules")
+    for key in data:
+        if key not in _TOP_KEYS:
+            raise CovenantError(f"unknown top-level key '{key}' "
+                                f"(allowed: {', '.join(_TOP_KEYS)})")
+    rules = data.get("rules", [])
+    if rules is None:
+        rules = []
+    if not isinstance(rules, list):
+        raise CovenantError("'rules' must be a list")
+    for i, rule in enumerate(rules, start=1):
+        where = f"rule {i}"
+        if not isinstance(rule, dict):
+            raise CovenantError(f"{where}: must be a mapping like '- permit: action_name'")
+        for key in rule:
+            if key not in _RULE_KEYS:
+                raise CovenantError(f"{where}: unknown key '{key}' "
+                                    f"(allowed: {', '.join(_RULE_KEYS)})")
+        actions = [a for a in _ACTIONS if a in rule]
+        if not actions:
+            raise CovenantError(f"{where}: needs one of {', '.join(_ACTIONS)}")
+        if len(actions) > 1:
+            raise CovenantError(f"{where}: has {' and '.join(actions)}; a rule "
+                                "takes exactly one of permit, forbid, require_approval")
+        target = rule[actions[0]]
+        if not isinstance(target, str) or not target.strip():
+            raise CovenantError(f"{where}: the {actions[0]} target must be a non-empty "
+                                "string (quote it if YAML would read it as a "
+                                "number or yes/no)")
+        if "when" in rule:
+            _validate_condition(where, rule["when"])
+        if "unless" in rule:
+            unless = rule["unless"]
+            if not isinstance(unless, str) or not _FIELD.fullmatch(unless):
+                raise CovenantError(f"{where}: 'unless' must be a field name "
+                                    "like human_approved")
+        if "category" in rule:
+            category = rule["category"]
+            if not isinstance(category, str) or not category.strip():
+                raise CovenantError(f"{where}: 'category' must be a non-empty string")
+
+
+def _validate_condition(where: str, when) -> None:
+    if not isinstance(when, str):
+        raise CovenantError(f"{where}: 'when' must be a string like \"amount > 100\"")
+    text = when.strip()
+    if _DOTTED.match(text):
+        raise CovenantError(f"{where}: 'when: {text}' reads a nested field; "
+                            "conditions read top-level fields only")
+    match = None if "\n" in text else _CONDITION.fullmatch(text)
+    if not match:
+        raise CovenantError(f"{where}: cannot read 'when: {text}'; write it as "
+                            "field op value, e.g. amount > 100")
+    _, op, value = match.groups()
+    value = value.strip().strip('"').strip("'")
+    if op in (">", "<", ">=", "<="):
+        try:
+            float(value)
+        except ValueError:
+            raise CovenantError(f"{where}: 'when: {text}' orders against "
+                                f"'{value}', which is not a number") from None
 
 
 def _eval_condition(condition: str, context: dict):

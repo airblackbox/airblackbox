@@ -26,6 +26,14 @@ import { loadPythonYaml, pyStr as loadedStr, pyTruthy, type PyValue } from "./py
 export type RuleAction = "permit" | "forbid" | "require_approval";
 const RULE_ACTIONS: RuleAction[] = ["permit", "forbid", "require_approval"];
 
+/** A covenant that cannot be loaded as written. */
+export class CovenantError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CovenantError";
+  }
+}
+
 export interface RuleInit {
   action: RuleAction;
   target: string;
@@ -118,14 +126,30 @@ export class Covenant {
     return Covenant.fromYamlString(fs.readFileSync(path, "utf8"));
   }
 
-  /** Parse YAML as the Python SDK's yaml.safe_load does, so the hash matches. */
+  /**
+   * Parse YAML as the Python SDK's yaml.safe_load does, so the hash matches.
+   * Throws CovenantError for invalid YAML or a covenant that does not
+   * validate, with the Python SDK's messages.
+   */
   static fromYamlString(content: string): Covenant {
-    const data = loadPythonYaml(content);
-    const isMapping = data !== null && typeof data === "object" && !Array.isArray(data) && !(data instanceof RawNumber);
-    return Covenant.fromObject(isMapping ? (data as Record<string, unknown>) : {});
+    let data: PyValue;
+    try {
+      data = loadPythonYaml(content);
+    } catch (e) {
+      const err = e as { code?: string; pos?: [number, number]; linePos?: Array<{ line: number }>; message?: string };
+      if (err.code === "DUPLICATE_KEY" && err.pos) {
+        const key = (/^[^:\s]+/.exec(content.slice(err.pos[0])) ?? [""])[0];
+        throw new CovenantError(`duplicate key '${key}' at line ${err.linePos?.[0]?.line ?? "?"}`);
+      }
+      throw new CovenantError(`not valid YAML: ${String(err.message ?? e).split("\n")[0]}`);
+    }
+    validateCovenant(data); // before anything else: "" or a list is not a covenant
+    return Covenant.fromObject(data as Record<string, unknown>);
   }
 
+  /** Build a covenant from parsed data. Throws CovenantError if it does not validate. */
   static fromObject(data: Record<string, unknown>): Covenant {
+    validateCovenant(data);
     const rules: Rule[] = [];
     const rawRules = data["rules"];
     for (const raw of Array.isArray(rawRules) ? (rawRules as Record<string, PyValue>[]) : []) {
@@ -172,6 +196,7 @@ export class Covenant {
   /** forbid > require_approval > permit > default forbid. */
   evaluate(actionName: string, context: Context = {}): RuleAction {
     const matched: Rule[] = [];
+    let uncertainApproval = false;
     for (const rule of this.rules) {
       if (!rule.matches(actionName, context)) continue;
       const state = rule.conditionState(context);
@@ -180,11 +205,19 @@ export class Covenant {
         if (state !== false) matched.push(rule);
       } else if (state === true) {
         matched.push(rule);
+      } else if (state === null && rule.action === "require_approval") {
+        uncertainApproval = true;
       }
+      // An indeterminate permit never grants.
     }
+    // Default deny. An approval rule that might apply cannot lift it: that
+    // would only loosen the decision.
     if (matched.length === 0) return "forbid";
     if (matched.some((r) => r.action === "forbid")) return "forbid";
-    if (matched.some((r) => r.action === "require_approval")) return "require_approval";
+    // An approval rule whose guard cannot be read counts: it can only make the
+    // decision stricter, so an unreadable amount turns a permit into
+    // require_approval instead of letting it through.
+    if (uncertainApproval || matched.some((r) => r.action === "require_approval")) return "require_approval";
     return "permit";
   }
 
@@ -212,11 +245,77 @@ function optString(v: unknown): string | undefined {
  * numeric comparison when both sides parse as numbers; otherwise only == and
  * != are meaningful and an ordering comparison is indeterminate.
  */
+// Python's \w (Unicode letters, digits, underscore), for field names.
+const WORD = String.raw`[\p{L}\p{N}_]`;
+const OPS = "(>=|<=|!=|==|>|<)";
+const CONDITION_PREFIX = new RegExp(`^(${WORD}+)\\s*${OPS}\\s*(\\S[^\\n]*)`, "u");
+const CONDITION = new RegExp(`^(${WORD}+)\\s*${OPS}\\s*(\\S[^\\n]*)$`, "u"); // [^\\n] is Python's "."
+const DOTTED = new RegExp(`^${WORD}+(?:\\.${WORD}+)+\\s*${OPS}`, "u");
+const FIELD = new RegExp(`^${WORD}+$`, "u");
+const TOP_KEYS = ["agent", "version", "description", "rules"];
+const RULE_KEYS = [...RULE_ACTIONS, "when", "unless", "category"];
+
+const hasOwn = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
+const isMapping = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof RawNumber);
+
+/**
+ * Throw CovenantError unless `data` is a covenant as the YAML format defines
+ * it. Same checks and messages as the Python SDK's validate_covenant, so a
+ * file one SDK refuses the other refuses too.
+ */
+export function validateCovenant(data: unknown): void {
+  if (!isMapping(data)) throw new CovenantError("a covenant must be a YAML mapping with agent and rules");
+  for (const key of Object.keys(data)) {
+    if (!TOP_KEYS.includes(key)) throw new CovenantError(`unknown top-level key '${key}' (allowed: ${TOP_KEYS.join(", ")})`);
+  }
+  const rules = data["rules"] ?? [];
+  if (!Array.isArray(rules)) throw new CovenantError("'rules' must be a list");
+  rules.forEach((rule: unknown, i: number) => {
+    const where = `rule ${i + 1}`;
+    if (!isMapping(rule)) throw new CovenantError(`${where}: must be a mapping like '- permit: action_name'`);
+    for (const key of Object.keys(rule)) {
+      if (!RULE_KEYS.includes(key)) throw new CovenantError(`${where}: unknown key '${key}' (allowed: ${RULE_KEYS.join(", ")})`);
+    }
+    const actions = RULE_ACTIONS.filter((a) => hasOwn(rule, a));
+    if (actions.length === 0) throw new CovenantError(`${where}: needs one of ${RULE_ACTIONS.join(", ")}`);
+    if (actions.length > 1) {
+      throw new CovenantError(`${where}: has ${actions.join(" and ")}; a rule takes exactly one of permit, forbid, require_approval`);
+    }
+    const target = rule[actions[0]!];
+    if (typeof target !== "string" || !target.trim()) {
+      throw new CovenantError(`${where}: the ${actions[0]} target must be a non-empty string (quote it if YAML would read it as a number or yes/no)`);
+    }
+    if (hasOwn(rule, "when")) validateCondition(where, rule["when"]);
+    if (hasOwn(rule, "unless")) {
+      const unless = rule["unless"];
+      if (typeof unless !== "string" || !FIELD.test(unless)) throw new CovenantError(`${where}: 'unless' must be a field name like human_approved`);
+    }
+    if (hasOwn(rule, "category")) {
+      const category = rule["category"];
+      if (typeof category !== "string" || !category.trim()) throw new CovenantError(`${where}: 'category' must be a non-empty string`);
+    }
+  });
+}
+
+function validateCondition(where: string, when: unknown): void {
+  if (typeof when !== "string") throw new CovenantError(`${where}: 'when' must be a string like "amount > 100"`);
+  const text = when.trim();
+  if (DOTTED.test(text)) throw new CovenantError(`${where}: 'when: ${text}' reads a nested field; conditions read top-level fields only`);
+  const m = text.includes("\n") ? null : CONDITION.exec(text);
+  if (!m) throw new CovenantError(`${where}: cannot read 'when: ${text}'; write it as field op value, e.g. amount > 100`);
+  const op = m[2]!;
+  const value = stripChar(stripChar(m[3]!.trim(), '"'), "'");
+  if ([">", "<", ">=", "<="].includes(op) && toNumber(value) === null) {
+    throw new CovenantError(`${where}: 'when: ${text}' orders against '${value}', which is not a number`);
+  }
+}
+
 export function evalCondition(condition: string, context: Context): boolean | null {
   // Python's re.match(r"(\w+)\s*(op)\s*(.+)"): anchored at the start only, and
   // the value runs from the first non-space character to the end of the line.
   // \s and \S don't overlap, so the match can't backtrack quadratically.
-  const m = /^(\w+)\s*(>=|<=|!=|==|>|<)\s*(\S[^\n]*)/.exec(condition.trim());
+  const m = CONDITION_PREFIX.exec(condition.trim());
   if (!m) return null;
   const [, field, op, rawValue] = m;
   const want = stripChar(stripChar(rawValue!.trim(), '"'), "'");
