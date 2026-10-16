@@ -9,6 +9,7 @@ import io
 import json
 import sys
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -89,7 +90,7 @@ def test_bytes_before_the_archive_are_refused(bundle, tmp_path, prefix):
             z.writestr("readme.txt", "nothing to see")
         prefix = decoy.read_bytes()
     path = tmp_path / "prepended.air-evidence"
-    path.write_bytes(prefix + open(bundle, "rb").read())
+    path.write_bytes(prefix + Path(bundle).read_bytes())
     with pytest.raises(VerificationFailure) as e:
         _verify(path)
     assert e.value.check == 1
@@ -98,7 +99,7 @@ def test_bytes_before_the_archive_are_refused(bundle, tmp_path, prefix):
 
 def test_bytes_after_the_archive_are_refused(bundle, tmp_path):
     path = tmp_path / "appended.air-evidence"
-    path.write_bytes(open(bundle, "rb").read() + b"<script>payload()</script>")
+    path.write_bytes(Path(bundle).read_bytes() + b"<script>payload()</script>")
     with pytest.raises(VerificationFailure) as e:
         _verify(path)
     assert e.value.check == 1
