@@ -78,20 +78,22 @@ export class AuditChain {
     if (resume) this.resume();
   }
 
+  /**
+   * Continue from the newest record's stored chain_hash, found by indexing
+   * the directory (one read per file, no full parse for pretty-printed
+   * records, no re-hashing). For an intact chain that is exactly the digest
+   * re-hashing would reach; a broken chain fails verification at its break
+   * either way.
+   */
   private resume(): void {
-    this.prev = GENESIS;
-    this.seq = 0;
-    this.count = 0;
     this.writes = 0;
-    const { records, unreadable } = loadRecordsReport(this.runsDir);
-    this.knownFiles = records.length + unreadable.length;
-    for (const rec of records) {
-      if (!rec.chain_hash) continue;
-      const h = this.digest(rec);
-      this.prev = h.digest;
-      this.count++;
-      this.seq = Math.max(this.seq, Number(rec.chain_seq ?? 0));
-    }
+    const { entries, unreadable } = indexRecords(this.runsDir);
+    this.knownFiles = entries.length + unreadable.length;
+    const chained = entries.filter((e) => e.chainHash);
+    const head = chained[chained.length - 1];
+    this.prev = head ? Buffer.from(head.chainHash, "hex") : GENESIS;
+    this.count = chained.length;
+    this.seq = chained.reduce((m, e) => Math.max(m, e.seq), 0);
   }
 
   /**
@@ -174,6 +176,195 @@ export class AuditChain {
   }
 }
 
+/** Where a record file sits in verification order, without the record. */
+export interface RecordIndexEntry {
+  file: string;
+  seq: number;
+  timestamp: string;
+  runId: string;
+  /** "" for a record outside the chain. */
+  chainHash: string;
+}
+
+// A top-level field of a pretty-printed record: every writer (this package,
+// the Python SDK, the Go gateway) puts top-level keys on their own line at
+// two spaces, and a newline inside a JSON string is always escaped, so this
+// cannot match a nested key or text inside a value.
+const topLevel = (key: string): RegExp => new RegExp(`\\n  "${key}": ("(?:[^"\\\\]|\\\\.)*"|-?\\d+)(?=,?\\n)`, "g");
+const TOP_CHAIN_HASH = topLevel("chain_hash");
+const TOP_CHAIN_SEQ = topLevel("chain_seq");
+const TOP_RUN_ID = topLevel("run_id");
+const TOP_TIMESTAMP = topLevel("timestamp");
+
+const UNREAD = Symbol("unread");
+
+/**
+ * The value of a top-level key, undefined when it is absent, or UNREAD when
+ * the fast path cannot be sure of it (a value it does not match, or the key
+ * twice, where a JSON parser would keep the last).
+ */
+function topValue(re: RegExp, text: string, key: string): unknown {
+  re.lastIndex = 0;
+  const m = re.exec(text);
+  if (!m) return text.includes(`\n  "${key}": `) ? UNREAD : undefined;
+  if (re.exec(text)) return UNREAD;
+  return JSON.parse(m[1]!);
+}
+
+/** Index one record file; undefined if it cannot be read as a record. */
+export function indexRecordFile(runsDir: string, file: string): RecordIndexEntry | undefined {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(runsDir, file), "utf8");
+  } catch {
+    return undefined;
+  }
+  // The fast path reads a complete pretty-printed record. It orders entries
+  // exactly as loadRecords would, or gives way to a full parse.
+  const hash = topValue(TOP_CHAIN_HASH, text, "chain_hash");
+  if (typeof hash === "string" && hash && text.trimEnd().endsWith("}")) {
+    const seq = topValue(TOP_CHAIN_SEQ, text, "chain_seq");
+    const timestamp = topValue(TOP_TIMESTAMP, text, "timestamp");
+    const runId = topValue(TOP_RUN_ID, text, "run_id");
+    if (seq !== UNREAD && timestamp !== UNREAD && runId !== UNREAD) {
+      return {
+        file,
+        seq: Number(seq ?? 0),
+        timestamp: String(timestamp ?? ""),
+        runId: String(runId ?? ""),
+        chainHash: hash,
+      };
+    }
+  }
+  // Not pretty-printed, outside the chain, or unusual: read it properly.
+  let rec: Canonical;
+  try {
+    rec = parsePreserving(text);
+  } catch {
+    return undefined;
+  }
+  if (!rec || typeof rec !== "object" || Array.isArray(rec)) return undefined;
+  const r = rec as ChainRecord;
+  return {
+    file,
+    seq: Number(r.chain_seq ?? 0),
+    timestamp: String(r.timestamp ?? ""),
+    runId: String(r.run_id ?? ""),
+    chainHash: r.chain_hash ? String(r.chain_hash) : "",
+  };
+}
+
+/** Verification order: chain_seq, then timestamp, as loadRecords sorts. */
+export function compareIndexEntries(a: RecordIndexEntry, b: RecordIndexEntry): number {
+  if (a.seq !== b.seq) return a.seq - b.seq;
+  return a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0;
+}
+
+export function recordFileNames(runsDir: string): string[] {
+  try {
+    return fs.readdirSync(runsDir).filter((n) => n.endsWith(".air.json"));
+  } catch {
+    return [];
+  }
+}
+
+/** Index a runs directory in verification order, holding no records in memory. */
+export function indexRecords(runsDir: string): { entries: RecordIndexEntry[]; unreadable: string[] } {
+  const entries: RecordIndexEntry[] = [];
+  const unreadable: string[] = [];
+  for (const file of recordFileNames(runsDir)) {
+    const e = indexRecordFile(runsDir, file);
+    if (e) entries.push(e);
+    else unreadable.push(file);
+  }
+  entries.sort(compareIndexEntries);
+  return { entries, unreadable };
+}
+
+/** indexRecords, giving the event loop a turn as it goes (pacer). */
+export async function indexRecordsPaced(runsDir: string, pacer = new Pacer()): Promise<{ entries: RecordIndexEntry[]; unreadable: string[] }> {
+  const entries: RecordIndexEntry[] = [];
+  const unreadable: string[] = [];
+  for (const file of recordFileNames(runsDir)) {
+    if (pacer.due()) await pacer.pause();
+    const e = indexRecordFile(runsDir, file);
+    if (e) entries.push(e);
+    else unreadable.push(file);
+  }
+  entries.sort(compareIndexEntries);
+  return { entries, unreadable };
+}
+
+/**
+ * Long synchronous work, cut into slices so the process it runs in stays
+ * responsive: due() says when about `budgetMs` of work (or `every` steps)
+ * has gone by since the last pause.
+ */
+export class Pacer {
+  private last = performance.now();
+  private steps = 0;
+
+  constructor(private readonly every = Infinity, private readonly budgetMs = 20) {}
+
+  due(): boolean {
+    if (++this.steps >= this.every || performance.now() - this.last >= this.budgetMs) {
+      this.steps = 0;
+      return true;
+    }
+    return false;
+  }
+
+  async pause(): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    this.last = performance.now();
+  }
+}
+
+/**
+ * Verify a runs directory one record at a time, as verifyRecords would over
+ * loadRecords, in memory proportional to the number of records' index
+ * entries rather than their contents.
+ */
+export function verifyDirectory(runsDir: string, signingKey: string): ChainVerification & { unreadable: string[] } {
+  const { entries, unreadable } = indexRecords(runsDir);
+  const key = Buffer.from(signingKey, "utf8");
+  let prev: Buffer = GENESIS;
+  let verified = 0;
+  let withHash = 0;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]!;
+    if (!e.chainHash) continue;
+    let rec: ChainRecord;
+    try {
+      rec = parsePreserving(fs.readFileSync(path.join(runsDir, e.file), "utf8")) as ChainRecord;
+    } catch {
+      unreadable.push(e.file);
+      continue;
+    }
+    const step = chainStep(key, prev, rec);
+    withHash++;
+    if (!step.ok) {
+      return { intact: false, total_records: entries.length, verified_records: verified, records_with_hash: withHash,
+        first_break_at: i, first_break_run_id: String(rec.run_id ?? ""), unreadable };
+    }
+    verified++;
+    prev = step.digest;
+  }
+  return { intact: true, total_records: entries.length, verified_records: verified, records_with_hash: withHash, unreadable };
+}
+
+/** One link of the chain: does this record's stored hash follow from prev? */
+export function chainStep(key: Buffer, prev: Buffer, record: ChainRecord): { ok: boolean; digest: Buffer } {
+  const { chain_hash: stored, ...clean } = record;
+  const h = createHmac("sha256", key);
+  h.update(prev);
+  h.update(pythonJsonBytes(clean as Canonical));
+  const digest = h.digest();
+  return { ok: digest.toString("hex") === stored, digest };
+}
+
+export const GENESIS_DIGEST = GENESIS;
+
 /** Load the chained records of a directory in verification order. */
 export function loadRecords(runsDir: string): ChainRecord[] {
   return loadRecordsReport(runsDir).records;
@@ -253,7 +444,8 @@ export function verifyRecords(records: ChainRecord[], signingKey: string): Chain
   return { intact: true, total_records: records.length, verified_records: verified, records_with_hash: withHash };
 }
 
-/** Verify every chained record in a runs directory. */
+/** Verify every chained record in a runs directory, one record at a time. */
 export function verifyChain(runsDir: string, signingKey?: string): ChainVerification {
-  return verifyRecords(loadRecords(runsDir), resolveSigningKey(runsDir, signingKey));
+  const { unreadable: _unreadable, ...result } = verifyDirectory(runsDir, resolveSigningKey(runsDir, signingKey));
+  return result;
 }

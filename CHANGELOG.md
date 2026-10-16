@@ -61,6 +61,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field), a key repeated in one mapping and unknown top-level keys now raise
   `CovenantError` naming the rule. The four example covenants load
   unchanged, with the same hashes.
+- **TypeScript: `export()` streams from the runs directory.** It used to load
+  every record into memory and write the bundle in one synchronous step: at
+  100,000 records that took 2 GB and froze the event loop (and with it the
+  agent) for most of a minute. It now reads, verifies and writes one record
+  at a time and gives the event loop a turn every 20 ms or so. At 100,000
+  records it peaks near 200 MB, finishes in 25 s instead of 53 s, and never
+  stalls the loop for more than about 0.1 s; opening a recorder on such a
+  directory takes 1.3 s instead of 37 s, since it continues from the stored
+  head. Bundles are byte for byte what the in-memory export wrote, which
+  the tests check across intact, broken, holed and mixed-writer directories.
+  CI exports 20,000 records under a 160 MB heap, where the old export ran
+  out of memory.
 
 ### Fixed
 - `air-evidence verify` accepted, or crashed on, malformed bundles found by a

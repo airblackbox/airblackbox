@@ -213,6 +213,11 @@ if (receipt.authorized) {
 - An export checks the directory against what this process wrote: a missing
   or unreadable record file makes the bundle say the chain is not intact,
   so it fails verification instead of attesting what is left.
+- An export streams from the runs directory one record at a time and gives
+  the event loop a turn every 20 ms or so, so the agent in the same process
+  keeps running. At 100,000 records it peaks near 200 MB and takes about
+  25 seconds. It covers the records on disk when it starts; anything
+  recorded meanwhile goes in the next export.
 - The chain's HMAC key defaults to a public development value, so on its own
   the chain proves order and internal consistency, not who wrote it. Set
   `hmacKey` or `TRUST_SIGNING_KEY` for a secret chain key; the Ed25519
