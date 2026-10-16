@@ -3,9 +3,10 @@
  * execution into a record, and, where the framework lets us intervene,
  * stopping a tool the covenant does not permit before it runs.
  */
-import { hashPayload } from "../receipt.js";
+import { pythonJson } from "../canonical.js";
+import { hashable, hashPayload } from "../receipt.js";
 import type { Recorder } from "../recorder.js";
-import type { Context, RuleAction } from "../covenant.js";
+import type { Context, Covenant, RuleAction } from "../covenant.js";
 
 /** Thrown by an enforcing hook when the covenant does not permit a tool. */
 export class CovenantViolation extends Error {
@@ -63,17 +64,48 @@ export interface ModelObservation {
   stream?: boolean;
 }
 
-function guardFields(input: unknown): Context {
-  return input && typeof input === "object" && !Array.isArray(input) ? { ...(input as Context) } : {};
+/**
+ * A tool's arguments as values the covenant's `when:` conditions can test.
+ * The model writes them, so they may not supply what only the application
+ * can vouch for: a rule's `unless` field (human_approved, say) or
+ * `category`. Those are dropped here, so an argument named human_approved
+ * cannot lift a forbid.
+ */
+function argFields(input: unknown, covenant: Covenant | undefined): Context {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const appOnly = covenant?.appOnlyFields();
+  const out: Context = {};
+  let keys: string[];
+  try {
+    keys = Object.keys(input);
+  } catch {
+    return {};
+  }
+  for (const k of keys) {
+    if (appOnly?.has(k)) continue;
+    try {
+      Object.defineProperty(out, k, { value: (input as Context)[k], enumerable: true, writable: true, configurable: true });
+    } catch {
+      // A getter that throws: leave the field out (a guard on it is then indeterminate).
+    }
+  }
+  return out;
 }
 
 function describe(input: unknown, limit: number): string {
   if (input === undefined || limit <= 0) return "";
-  let s: string;
+  let s: string | undefined;
   try {
     s = typeof input === "string" ? input : JSON.stringify(input);
   } catch {
-    s = String(input);
+    // BigInt, a circular reference: fall through to the canonical form.
+  }
+  if (typeof s !== "string") {
+    try {
+      s = pythonJson(hashable(input));
+    } catch {
+      s = "[unreadable input]";
+    }
   }
   return s.length > limit ? s.slice(0, limit) + "…" : s;
 }
@@ -91,48 +123,85 @@ export class ActionGate {
     this.detailLimit = options.detailLimit ?? 500;
   }
 
+  private guardContext(input: unknown, guard?: Context): Context {
+    return { ...argFields(input, this.recorder.covenant), ...(guard ?? {}) };
+  }
+
   /** The covenant's decision for a tool, without recording anything. */
   decide(name: string, input: unknown, guard?: Context): RuleAction {
     if (!this.recorder.covenant) return "permit";
-    return this.recorder.covenant.evaluate(name, { ...guardFields(input), ...(guard ?? {}) });
+    return this.recorder.covenant.evaluate(name, this.guardContext(input, guard));
   }
 
   /**
    * Call before a tool runs. When enforcing and the covenant does not permit
    * it, the attempt is recorded as blocked and CovenantViolation is thrown.
+   * The tool stays blocked even if recording the attempt fails.
    */
   before(name: string, input: unknown, guard?: Context): RuleAction {
     const decision = this.decide(name, input, guard);
     if (this.enforce && decision !== "permit") {
-      this.recorder.action(name, describe(input, this.detailLimit), {
-        status: "blocked",
-        framework: this.framework,
-        guard: { ...guardFields(input), ...(guard ?? {}) },
-        context: { input_hash: input === undefined ? "" : hashPayload(input), blocked_by: "covenant" },
-      });
+      try {
+        this.recorder.action(name, describe(input, this.detailLimit), {
+          status: "blocked",
+          framework: this.framework,
+          guard: this.guardContext(input, guard),
+          context: { input_hash: input === undefined ? "" : hashPayload(input), blocked_by: "covenant" },
+        });
+      } catch (e) {
+        this.recorder.reportRecordError(e);
+      }
       throw new CovenantViolation(name, decision);
     }
     return decision;
   }
 
-  /** Call after a tool ran (or failed). */
+  /**
+   * Call after a tool ran (or failed). Never throws: the tool has already
+   * acted, and failing its call now would only make the agent retry it. If
+   * the full record cannot be written, a minimal one (name, outcome, why) is
+   * tried; if that fails too, the recorder's onRecordError hears about it.
+   */
   after(obs: ToolObservation): void {
-    const context: Context = {};
-    if (obs.input !== undefined) context["input_hash"] = hashPayload(obs.input);
-    if (obs.output !== undefined) context["output_hash"] = hashPayload(obs.output);
-    if (obs.durationMs !== undefined) context["duration_ms"] = Math.round(obs.durationMs);
-    if (obs.toolCallId) context["tool_call_id"] = obs.toolCallId;
-    if (obs.error) context["error"] = obs.error.slice(0, 500);
-    this.recorder.action(obs.name, describe(obs.input, this.detailLimit), {
-      status: obs.status,
-      framework: this.framework,
-      guard: { ...guardFields(obs.input), ...(obs.guard ?? {}) },
-      context,
-    });
+    try {
+      const context: Context = {};
+      if (obs.input !== undefined) context["input_hash"] = hashPayload(obs.input);
+      if (obs.output !== undefined) context["output_hash"] = hashPayload(obs.output);
+      if (obs.durationMs !== undefined) context["duration_ms"] = Math.round(obs.durationMs);
+      if (obs.toolCallId) context["tool_call_id"] = obs.toolCallId;
+      if (obs.error) context["error"] = obs.error.slice(0, 500);
+      this.recorder.action(obs.name, describe(obs.input, this.detailLimit), {
+        status: obs.status,
+        framework: this.framework,
+        guard: this.guardContext(obs.input, obs.guard),
+        context,
+      });
+    } catch (e) {
+      try {
+        this.recorder.action(obs.name, "", {
+          status: obs.status,
+          framework: this.framework,
+          guard: this.guardContext(obs.input, obs.guard),
+          context: { recording_error: errorText(e).slice(0, 300) },
+        });
+      } catch {
+        // Not even the minimal record could be written (a full disk, a
+        // deleted directory): report the original failure.
+      }
+      this.recorder.reportRecordError(e);
+    }
   }
 
-  /** Record a model call the hook observed. */
+  /** Record a model call the hook observed. Never throws, like after(). */
   model(obs: ModelObservation): void {
+    try {
+      this.recordModel(obs);
+    } catch (e) {
+      this.recorder.reportRecordError(e);
+    }
+  }
+
+  private recordModel(obs: ModelObservation): void {
     const tokens: Record<string, number> = {};
     if (obs.promptTokens !== undefined) tokens["prompt"] = obs.promptTokens;
     if (obs.completionTokens !== undefined) tokens["completion"] = obs.completionTokens;

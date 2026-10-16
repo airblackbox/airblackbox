@@ -13,9 +13,11 @@ import { createHmac, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { parsePreserving, pythonJsonBytes, pythonJsonPretty, type Canonical } from "./canonical.js";
+import { parsePreserving, pythonJson, pythonJsonBytes, pythonJsonPretty, type Canonical } from "./canonical.js";
 
 const GENESIS = Buffer.from("genesis", "utf8");
+// A run_id names its record's file, so it must not reach outside runsDir.
+const SAFE_RUN_ID = /^(?!\.\.?$)[A-Za-z0-9._-]{1,200}$/;
 export const DEFAULT_SIGNING_KEY = "air-blackbox-default";
 
 export interface ChainRecord {
@@ -34,6 +36,8 @@ export interface ChainVerification {
   records_with_hash: number;
   first_break_at?: number;
   first_break_run_id?: string;
+  /** Why an export judged the history incomplete (missing or unreadable records). */
+  problems?: string[];
 }
 
 /** The HMAC key the Python SDK and gateway would use for this directory. */
@@ -52,11 +56,13 @@ export function resolveSigningKey(runsDir: string, explicit?: string): string {
 
 export class AuditChain {
   readonly runsDir: string;
-  private readonly key: Buffer;
+  // A true private field, so console.log(chain) cannot print the HMAC key.
+  readonly #key: Buffer;
   private prev: Buffer = GENESIS;
   private seq = 0;
   private count = 0;
-  private pending: Promise<unknown> = Promise.resolve();
+  private writes = 0;
+  private knownFiles = 0;
 
   /**
    * @param runsDir where records are written; created if missing.
@@ -68,13 +74,19 @@ export class AuditChain {
   constructor(runsDir = "./runs", signingKey?: string, resume = false) {
     this.runsDir = runsDir;
     fs.mkdirSync(runsDir, { recursive: true });
-    this.key = Buffer.from(resolveSigningKey(runsDir, signingKey), "utf8");
+    this.#key = Buffer.from(resolveSigningKey(runsDir, signingKey), "utf8");
     if (resume) this.resume();
   }
 
   private resume(): void {
-    const records = loadRecords(this.runsDir).filter((r) => r.chain_hash);
+    this.prev = GENESIS;
+    this.seq = 0;
+    this.count = 0;
+    this.writes = 0;
+    const { records, unreadable } = loadRecordsReport(this.runsDir);
+    this.knownFiles = records.length + unreadable.length;
     for (const rec of records) {
+      if (!rec.chain_hash) continue;
       const h = this.digest(rec);
       this.prev = h.digest;
       this.count++;
@@ -82,9 +94,24 @@ export class AuditChain {
     }
   }
 
+  /**
+   * Pick up records another writer appended since this chain last looked
+   * (the Python SDK taking its turn, say). One directory listing when
+   * nothing changed.
+   */
+  syncWithDisk(): void {
+    let files: number;
+    try {
+      files = fs.readdirSync(this.runsDir).filter((n) => n.endsWith(".air.json")).length;
+    } catch {
+      return;
+    }
+    if (files !== this.knownFiles) this.resume();
+  }
+
   private digest(record: ChainRecord): { hex: string; digest: Buffer } {
     const { chain_hash: _omit, ...clean } = record;
-    const h = createHmac("sha256", this.key);
+    const h = createHmac("sha256", this.#key);
     h.update(this.prev);
     h.update(pythonJsonBytes(clean));
     const digest = h.digest();
@@ -98,25 +125,44 @@ export class AuditChain {
    */
   write(record: ChainRecord): string {
     if (!record.run_id) record.run_id = randomUUID();
+    if (!SAFE_RUN_ID.test(String(record.run_id))) {
+      throw new Error(`run_id ${JSON.stringify(record.run_id)} is not a safe file name; it names the record's file`);
+    }
     if (!record.version) record.version = "1.0.0";
     if (!record.timestamp) record.timestamp = new Date().toISOString();
     delete record.chain_hash;
     record.chain_seq = this.seq + 1;
-    const { hex, digest } = this.digest(record);
+    // Serialise once and hash and write that snapshot: a value that reads
+    // differently each time (a getter, a Proxy) can then never make the file
+    // disagree with its hash.
+    const snapshot = parsePreserving(pythonJson(record)) as ChainRecord;
+    const { hex, digest } = this.digest(snapshot);
+    snapshot.chain_hash = hex;
     record.chain_hash = hex;
     // The file is the canonical form indented: every number is written as it
     // was hashed, so any reader that re-serialises canonically recovers the
-    // hashed bytes.
+    // hashed bytes. Written to a temporary name and renamed, so a crash never
+    // leaves a torn record behind.
     const file = path.join(this.runsDir, `${record.run_id}.air.json`);
-    fs.writeFileSync(file, pythonJsonPretty(record) + "\n");
+    const tmp = `${file}.${process.pid}.tmp`;
+    const existed = fs.existsSync(file);
+    fs.writeFileSync(tmp, pythonJsonPretty(snapshot) + "\n");
+    fs.renameSync(tmp, file);
     this.prev = digest;
     this.count++;
     this.seq++;
+    this.writes++;
+    if (!existed) this.knownFiles++;
     return hex;
   }
 
   get recordCount(): number {
     return this.count;
+  }
+
+  /** Records written through this chain since it last read the directory. */
+  get writesSinceLoad(): number {
+    return this.writes;
   }
 
   get currentHash(): string {
@@ -130,21 +176,33 @@ export class AuditChain {
 
 /** Load the chained records of a directory in verification order. */
 export function loadRecords(runsDir: string): ChainRecord[] {
+  return loadRecordsReport(runsDir).records;
+}
+
+/**
+ * loadRecords, also naming the record files that could not be read. Those
+ * are outside the chain, as in the Python loader, but an export should say
+ * so rather than attest a history with a hole in it.
+ */
+export function loadRecordsReport(runsDir: string): { records: ChainRecord[]; unreadable: string[] } {
   let names: string[];
   try {
     names = fs.readdirSync(runsDir).filter((n) => n.endsWith(".air.json"));
   } catch {
-    return [];
+    return { records: [], unreadable: [] };
   }
   const records: ChainRecord[] = [];
+  const unreadable: string[] = [];
   for (const name of names) {
     try {
       const parsed = parsePreserving(fs.readFileSync(path.join(runsDir, name), "utf8"));
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         records.push(parsed as ChainRecord);
+      } else {
+        unreadable.push(name);
       }
     } catch {
-      /* unreadable file is outside the chain, as in the Python loader */
+      unreadable.push(name);
     }
   }
   records.sort((a, b) => {
@@ -155,7 +213,7 @@ export function loadRecords(runsDir: string): ChainRecord[] {
     const tb = String(b.timestamp ?? "");
     return ta < tb ? -1 : ta > tb ? 1 : 0;
   });
-  return records;
+  return { records, unreadable };
 }
 
 /**

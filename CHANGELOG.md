@@ -19,7 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Differential tests in CI check that the Python SDK verifies this package's
   chains, receipts, bundles and anchors, that this package verifies the
   Python SDK's, and that both can write one chain; a TypeScript bundle also
-  passes the browser verifier.
+  passes the browser verifier. Before release it was run as real agents on
+  each framework and put through a stress and tamper test, which shaped
+  these guarantees: a recording failure never fails the agent's tool call
+  (`onRecordError` hears about it); tool arguments, which the model writes,
+  cannot satisfy a rule's `unless` or `category`; recorders in one process
+  share one chain and a second process is refused rather than forking it;
+  an export with missing or unreadable records fails verification; a
+  timestamp response must be a granted token over the chain head; and
+  covenant YAML is read as PyYAML reads it, so a file has one hash in both
+  SDKs.
 - **Gateway: Anthropic Messages API.** `POST /v1/messages` is forwarded to
   `ANTHROPIC_URL` (default `https://api.anthropic.com`) with `x-api-key`,
   `anthropic-version` and `anthropic-beta`, streamed or buffered, recorded

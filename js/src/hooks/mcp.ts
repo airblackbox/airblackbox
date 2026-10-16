@@ -51,23 +51,23 @@ export function airMcpClient<C extends ClientLike>(client: C, recorder: Recorder
     const guard = options.server ? { server: options.server } : undefined;
     gate.before(params.name, params.arguments, guard);
     const start = performance.now();
+    let result: CallToolResultLike;
     try {
-      const result = await original(params, ...rest);
-      const output = result.structuredContent ?? result.content;
-      gate.after({
-        name: params.name,
-        input: params.arguments,
-        output,
-        status: result.isError ? "error" : "success",
-        error: result.isError ? firstText(result.content) : undefined,
-        durationMs: elapsedMs(start),
-        guard,
-      });
-      return result;
+      result = await original(params, ...rest);
     } catch (e) {
       gate.after({ name: params.name, input: params.arguments, status: "error", error: errorText(e), durationMs: elapsedMs(start), guard });
       throw e;
     }
+    gate.after({
+      name: params.name,
+      input: params.arguments,
+      output: result?.structuredContent ?? result?.content,
+      status: result?.isError ? "error" : "success",
+      error: result?.isError ? firstText(result.content) : undefined,
+      durationMs: elapsedMs(start),
+      guard,
+    });
+    return result;
   };
   Object.defineProperty(client, "callTool", { value: patched, writable: true, configurable: true });
   return client;

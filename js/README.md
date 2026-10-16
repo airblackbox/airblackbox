@@ -113,6 +113,9 @@ await agent.invoke(input, { callbacks: [handler] });
 With `enforce`, LangChain awaits the handler before each tool and propagates
 the `CovenantViolation` it throws, so the tool function is never called.
 LangChain logs the violation as a handler error; that log line is expected.
+The handler knows a tool by its run name, which is the tool's name unless
+you pass `runName` when invoking it; if you do, the covenant is checked
+against that name instead.
 
 ### MCP
 
@@ -146,6 +149,18 @@ Precedence is forbid, then require_approval, then permit, and anything not
 named is forbidden. A guard that cannot be evaluated (a missing field, a
 non-number compared with `>`) never grants and never lifts a forbid.
 
+A `when:` guard in a hook can test the tool's arguments (`amount > 100`
+above). The model writes those arguments, so they never count for what only
+your application can vouch for: an argument named like a rule's `unless`
+field (`human_approved`) or `category` is ignored. Pass such values yourself,
+as `guard` to `recorder.action`, and write approvals as `unless:`, never as a
+`when:` test, which would read the model's arguments. Since a guard that cannot be evaluated
+never grants, it never requires approval either: with an unconditional
+`permit: issue_refund` beside `require_approval: issue_refund` when
+`amount > 100`, an amount written as "$5,000" leaves only the permit. Give
+the permit its own guard, as above, and such an amount matches neither rule
+and is forbidden.
+
 The framework hooks have no one to ask, so with `enforce` they block a
 `require_approval` action the same way as a forbidden one. To put a person
 in the loop, use the gate below with `onApprovalNeeded`.
@@ -178,8 +193,28 @@ if (receipt.authorized) {
 - Signatures are Ed25519. The Python SDK can also sign with ML-DSA-65
   (post-quantum); this package reports such receipts as not checkable here
   rather than as invalid. Verify them with the Python SDK.
-- The chain has one writer at a time. Several processes sharing one history
-  should use the ingest server instead (see the main repository).
+- A hook never lets a recording failure break the agent's own work: the tool
+  has already run, and failing its call would only invite a retry. The
+  failure goes to `onRecordError` if you pass one to `record()`, otherwise
+  the first is logged with `console.warn`; `recorder.recordErrors` counts
+  them. Calling `recorder.action` yourself does throw, so you can decide.
+- The chain has one writer at a time. Recorders on the same directory in one
+  process share one chain. A second process on the same machine is refused
+  while the first is recording; call `close()` on a recorder when it is done
+  (or use `await using`), and a process that exits releases its directories
+  anyway. Several processes sharing one history should use the ingest server
+  (see the main repository).
+- An export checks the directory against what this process wrote: a missing
+  or unreadable record file makes the bundle say the chain is not intact,
+  so it fails verification instead of attesting what is left.
+- The chain's HMAC key defaults to a public development value, so on its own
+  the chain proves order and internal consistency, not who wrote it. Set
+  `hmacKey` or `TRUST_SIGNING_KEY` for a secret chain key; the Ed25519
+  signatures and the bundle signature do not depend on it.
+- Covenant YAML is read as the Python SDK reads it (YAML 1.1: `version: 1.0`
+  stays `1.0`, `on` and `no` are booleans), so a covenant file has one hash
+  in both. A covenant built in code with `Covenant.fromObject` cannot tell
+  `1.0` from `1`.
 
 ## Tested against
 

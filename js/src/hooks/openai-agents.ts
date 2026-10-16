@@ -63,6 +63,15 @@ export class AirTraceProcessor implements TracingProcessor {
   async onSpanStart(_span: Span<any>): Promise<void> {}
 
   async onSpanEnd(span: Span<any>): Promise<void> {
+    // A tracing processor that throws must not disturb the run it observes.
+    try {
+      this.record(span);
+    } catch (e) {
+      this.gate.recorder.reportRecordError(e);
+    }
+  }
+
+  private record(span: Span<any>): void {
     const d = span.spanData as Record<string, unknown> & { type: string };
     const err = span.error;
     const ms = durationMs(span);

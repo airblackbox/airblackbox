@@ -26,7 +26,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 
-import { pythonJson, pythonJsonBytes } from "./canonical.js";
+import { RawNumber, pythonJson, pythonJsonBytes } from "./canonical.js";
 
 export type ReceiptStatus = "authorized" | "denied" | "pending" | "sealed" | "failed";
 export type SigningMethod = "ed25519" | "hmac-sha256";
@@ -201,10 +201,88 @@ export function authorizationPayloadFromDict(d: Partial<ReceiptDict>): Buffer {
 /**
  * SHA-256 of a payload's canonical JSON. Never stores the payload. Matches
  * the Python `hash_payload` (json.dumps(..., sort_keys=True, default=str))
- * for JSON-representable values; a Date is hashed as its ISO string.
+ * for JSON-representable values; a Date is hashed as its ISO string, and
+ * anything else as `hashable` describes. It does not throw on a payload's
+ * contents: hashing a tool's output must never be what breaks the tool call.
  */
 export function hashPayload(payload: unknown): string {
-  return createHash("sha256").update(pythonJson(payload), "utf8").digest("hex");
+  let text: string;
+  try {
+    text = pythonJson(hashable(payload));
+  } catch {
+    text = pythonJson("[unhashable]"); // e.g. a Proxy whose traps throw
+  }
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+const MAX_HASH_DEPTH = 500;
+
+/**
+ * A payload as canonical JSON can represent it. Plain JSON values are
+ * unchanged, so hashes match the Python SDK's. Values JSON has no form for
+ * get a stable one rather than an exception: non-finite numbers as Python
+ * writes them (NaN, Infinity), a Map as an object, a Set as an array, bytes
+ * as base64, an Error or URL as its text, a function or symbol by name, an
+ * object with toJSON by its result, a property whose getter throws as
+ * "[unreadable]", a reference back to an ancestor as "[circular]", and
+ * nesting beyond 500 levels as "[too deep]".
+ */
+export function hashable(value: unknown, depth = 0, ancestors: Set<object> = new Set()): unknown {
+  switch (typeof value) {
+    case "number":
+      return Number.isFinite(value) ? value : new RawNumber(Number.isNaN(value) ? "NaN" : value > 0 ? "Infinity" : "-Infinity");
+    case "function":
+      return `[function ${(value as { name?: string }).name || "anonymous"}]`;
+    case "symbol":
+      return value.toString();
+    case "object":
+      break;
+    default:
+      return value; // string, boolean, bigint, undefined
+  }
+  if (value === null || value instanceof RawNumber || value instanceof Date) return value;
+  if (depth >= MAX_HASH_DEPTH) return "[too deep]";
+  const obj = value as object;
+  if (ancestors.has(obj)) return "[circular]";
+  ancestors.add(obj);
+  try {
+    if (Array.isArray(obj)) return obj.map((v) => hashable(v, depth + 1, ancestors));
+    if (ArrayBuffer.isView(obj)) return Buffer.from(obj.buffer, obj.byteOffset, obj.byteLength).toString("base64");
+    if (obj instanceof ArrayBuffer) return Buffer.from(obj).toString("base64");
+    if (obj instanceof Map) {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of obj) define(out, String(k), hashable(v, depth + 1, ancestors));
+      return out;
+    }
+    if (obj instanceof Set) return [...obj].map((v) => hashable(v, depth + 1, ancestors));
+    if (obj instanceof Error) return `${obj.name}: ${obj.message}`;
+    if (obj instanceof URL) return obj.href;
+    const toJSON = (obj as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === "function") {
+      try {
+        return hashable(toJSON.call(obj), depth + 1, ancestors);
+      } catch {
+        return "[unreadable]";
+      }
+    }
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(obj)) {
+      let v: unknown;
+      try {
+        v = (obj as Record<string, unknown>)[k];
+      } catch {
+        v = "[unreadable]";
+      }
+      define(out, k, hashable(v, depth + 1, ancestors));
+    }
+    return out;
+  } finally {
+    ancestors.delete(obj);
+  }
+}
+
+function define(obj: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true });
 }
 
 export const hashResult = hashPayload;

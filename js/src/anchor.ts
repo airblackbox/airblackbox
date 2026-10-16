@@ -67,12 +67,16 @@ function der(tag: number, content: Buffer): Buffer {
 
 const SHA256_ALG_ID = Buffer.from("300d06096086480165030402010500", "hex");
 
+/** A positive DER INTEGER body for a fresh 64-bit nonce. */
+function freshNonce(): Buffer {
+  const nonce = randomBytes(8);
+  return nonce[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), nonce]) : nonce;
+}
+
 /** An RFC 3161 TimeStampReq over a 32-byte SHA-256 head, as DER. */
-export function makeQuery(headHex: string): Buffer {
+export function makeQuery(headHex: string, nonce: Buffer = freshNonce()): Buffer {
   const digest = Buffer.from(headHex, "hex");
   if (digest.length !== 32) throw new RangeError("head must be a 32-byte hex digest");
-  let nonce = randomBytes(8);
-  if (nonce[0]! & 0x80) nonce = Buffer.concat([Buffer.from([0]), nonce]);
   return der(0x30, Buffer.concat([
     der(0x02, Buffer.from([1])), // version v1
     der(0x30, Buffer.concat([SHA256_ALG_ID, der(0x04, digest)])), // MessageImprint
@@ -93,8 +97,9 @@ export async function timestampHead(
 ): Promise<AnchorResult> {
   if (!headHex) return { ok: false, head: headHex, error: "no chain head to anchor" };
   let tsq: Buffer;
+  const nonce = freshNonce();
   try {
-    tsq = makeQuery(headHex);
+    tsq = makeQuery(headHex, nonce);
   } catch (e) {
     return { ok: false, head: headHex, error: String(e) };
   }
@@ -112,8 +117,10 @@ export async function timestampHead(
         continue;
       }
       const tsr = Buffer.from(await resp.arrayBuffer());
-      if (tsr.length === 0) {
-        lastErr = `${url}: empty response`;
+      const problem = checkResponse(tsr, Buffer.from(headHex, "hex"), nonce);
+      if (problem) {
+        // A captive portal or proxy answers 200 with a page of its own.
+        lastErr = `${url}: ${problem}`;
         continue;
       }
       return { ok: true, head: headHex, tsr, tsa_url: url, timestamp: extractGenTime(tsr) };
@@ -122,6 +129,46 @@ export async function timestampHead(
     }
   }
   return { ok: false, head: headHex, error: lastErr };
+}
+
+/** A DER element's tag and the bounds of its content, or undefined if malformed. */
+function readElement(buf: Buffer, at: number): { tag: number; start: number; end: number } | undefined {
+  if (at + 2 > buf.length) return undefined;
+  const tag = buf[at]!;
+  let len = buf[at + 1]!;
+  let start = at + 2;
+  if (len & 0x80) {
+    const n = len & 0x7f;
+    if (n < 1 || n > 4 || start + n > buf.length) return undefined;
+    len = 0;
+    for (let i = 0; i < n; i++) len = len * 256 + buf[start + i]!;
+    start += n;
+  }
+  const end = start + len;
+  return end <= buf.length ? { tag, start, end } : undefined;
+}
+
+/**
+ * Whether a response is a granted TimeStampResp for this request, or why
+ * not. Structural, not cryptographic: the outer SEQUENCE, a granted status,
+ * and a token carrying the TSTInfo content type, this head's SHA-256 message
+ * imprint and this request's nonce. The Python verifier checks the TSA's
+ * signature; this only keeps a recorder from calling anything else a
+ * timestamp.
+ */
+export function checkResponse(tsr: Buffer, digest: Buffer, nonce: Buffer): string | undefined {
+  const outer = readElement(tsr, 0);
+  if (!outer || outer.tag !== 0x30 || outer.end !== tsr.length) return "not a timestamp response";
+  const statusInfo = readElement(tsr, outer.start);
+  if (!statusInfo || statusInfo.tag !== 0x30) return "not a timestamp response";
+  const status = readElement(tsr, statusInfo.start);
+  if (!status || status.tag !== 0x02 || status.end - status.start !== 1) return "not a timestamp response";
+  const code = tsr[status.start]!;
+  if (code !== 0 && code !== 1) return `timestamp refused (status ${code})`;
+  if (!tsr.includes(Buffer.from("060b2a864886f70d0109100104", "hex"))) return "response carries no timestamp token";
+  if (!tsr.includes(Buffer.concat([SHA256_ALG_ID, der(0x04, digest)]))) return "timestamp is not over this chain head";
+  if (!tsr.includes(der(0x02, nonce))) return "timestamp does not answer this request (nonce)";
+  return undefined;
 }
 
 /**

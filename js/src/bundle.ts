@@ -190,7 +190,10 @@ export function generateEvidenceBundleV1(options: BundleOptions): { path: string
   };
 
   const stamp = now.toISOString().replace(/[:T]/g, (c) => (c === "T" ? "-" : "")).slice(0, 17);
-  const name = `bundle-${stamp}-${tenant}-${String(manifest["bundle_id"]).slice(0, 8)}.air-evidence`;
+  // The tenant is a recorder name ("acme/support" is a fine name): keep it
+  // to file-name characters so it cannot point the bundle somewhere else.
+  const safeTenant = tenant.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "agent";
+  const name = `bundle-${stamp}-${safeTenant}-${String(manifest["bundle_id"]).slice(0, 8)}.air-evidence`;
   const outDir = options.outputDir ?? ".";
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, name);

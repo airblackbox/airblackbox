@@ -142,31 +142,40 @@ export function airTools<T extends ToolSet>(tools: T, recorder: Recorder, option
       execute: async (input: unknown, opts: { toolCallId?: string }) => {
         gate.before(name, input);
         const start = performance.now();
+        const done = (outcome: { status: "success" | "error"; output?: unknown; error?: string }): void =>
+          gate.after({ name, input, ...outcome, durationMs: elapsedMs(start), toolCallId: opts?.toolCallId });
+        let out: unknown;
         try {
-          const out = await execute.call(tool, input, opts);
-          if (isAsyncIterable(out)) {
-            // Streaming tool output: record once the iteration completes.
-            const src = out;
-            return (async function* () {
-              let last: unknown;
-              try {
-                for await (const chunk of src) {
-                  last = chunk;
-                  yield chunk;
-                }
-                gate.after({ name, input, output: last, status: "success", durationMs: elapsedMs(start), toolCallId: opts?.toolCallId });
-              } catch (e) {
-                gate.after({ name, input, status: "error", error: errorText(e), durationMs: elapsedMs(start), toolCallId: opts?.toolCallId });
-                throw e;
-              }
-            })();
-          }
-          gate.after({ name, input, output: out, status: "success", durationMs: elapsedMs(start), toolCallId: opts?.toolCallId });
-          return out;
+          out = await execute.call(tool, input, opts);
         } catch (e) {
-          gate.after({ name, input, status: "error", error: errorText(e), durationMs: elapsedMs(start), toolCallId: opts?.toolCallId });
+          done({ status: "error", error: errorText(e) });
           throw e;
         }
+        if (!isAsyncIterable(out)) {
+          done({ status: "success", output: out });
+          return out;
+        }
+        // Streaming tool output: record once the iteration ends, however it ends.
+        const src = out;
+        return (async function* () {
+          let last: unknown;
+          let recorded = false;
+          try {
+            for await (const chunk of src) {
+              last = chunk;
+              yield chunk;
+            }
+            recorded = true;
+            done({ status: "success", output: last });
+          } catch (e) {
+            recorded = true;
+            done({ status: "error", error: errorText(e) });
+            throw e;
+          } finally {
+            // The consumer stopped iterating early: the tool ran part way.
+            if (!recorded) done({ status: "error", output: last, error: "stopped before the tool finished: the consumer ended the stream" });
+          }
+        })();
       },
     };
   }

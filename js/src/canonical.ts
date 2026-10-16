@@ -257,7 +257,10 @@ export function parsePreserving(text: string): Canonical {
         ws();
         if (text[i] !== ":") err("expected ':'");
         i++;
-        obj[k] = value();
+        // defineProperty, not assignment: `obj["__proto__"] = v` would set
+        // the prototype and drop the key, so the record would no longer
+        // re-serialise to the bytes it was hashed as.
+        Object.defineProperty(obj, k, { value: value(), enumerable: true, writable: true, configurable: true });
         ws();
         if (text[i] === ",") { i++; continue; }
         if (text[i] === "}") { i++; return obj; }
@@ -281,6 +284,11 @@ export function parsePreserving(text: string): Canonical {
     if (text.startsWith("true", i)) { i += 4; return true; }
     if (text.startsWith("false", i)) { i += 5; return false; }
     if (text.startsWith("null", i)) { i += 4; return null; }
+    // Python's json.dumps writes these for non-finite floats (allow_nan is
+    // its default), so a Python-written record can carry them.
+    for (const token of ["NaN", "Infinity", "-Infinity"]) {
+      if (text.startsWith(token, i)) { i += token.length; return new RawNumber(token); }
+    }
     const m = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(i));
     if (!m || !m[0]) return err("unexpected token");
     i += m[0].length;

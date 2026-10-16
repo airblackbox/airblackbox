@@ -120,3 +120,41 @@ print(json.dumps({"hash": c.hash, "decisions": [c.evaluate(a, ctx).value for a, 
   ];
   assert.deepEqual(ours, theirs.decisions);
 });
+
+// YAML corners where a 1.2 parser and PyYAML (1.1) disagree. The covenant
+// hash is what a receipt pins, so it must match the Python SDK's exactly.
+const YAML_CORNERS = [
+  "agent: a\nversion: 1.0\nrules:\n  - permit: x\n",
+  "agent: a\nversion: 2\nrules:\n  - permit: x\n",
+  "agent: a\nversion: '1.0'\nrules:\n  - permit: x\n",
+  "agent: a\nversion: 1.10\nrules:\n  - permit: x\n",
+  "agent: a\nversion: on\nrules:\n  - permit: x\n",
+  "agent: a\nrules:\n  - permit: 123\n  - forbid: 1.5\n  - permit: on\n  - permit: no\n  - permit: y\n  - permit: 1e3\n  - permit: 010\n  - permit: 0x1F\n  - permit: 1_000\n  - permit: 1:30\n  - permit: .5\n  - permit: ~\n",
+  "agent: 007\ndescription: 3.0\nrules:\n  - forbid: send_email\n    unless: 1\n  - require_approval: pay\n    when: amount > 10\n    category: 2.0\n",
+  "agent: a\nrules:\n  - permit: '*'\n  - forbid: \"on\"\n",
+];
+
+test("differential: YAML scalars load as PyYAML loads them, so hashes match", { skip: !hasAirSdk() && "air_blackbox SDK not importable" }, () => {
+  const out = python(`
+import json, sys
+from air_blackbox.gate.covenant import Covenant
+res = []
+for y in json.load(sys.stdin):
+    c = Covenant.from_yaml_string(y)
+    res.append({"hash": c.hash, "version": c.version,
+                "decisions": [c.evaluate(a).value for a in ["x", "123", "on", "no", "y", "1e3", "send_email", "*"]]})
+print(json.dumps(res))`, JSON.stringify(YAML_CORNERS));
+  const theirs = JSON.parse(out) as { hash: string; version: string; decisions: string[] }[];
+  YAML_CORNERS.forEach((y, i) => {
+    const c = Covenant.fromYamlString(y);
+    assert.equal(c.version, theirs[i]!.version, `version of ${JSON.stringify(y)}`);
+    assert.equal(c.hash, theirs[i]!.hash, `hash of ${JSON.stringify(y)}`);
+    assert.deepEqual(["x", "123", "on", "no", "y", "1e3", "send_email", "*"].map((a) => c.evaluate(a)), theirs[i]!.decisions, `decisions of ${JSON.stringify(y)}`);
+  });
+});
+
+test("guards read a context's own fields, never inherited members", () => {
+  const c = Covenant.fromYamlString("agent: a\nrules:\n  - forbid: send_email\n    unless: constructor\n  - permit: send_email\n  - permit: pay\n    when: toString == x\n");
+  assert.equal(c.evaluate("send_email", {}), "forbid");
+  assert.equal(c.evaluate("pay", {}), "forbid");
+});

@@ -18,16 +18,18 @@
  * directory and the result still verifies as one history.
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
 import { computeHead, timestampHead, type AnchorResult } from "./anchor.js";
 import { anchorManifestFrom, generateEvidenceBundleV1, type AnchorManifest } from "./bundle.js";
-import { AuditChain, loadRecords, resolveSigningKey, verifyRecords, type ChainRecord } from "./chain.js";
+import { AuditChain, loadRecords, loadRecordsReport, resolveSigningKey, verifyRecords, type ChainRecord } from "./chain.js";
 import { Covenant, type Context, type RuleAction } from "./covenant.js";
 import { ActionReceipt, ReceiptSigner, hashPayload } from "./receipt.js";
 
 const KEY_FILE = ".air-receipt-key";
+const LOCK_FILE = ".air-writer.lock";
 
 export interface Recorded {
   action: string;
@@ -50,6 +52,13 @@ export interface RecorderOptions {
   anchorTimeout?: number;
   /** Timestamp authorities to try, in order. */
   tsaUrls?: string[];
+  /**
+   * Called when a framework hook could not record something. Hooks never let
+   * a recording failure break the agent's own work (the tool has already
+   * run); without this callback the first failure is logged with
+   * console.warn and later ones are only counted in `recordErrors`.
+   */
+  onRecordError?: (error: unknown) => void;
 }
 
 export interface ActionOptions {
@@ -83,9 +92,20 @@ export interface ObservationFields {
 
 function loadOrCreateSigner(runsDir: string): ReceiptSigner {
   const file = path.join(runsDir, KEY_FILE);
-  if (fs.existsSync(file)) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let text: string;
     try {
-      const doc = JSON.parse(fs.readFileSync(file, "utf8")) as { algorithm?: string; seed?: string };
+      text = fs.readFileSync(file, "utf8");
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new Error(`cannot read ${file} (${(e as Error).message}). It holds this directory's signing identity: fix its permissions rather than replacing it.`);
+      }
+      const created = createKeyFile(file);
+      if (created) return created;
+      continue; // another process created it first: use theirs
+    }
+    try {
+      const doc = JSON.parse(text) as { algorithm?: string; seed?: string };
       if (doc.algorithm === "ed25519" && doc.seed) return new ReceiptSigner({ privateKey: Buffer.from(doc.seed, "hex") });
     } catch {
       /* fall through to the refusal below */
@@ -94,9 +114,141 @@ function loadOrCreateSigner(runsDir: string): ReceiptSigner {
     // every earlier receipt in this directory was signed under.
     throw new Error(`${file} exists but is not an Ed25519 key this recorder can use. Point runsDir at a fresh directory rather than replacing it.`);
   }
+  throw new Error(`could not create or read ${file}`);
+}
+
+/**
+ * Create the key file atomically: written whole under a temporary name, then
+ * hard-linked into place, so a process starting at the same moment never
+ * reads half a key and two creators cannot both win. Returns undefined when
+ * another process got there first.
+ */
+function createKeyFile(file: string): ReceiptSigner | undefined {
   const signer = new ReceiptSigner();
-  fs.writeFileSync(file, JSON.stringify({ algorithm: "ed25519", seed: signer.seed!.toString("hex") }), { mode: 0o600, flag: "wx" });
-  return signer;
+  const body = JSON.stringify({ algorithm: "ed25519", seed: signer.seed!.toString("hex") });
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  fs.writeFileSync(tmp, body, { mode: 0o600, flag: "wx" });
+  try {
+    fs.linkSync(tmp, file);
+    return signer;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") return undefined;
+    // A filesystem without hard links: an exclusive create is still safe
+    // against overwriting, if not against a reader racing the write.
+    try {
+      fs.writeFileSync(file, body, { mode: 0o600, flag: "wx" });
+      return signer;
+    } catch (e2) {
+      if ((e2 as NodeJS.ErrnoException).code === "EEXIST") return undefined;
+      throw e2;
+    }
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+// One chain per runs directory per process: Recorders opened on the same
+// directory (a recorder per request, say) append to one history instead of
+// forking it.
+const chains = new Map<string, { chain: AuditChain; key: string; users: number }>();
+const heldLocks = new Set<string>();
+let exitHookInstalled = false;
+
+function sharedChain(runsDir: string, hmacKey: string | undefined): { chain: AuditChain; dir: string } {
+  const dir = fs.realpathSync(runsDir);
+  const key = resolveSigningKey(runsDir, hmacKey);
+  const existing = chains.get(dir);
+  if (existing) {
+    if (existing.key !== key) throw new Error(`${runsDir} is already being recorded in this process with a different HMAC key`);
+    existing.chain.syncWithDisk();
+    existing.users++;
+    return { chain: existing.chain, dir };
+  }
+  acquireWriterLock(dir);
+  const chain = new AuditChain(runsDir, hmacKey, true);
+  chains.set(dir, { chain, key, users: 1 });
+  return { chain, dir };
+}
+
+/** One Recorder on `dir` is done; the last one out releases the directory. */
+function releaseChain(dir: string): void {
+  const entry = chains.get(dir);
+  if (!entry || --entry.users > 0) return;
+  chains.delete(dir);
+  if (heldLocks.delete(dir)) {
+    try {
+      fs.rmSync(path.join(dir, LOCK_FILE), { force: true });
+    } catch {
+      /* the directory is gone */
+    }
+  }
+}
+
+/**
+ * The chain has one writer at a time. Two processes appending to one
+ * directory fork it, and the fork only shows when the evidence fails to
+ * verify, so a second process on this machine is refused up front. A lock
+ * left by a process that has exited is taken over. This narrows the ways to
+ * fork a chain; it is not a distributed mutex (two processes taking over the
+ * same stale lock at the same instant can both proceed).
+ */
+function acquireWriterLock(dir: string): void {
+  if (heldLocks.has(dir)) return;
+  const file = path.join(dir, LOCK_FILE);
+  const mine = JSON.stringify({ pid: process.pid, host: os.hostname(), started: new Date().toISOString() });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fs.writeFileSync(file, mine, { flag: "wx" });
+      heldLocks.add(dir);
+      installExitHook();
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") return; // cannot lock (read-only, say): writing will report its own errors
+    }
+    let holder: { pid?: number; host?: string } = {};
+    try {
+      holder = JSON.parse(fs.readFileSync(file, "utf8")) as typeof holder;
+    } catch {
+      /* unreadable lock: treat as stale */
+    }
+    if (holder.pid && holder.host && holder.host !== os.hostname()) {
+      // Liveness cannot be checked across machines (a shared volume).
+      console.warn(`AIR Blackbox: taking over ${file}, held by process ${holder.pid} on ${holder.host}. ` +
+        "If that machine is still recording into this directory, the chain will fork.");
+    } else if (holder.pid && holder.pid !== process.pid && processAlive(holder.pid)) {
+      throw new Error(
+        `${dir} is being recorded by process ${holder.pid}. A chain has one writer at a time: give each process its own ` +
+          `runsDir, send records through the ingest server, or have that process call close() on its recorder when it ` +
+          `is done. If no such process is running, delete ${file}.`,
+      );
+    }
+    fs.rmSync(file, { force: true }); // stale, or left by this process
+  }
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function installExitHook(): void {
+  if (exitHookInstalled) return;
+  exitHookInstalled = true;
+  process.once("exit", () => {
+    for (const dir of heldLocks) {
+      try {
+        fs.rmSync(path.join(dir, LOCK_FILE), { force: true });
+      } catch {
+        // The directory is gone or replaced: nothing left to unlock, and an
+        // exit hook must never turn a clean exit into a crash.
+      }
+    }
+  });
 }
 
 export class Recorder {
@@ -108,9 +260,15 @@ export class Recorder {
   readonly tsaUrls?: string[];
   bundlePath?: string;
   lastExportNote = "";
+  /** Recording failures the hooks absorbed so the agent could carry on. */
+  recordErrors = 0;
   private readonly chain: AuditChain;
+  private readonly chainDir: string;
+  private closed = false;
   private readonly signer: ReceiptSigner;
-  private readonly hmacKey?: string;
+  // A true private field, so console.log(recorder) cannot print the key.
+  readonly #hmacKey?: string;
+  private readonly onRecordError?: (error: unknown) => void;
   private written = 0;
 
   constructor(name = "agent", options: RecorderOptions = {}) {
@@ -121,9 +279,47 @@ export class Recorder {
     this.anchor = options.anchor ?? true;
     this.anchorTimeout = options.anchorTimeout ?? 10000;
     this.tsaUrls = options.tsaUrls;
-    this.hmacKey = options.hmacKey;
-    this.chain = new AuditChain(this.runsDir, options.hmacKey, true);
+    this.#hmacKey = options.hmacKey;
+    this.onRecordError = options.onRecordError;
     this.signer = loadOrCreateSigner(this.runsDir);
+    const shared = sharedChain(this.runsDir, options.hmacKey);
+    this.chain = shared.chain;
+    this.chainDir = shared.dir;
+  }
+
+  /**
+   * Done recording: hand the directory back so another process can continue
+   * the chain while this one keeps running. Recording after close() throws.
+   * (A process that exits releases its directories anyway.)
+   */
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    releaseChain(this.chainDir);
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error(`recorder ${this.name} is closed`);
+  }
+
+  /**
+   * How a hook reports a record it could not write. Hooks call this instead
+   * of letting the failure reach the agent.
+   */
+  reportRecordError(error: unknown): void {
+    this.recordErrors++;
+    if (this.onRecordError) {
+      try {
+        this.onRecordError(error);
+      } catch {
+        /* a failing callback must not break the agent either */
+      }
+      return;
+    }
+    if (this.recordErrors === 1) {
+      console.warn(`AIR Blackbox (${this.name}): could not record an action: ${error instanceof Error ? error.message : String(error)}. ` +
+        "The agent was not interrupted; later failures are counted in recordErrors. Pass onRecordError to handle them.");
+    }
   }
 
   /** The signer's public key (hex). */
@@ -151,6 +347,8 @@ export class Recorder {
    * intercept. Read `allowed` and honour it.
    */
   action(name: string, detail = "", options: ActionOptions = {}): Recorded {
+    this.assertOpen();
+    if (typeof detail !== "string") detail = String(detail ?? "");
     const context = options.context ?? {};
     const decision: RuleAction = this.covenant
       ? this.covenant.evaluate(name, { detail, ...(options.guard ?? {}), ...context })
@@ -170,7 +368,7 @@ export class Recorder {
     if (options.decisionType || options.humanReviewer) {
       category = "screening";
       const screening: Record<string, string> = { decision_type: options.decisionType ?? name };
-      if (options.humanReviewer) screening["human_reviewer"] = options.humanReviewer.slice(0, 100);
+      if (options.humanReviewer) screening["human_reviewer"] = String(options.humanReviewer).slice(0, 100);
       record["screening"] = screening;
     }
     if (this.covenant) record["covenant_hash"] = this.covenant.hash;
@@ -196,7 +394,10 @@ export class Recorder {
    * these are the records the Python trust layers write.
    */
   observe(type: string, fields: ObservationFields = {}): string {
-    const record: ChainRecord = { run_id: randomUUID(), timestamp: new Date().toISOString(), type, ...fields };
+    this.assertOpen();
+    // The writer's fields last: a field named run_id would otherwise choose
+    // the record's file name (and could overwrite another record).
+    const record: ChainRecord = { ...fields, run_id: randomUUID(), timestamp: new Date().toISOString(), type };
     const chainHash = this.chain.write(record);
     this.written++;
     return chainHash;
@@ -204,7 +405,7 @@ export class Recorder {
 
   /** Verify the chain this recorder writes to, as the Python verifier would. */
   verify(): ReturnType<typeof verifyRecords> {
-    return verifyRecords(loadRecords(this.runsDir), resolveSigningKey(this.runsDir, this.hmacKey));
+    return verifyRecords(loadRecords(this.runsDir), resolveSigningKey(this.runsDir, this.#hmacKey));
   }
 
   /**
@@ -213,10 +414,20 @@ export class Recorder {
    * bundle never quietly attests a broken history.
    */
   async export(outputDir?: string): Promise<string> {
-    const records = loadRecords(this.runsDir);
-    const verification = this.verify();
-    const fullyIntact = verification.intact && verification.verified_records === records.length;
+    const { records, unreadable } = loadRecordsReport(this.runsDir);
+    const verification = verifyRecords(records, resolveSigningKey(this.runsDir, this.#hmacKey));
     const chained = records.filter((r) => r.chain_hash);
+    // This process knows the head it wrote. If the newest record on disk is
+    // not it, records were removed after they were written; and a record
+    // file that cannot be read is a hole. Either way the export says the
+    // history is not intact rather than attesting what is left.
+    const problems: string[] = [];
+    if (unreadable.length) problems.push(`${unreadable.length} record file(s) could not be read: ${unreadable.slice(0, 3).join(", ")}`);
+    const head = chained.length ? String(chained[chained.length - 1]!.chain_hash) : "genesis";
+    if (this.chain.writesSinceLoad > 0 && head !== this.chain.currentHash) problems.push("the newest record this process wrote is missing from the directory");
+    const fullyIntact = verification.intact && verification.verified_records === records.length && problems.length === 0;
+    this.lastExportNote = problems.length ? `chain not intact: ${problems.join("; ")}` : "";
+    if (problems.length) console.warn(`AIR Blackbox (${this.name}): ${this.lastExportNote}`);
     const seqMax = chained.reduce((m, r) => Math.max(m, Number(r.chain_seq ?? 0)), 0);
 
     let anchor: AnchorManifest;
@@ -228,7 +439,8 @@ export class Recorder {
         anchor = { anchored: false, reason: "no records" };
       } else {
         const result: AnchorResult = await timestampHead(head, this.tsaUrls, this.anchorTimeout);
-        this.lastExportNote = result.ok ? `timestamped by ${result.tsa_url}` : `no external timestamp: ${result.error}`;
+        const note = result.ok ? `timestamped by ${result.tsa_url}` : `no external timestamp: ${result.error}`;
+        this.lastExportNote = this.lastExportNote.startsWith("chain not intact") ? `${this.lastExportNote}; ${note}` : note;
         anchor = anchorManifestFrom(result, seqMax);
       }
     }
@@ -237,7 +449,12 @@ export class Recorder {
       chainEntries: chained,
       tenant: this.name,
       signer: this.signer,
-      chainVerification: { fully_intact: fullyIntact, ...verification },
+      chainVerification: {
+        fully_intact: fullyIntact,
+        ...verification,
+        // Stamped as a break, so verifiers fail the bundle and say why.
+        ...(problems.length ? { intact: false, first_break_at: verification.first_break_at ?? chained.length, problems } : {}),
+      },
       system: { name: this.name, high_risk_rationale: "", deployer: "" },
       anchor,
       outputDir: outputDir ?? this.runsDir,
@@ -246,9 +463,13 @@ export class Recorder {
     return bundlePath;
   }
 
-  /** Export if anything was recorded. For `await using rec = record(...)`. */
+  /** Export if anything was recorded, then close. For `await using rec = record(...)`. */
   async [Symbol.asyncDispose](): Promise<void> {
-    if (this.written) await this.export();
+    try {
+      if (this.written && !this.closed) await this.export();
+    } finally {
+      this.close();
+    }
   }
 }
 
