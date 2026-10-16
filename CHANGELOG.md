@@ -42,6 +42,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   found two gaps in AIR's own framework detection (LangGraph-only Python, and
   `@openai/guardrails` in TypeScript and JavaScript).
 
+### Changed
+- **Covenants: an approval rule whose guard cannot be read now fails
+  closed, in both SDKs.** With `permit: issue_refund` beside
+  `require_approval: issue_refund` when `amount > 1000`, a missing or
+  unreadable amount (`"$5,000"`) used to leave only the permit, so the
+  refund went through; it now requires approval. Such a rule only ever
+  makes a decision stricter: with no permit, the default forbid stands.
+  Decisions change only where a `require_approval` guard is indeterminate.
+- **Covenant loading is strict, in both SDKs, with the same messages.**
+  Mistakes used to load silently: a misspelled `wehn:` dropped the guard and
+  left an unconditional permit, a rule with both `forbid:` and `permit:`
+  became a permit, `amount >> 5` and `order.amount > 5` loaded and were
+  never true, and a target YAML reads as a number or boolean (`on`, `no`,
+  `123`) never matched. Unknown keys, a rule with no action or two, a
+  non-string target, `when`, `unless` or `category`, a condition that is
+  not `field op value` (or orders against a non-number, or reads a nested
+  field), a key repeated in one mapping and unknown top-level keys now raise
+  `CovenantError` naming the rule. The four example covenants load
+  unchanged, with the same hashes.
+
 ### Fixed
 - `air-evidence verify` accepted, or crashed on, malformed bundles found by a
   tamper test of TypeScript-written bundles: a manifest repeating a key (the
