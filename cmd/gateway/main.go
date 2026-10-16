@@ -55,7 +55,7 @@ func main() {
 			UseSSL:    envOr("VAULT_USE_SSL", "false") == "true",
 		})
 		if err != nil {
-			log.Printf("WARN: vault disabled: %v (gateway will proxy without recording)", err)
+			log.Printf("WARN: vault disabled: %v (records are still written; request and response bodies are not stored)", err)
 		} else {
 			log.Printf("Vault connected: %s", vaultEndpoint)
 		}
@@ -185,10 +185,12 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:         *addr,
-		Handler:      handler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 180 * time.Second, // Allow time for slow LLM streaming responses.
+		Addr:        *addr,
+		Handler:     handler,
+		ReadTimeout: 30 * time.Second,
+		// No overall write timeout: a streamed answer can run for many
+		// minutes. The proxy bounds each write to the client instead.
+		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
 

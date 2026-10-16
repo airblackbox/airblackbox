@@ -8,9 +8,11 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -27,10 +29,122 @@ import (
 
 var tracer = otel.Tracer("air-blackbox-gateway")
 
-// upstreamClient is an HTTP client with explicit timeouts for LLM provider calls.
-// The default Go http.Client has no timeout, which can hang goroutines forever.
+// upstreamClient has no overall timeout: a streamed answer can run for many
+// minutes, and an overall limit cut such streams off while the client saw a
+// normal end. The caller's own timeout ends a call (the upstream request
+// carries the client's context); the transport bounds the steps that should
+// be quick, and how long an answer may take to start arriving.
 var upstreamClient = &http.Client{
-	Timeout: 120 * time.Second, // LLM calls can be slow; 2 min is generous but safe.
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Minute, // the provider SDKs' own default request timeout
+		ExpectContinueTimeout: time.Second,
+		// Go's default keeps 2 idle connections per host, so concurrent
+		// calls opened a new connection (and TLS handshake) almost every time.
+		MaxIdleConns:        512,
+		MaxIdleConnsPerHost: 256,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
+// streamWriteTimeout bounds each write to the client. The server has no
+// overall write timeout (it would cut long streams); this stops a client that
+// stopped reading from holding the call open indefinitely.
+const streamWriteTimeout = 2 * time.Minute
+
+// hopHeaders are connection-level headers a proxy must not forward (RFC 9110 §7.6.1).
+var hopHeaders = []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization",
+	"Proxy-Connection", "Te", "Trailer", "Transfer-Encoding", "Upgrade"}
+
+func removeHopHeaders(h http.Header) {
+	for _, v := range h.Values("Connection") {
+		for _, name := range strings.Split(v, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				h.Del(name)
+			}
+		}
+	}
+	for _, name := range hopHeaders {
+		h.Del(name)
+	}
+}
+
+// upstreamHeaders is the client's request headers as the provider should
+// see them: everything the SDK sent (organization and project headers, beta
+// flags, its User-Agent) except connection headers and the gateway's own.
+func upstreamHeaders(r *http.Request, cfg Config, endpoint string) http.Header {
+	h := r.Header.Clone()
+	removeHopHeaders(h)
+	for _, name := range []string{"X-Gateway-Key", "X-Air-Config-Hash", "X-Session-Id", "Host",
+		// The body may have been rewritten, and leaving compression to the
+		// transport is what makes it decompress the response we parse.
+		"Content-Length", "Accept-Encoding"} {
+		h.Del(name)
+	}
+	// On the OpenAI-shaped endpoints X-Api-Key is accepted as the gateway key
+	// when X-Gateway-Key is absent; that secret must not reach the provider.
+	if endpoint != "/v1/messages" && cfg.GatewayKey != "" && r.Header.Get("X-Gateway-Key") == "" {
+		h.Del("X-Api-Key")
+	}
+	h.Set("Content-Type", "application/json")
+	return h
+}
+
+// copyResponseHeaders passes the provider's response headers to the client,
+// so SDK retries see retry-after, x-should-retry and the rate-limit headers.
+func copyResponseHeaders(dst, src http.Header) {
+	for name, values := range src {
+		dst[name] = append([]string(nil), values...)
+	}
+	removeHopHeaders(dst)
+	dst.Del("Content-Length") // the response is re-framed here
+}
+
+// extendWriteDeadline gives the next write to the client streamWriteTimeout.
+// Writers without deadline support (tests) are left as they are.
+func extendWriteDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
+}
+
+// writeGatewayError writes an error the gateway itself raises, as JSON in the
+// providers' {"error": {"type", "message"}} shape so SDKs surface it.
+func writeGatewayError(w http.ResponseWriter, status int, errType, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": map[string]interface{}{"type": errType, "message": message},
+	})
+}
+
+// upstreamErrorText describes a provider error for the record: the HTTP
+// status and the provider's error type, never its message, which can quote
+// the request.
+func upstreamErrorText(status int, body []byte) string {
+	var parsed struct {
+		Error *struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	text := fmt.Sprintf("upstream HTTP %d", status)
+	if json.Unmarshal(body, &parsed) == nil && parsed.Error != nil {
+		if t := firstNonEmpty(parsed.Error.Type, parsed.Error.Code); t != "" {
+			text += " " + t
+		}
+	}
+	return text
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // DefaultAnthropicURL is where /v1/messages is forwarded when AnthropicURL is unset.
@@ -233,6 +347,9 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 
 	// Determine provider from model name.
 	provider := inferProvider(req.Model, upstreamBase(cfg, endpoint))
+	if provider == "unknown" && endpoint == "/v1/messages" {
+		provider = "anthropic" // an alias ("sonnet") or a cloud model id, through an internal proxy
+	}
 	span.SetAttributes(
 		attribute.String("gen_ai.system", provider),
 		attribute.String("gen_ai.provider.name", provider),
@@ -338,33 +455,23 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 		}
 	}
 
-	// Forward to upstream provider.
+	// Forward to upstream provider, with the client's query string (Azure's
+	// api-version, the Anthropic SDK's beta flag) and headers.
 	upstream := upstreamBase(cfg, endpoint) + endpoint
+	if r.URL.RawQuery != "" {
+		upstream += "?" + r.URL.RawQuery
+	}
 	proxyReq, err := http.NewRequestWithContext(ctx, "POST", upstream, bytes.NewReader(reqBody))
 	if err != nil {
-		http.Error(w, `{"error":"failed to create upstream request"}`, http.StatusInternalServerError)
+		writeGatewayError(w, http.StatusInternalServerError, "gateway_error", "failed to create upstream request")
 		return
 	}
-
-	// Copy relevant headers.
-	proxyReq.Header.Set("Content-Type", "application/json")
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		proxyReq.Header.Set("Authorization", auth)
-	}
-	if endpoint == "/v1/messages" {
-		// Anthropic's credential and protocol headers. Never the gateway key:
-		// /v1/messages authenticates the gateway with X-Gateway-Key only.
-		for _, h := range []string{"X-Api-Key", "Anthropic-Version", "Anthropic-Beta"} {
-			if v := r.Header.Get(h); v != "" {
-				proxyReq.Header.Set(h, v)
-			}
-		}
-	}
+	proxyReq.Header = upstreamHeaders(r, cfg, endpoint)
 
 	resp, err := upstreamClient.Do(proxyReq)
 	if err != nil {
 		span.SetAttributes(attribute.String("error", err.Error()))
-		http.Error(w, fmt.Sprintf(`{"error":"upstream: %s"}`, err), http.StatusBadGateway)
+		writeGatewayError(w, http.StatusBadGateway, "upstream_unreachable", "upstream: "+err.Error())
 
 		// --- Optimization: record upstream failure ---
 		if cfg.Analytics != nil {
@@ -380,18 +487,15 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 	defer resp.Body.Close()
 
+	copyResponseHeaders(w.Header(), resp.Header)
 	// Set run_id header early so the client gets it even for streaming responses.
 	w.Header().Set("x-run-id", runID)
-	for _, h := range []string{"x-request-id", "openai-organization", "request-id"} {
-		if v := resp.Header.Get(h); v != "" {
-			w.Header().Set(h, v)
-		}
-	}
 
 	// --- Streaming vs non-streaming response handling ---
 	var tokens recorder.Tokens
+	broken := false
 	if req.Stream && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		tokens = handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+		tokens, broken = handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	} else {
 		tokens = handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	}
@@ -399,17 +503,25 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	// Update guardrails session state after response.
 	if cfg.Guardrails != nil && cfg.Sessions != nil {
 		sessionID := extractSessionID(r)
-		isError := resp.StatusCode >= 400
+		isError := resp.StatusCode >= 400 || broken
 		cfg.Sessions.RecordResponse(sessionID, tokens.Total, isError)
+	}
+
+	// The upstream stream broke while the client was still reading. Ending
+	// the response normally would hand the client a truncated answer as if
+	// it were complete; aborting the connection makes its SDK raise.
+	if broken {
+		panic(http.ErrAbortHandler)
 	}
 }
 
 // handleStreamingResponse forwards SSE chunks to the client in real-time while
 // capturing the full response in the background for vault storage.
-// It returns the token usage extracted from the stream (zero if unavailable).
+// It returns the token usage extracted from the stream (zero if unavailable)
+// and whether the upstream stream broke while the client was still reading.
 func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) recorder.Tokens {
+	provider, endpoint string, reqBody []byte, start time.Time) (recorder.Tokens, bool) {
 
 	// Set streaming headers.
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -423,10 +535,12 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	var fullResponse bytes.Buffer
 	buf := make([]byte, 4096)
 
+	var readErr error
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
 			fullResponse.Write(buf[:n])
+			extendWriteDeadline(w)
 			w.Write(buf[:n])
 			if canFlush {
 				flusher.Flush()
@@ -434,6 +548,7 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 		}
 		if err != nil {
 			if err != io.EOF {
+				readErr = err
 				log.Printf("[%s] stream read error: %v", runID, err)
 			}
 			break
@@ -457,9 +572,22 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 		)
 	}
 
-	status := "success"
-	if resp.StatusCode >= 400 {
-		status = "error"
+	status, errMsg := "success", ""
+	broken := false
+	switch {
+	case resp.StatusCode >= 400:
+		status, errMsg = "error", upstreamErrorText(resp.StatusCode, respBytes)
+	case readErr != nil && errors.Is(readErr, context.Canceled):
+		// The client went away; the request context, and so the upstream
+		// read, was cancelled with it.
+		status, errMsg = "error", "client disconnected before the stream ended"
+	case readErr != nil:
+		status, errMsg = "error", "upstream stream broke: "+readErr.Error()
+		broken = true
+	default:
+		if e := streamErrorEvent(respBytes); e != "" {
+			status, errMsg = "error", "provider error in stream: "+e
+		}
 	}
 
 	log.Printf("[%s] %s model=%s tokens=%d duration=%dms status=%s stream=true",
@@ -477,8 +605,61 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
-		reqBody, respBytes, start, status, "")
-	return tokens
+		reqBody, respBytes, start, status, errMsg)
+	return tokens, broken
+}
+
+// streamErrorEvent finds an error the provider reported inside a stream that
+// began with HTTP 200: Anthropic's "error" event, the Responses API's
+// "error" and "response.failed" events, or a chat completions chunk carrying
+// "error". It returns the error's type (never its message, which can quote
+// the request), or "" when the stream reported none.
+func streamErrorEvent(data []byte) string {
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if !strings.Contains(payload, `"error"`) && !strings.Contains(payload, "response.failed") {
+			continue // the common case, without a parse
+		}
+		var ev struct {
+			Type     string          `json:"type"`
+			Code     string          `json:"code"`
+			Error    json.RawMessage `json:"error"`
+			Response *struct {
+				Error json.RawMessage `json:"error"`
+			} `json:"response"`
+		}
+		if json.Unmarshal([]byte(payload), &ev) != nil {
+			continue
+		}
+		switch {
+		case ev.Type == "error":
+			return firstNonEmpty(errorType(ev.Error), ev.Code, "error")
+		case ev.Type == "response.failed":
+			if ev.Response != nil {
+				return firstNonEmpty(errorType(ev.Response.Error), "response.failed")
+			}
+			return "response.failed"
+		case ev.Type == "" && len(ev.Error) > 0 && string(ev.Error) != "null":
+			return firstNonEmpty(errorType(ev.Error), "error")
+		}
+	}
+	return ""
+}
+
+// errorType reads "type" (or "code") from a provider error object.
+func errorType(raw json.RawMessage) string {
+	var e struct {
+		Type string `json:"type"`
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(raw, &e) != nil {
+		return ""
+	}
+	return firstNonEmpty(e.Type, e.Code)
 }
 
 // handleBufferedResponse handles traditional (non-streaming) responses.
@@ -490,7 +671,9 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	// Read response body.
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		http.Error(w, `{"error":"failed to read upstream response"}`, http.StatusBadGateway)
+		writeGatewayError(w, http.StatusBadGateway, "upstream_read_failed", "failed to read upstream response: "+err.Error())
+		go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
+			reqBody, nil, start, "error", "upstream response broke: "+err.Error())
 		return recorder.Tokens{}
 	}
 
@@ -511,33 +694,38 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	duration := time.Since(start)
 	span.SetAttributes(attribute.Int64("gen_ai.duration_ms", duration.Milliseconds()))
 
-	status := "success"
+	status, errMsg := "success", ""
 	if resp.StatusCode >= 400 {
-		status = "error"
+		status, errMsg = "error", upstreamErrorText(resp.StatusCode, respBody)
 	}
 
-	// Return response to caller.
-	w.Header().Set("Content-Type", "application/json")
+	// --- Optimization: classify failures (before the headers are sent) ---
+	errorType := ""
+	if cfg.Analytics != nil && resp.StatusCode >= 400 {
+		errorType = guardrails.ClassifyFailure(resp.StatusCode, string(respBody))
+		w.Header().Set("X-Error-Class", errorType)
+	}
+
+	// Return response to caller, in the content type the provider sent.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/json")
+	}
 	w.WriteHeader(resp.StatusCode)
+	extendWriteDeadline(w)
 	w.Write(respBody)
 
 	log.Printf("[%s] %s model=%s tokens=%d duration=%dms status=%s",
 		runID, endpoint, req.Model, tokens.Total, duration.Milliseconds(), status)
 
-	// --- Optimization: record metrics + classify failures ---
+	// --- Optimization: record metrics ---
 	if cfg.Analytics != nil {
-		errorType := ""
-		if resp.StatusCode >= 400 {
-			errorType = guardrails.ClassifyFailure(resp.StatusCode, string(respBody))
-			w.Header().Set("X-Error-Class", errorType)
-		}
 		cfg.Analytics.RecordCall(req.Model, duration.Milliseconds(),
 			tokens.Prompt, tokens.Completion, tokens.Total, status, errorType)
 	}
 
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
-		reqBody, respBody, start, status, "")
+		reqBody, respBody, start, status, errMsg)
 	return tokens
 }
 
@@ -836,9 +1024,10 @@ func inferProvider(model, providerURL string) string {
 	model = strings.ToLower(model)
 	switch {
 	case strings.HasPrefix(model, "gpt"), strings.HasPrefix(model, "o1"), strings.HasPrefix(model, "o3"),
-		strings.HasPrefix(model, "chatgpt"), strings.HasPrefix(model, "dall-e"):
+		strings.HasPrefix(model, "o4"), strings.HasPrefix(model, "codex"), strings.HasPrefix(model, "chatgpt"),
+		strings.HasPrefix(model, "dall-e"), strings.HasPrefix(model, "text-embedding"):
 		return "openai"
-	case strings.HasPrefix(model, "claude"):
+	case strings.HasPrefix(model, "claude"), strings.Contains(model, "anthropic.claude"):
 		return "anthropic"
 	case strings.HasPrefix(model, "gemini"):
 		return "google"

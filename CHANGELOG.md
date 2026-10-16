@@ -34,6 +34,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@openai/guardrails` in TypeScript and JavaScript).
 
 ### Fixed
+- Gateway: found by running the provider SDKs (OpenAI and Anthropic, Python
+  and TypeScript, plus the Vercel AI SDK and LangChain) through it against
+  scripted upstreams:
+  - A provider stream that broke partway reached the client as a normal end
+    of stream, so SDKs returned a truncated answer as complete, and was
+    recorded as a success. The client's connection is now broken too (the
+    SDK raises) and the record says `error`, as do an error event inside a
+    200 stream and a client that disconnects early.
+  - A 120-second overall upstream timeout cut longer streams off silently
+    and turned slow non-streamed answers into 502s (which SDKs retry), and
+    the server's 180-second write timeout would have cut streams next. Calls
+    now end on the caller's own timeout, with limits only on connecting and
+    on waiting for a response to start (10 minutes).
+  - Only request ids were passed back: `retry-after`, `x-should-retry` and
+    the rate-limit headers were dropped, so SDK retries ignored the
+    provider's backoff. The provider's response headers now reach the client.
+  - Only `Authorization` (and the Anthropic headers) were forwarded, and no
+    query string: `OpenAI-Organization` and `OpenAI-Project` were lost (the
+    call was billed to the default project), as were `api-version` and the
+    Anthropic SDK's `?beta=true`. The client's headers and query string now
+    reach the provider, except the gateway's own headers and the gateway key.
+  - Concurrent calls opened a new upstream connection almost every time (2
+    idle connections per host); the pool now keeps 256.
+  - Records of failed calls now say why (HTTP status and the provider's
+    error type, never its message), an unreachable upstream returns a JSON
+    error the SDKs can parse, and `/v1/messages` calls are recorded as
+    provider `anthropic` for aliases and cloud model ids.
+- Sandbox: agents using the Anthropic SDK bypassed the sandbox's gateway;
+  `ANTHROPIC_BASE_URL` is now set alongside `OPENAI_BASE_URL`.
+- README: the gateway section said "everything else in your code stays
+  identical", listed Azure and an injection scan the gateway does not have,
+  and did not say which endpoints it serves or where each library expects
+  the base URL. It now does.
 - Gateway recorded zero tokens for every Responses API call, buffered and
   streamed: it only read chat-completions usage names. Usage is now read in
   all three shapes (chat completions, Responses, Anthropic, where cache reads

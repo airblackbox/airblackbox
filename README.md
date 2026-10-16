@@ -91,7 +91,7 @@ One proxy swap. Complete coverage. Runs locally.
 # Before
 client = OpenAI(base_url="https://api.openai.com/v1")
 
-# After - everything else in your code stays identical
+# After - the calls you make stay the same
 client = OpenAI(
     base_url="http://localhost:8080/v1",
     default_headers={"X-Gateway-Key": "your-key"}
@@ -113,6 +113,31 @@ const anthropic = new Anthropic({
   defaultHeaders: { "X-Gateway-Key": "your-key" },
 });
 ```
+
+Libraries disagree on whether the base URL includes `/v1`:
+
+| Client | Base URL setting | Gateway key header |
+|---|---|---|
+| OpenAI SDK (Python, TS) | `base_url` / `baseURL`: `http://localhost:8080/v1` | `default_headers` / `defaultHeaders` |
+| Anthropic SDK (Python, TS) | `base_url` / `baseURL`: `http://localhost:8080` | `default_headers` / `defaultHeaders` |
+| Vercel AI SDK, `@ai-sdk/openai` and `@ai-sdk/anthropic` | `baseURL`: `http://localhost:8080/v1` | `headers` |
+| LangChain `ChatOpenAI` (Python, JS) | `base_url` / `configuration.baseURL`: `http://localhost:8080/v1` | `default_headers` / `configuration.defaultHeaders` |
+| LangChain `ChatAnthropic` (Python, JS) | `base_url` / `anthropicApiUrl`: `http://localhost:8080` | `default_headers` / `clientOptions.defaultHeaders` |
+
+What to know before you switch:
+
+- The gateway serves `POST /v1/chat/completions`, `/v1/responses` and
+  `/v1/messages`. Other endpoints (embeddings, `models.list`, token counting,
+  retrieving a stored response) return 404, so call those directly.
+- The client's headers and query string are passed to the provider, and the
+  provider's headers (request ids, `retry-after`, rate limits) come back, so
+  SDK retries behave as they would without the gateway. Streams are passed
+  through as they arrive; if the provider's stream breaks, the client's
+  connection is broken too, so the SDK raises instead of returning a partial
+  answer.
+- Streamed chat completions report token usage only when the request sets
+  `stream_options: {"include_usage": true}`; without it the record has zero
+  tokens. The Responses and Messages APIs always report usage.
 
 The gateway sees model calls, never whether a tool then ran or what it did.
 Its records hold the model, provider, token counts and timing; with a vault
@@ -431,12 +456,12 @@ Your Agent
     v
 AIR Gateway          <- swap base_url here
     |
-    |-- PII + injection scan      (before prompt reaches model)
+    |-- guardrails (opt-in)       (PII redaction, tool filter, before the model)
     |-- HMAC audit record         (async, zero latency impact)
     |-- Ed25519 / ML-DSA-65 sign  (keys never leave your machine)
     |
     v
-LLM Provider         <- OpenAI / Anthropic / Azure / local
+LLM Provider         <- OpenAI / Anthropic / OpenAI-compatible
     |
     v
 AIR Record           <- tamper-evident .air.json
@@ -445,7 +470,7 @@ AIR Record           <- tamper-evident .air.json
 Evidence Bundle      <- self-verifying .air-evidence ZIP
 ```
 
-Works with any OpenAI-compatible API. Same format, same integration, regardless of provider.
+Works with any provider that serves the OpenAI chat completions or Responses API under `/v1` (set `PROVIDER_URL`), and with the Anthropic Messages API (`ANTHROPIC_URL`). Azure OpenAI's deployment-style paths are not routed.
 
 ## Why Not Just Log Everything?
 
