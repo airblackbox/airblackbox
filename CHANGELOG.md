@@ -43,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@openai/guardrails` in TypeScript and JavaScript).
 
 ### Fixed
+- `air-evidence verify` accepted, or crashed on, malformed bundles found by a
+  tamper test of TypeScript-written bundles: a manifest repeating a key (the
+  signature covers the manifest as parsed, and readers disagree on which
+  value counts), bytes before or after the archive (`zipfile` re-bases or
+  ignores them), and records nested too deeply to parse (a `RecursionError`
+  traceback). Each now fails cleanly at the check concerned, and a bundle
+  exported with anchoring turned off shows the recorded reason instead of
+  "no anchor recorded". See findings 9-12 in the red-team review.
 - Gateway: found by running the provider SDKs (OpenAI and Anthropic, Python
   and TypeScript, plus the Vercel AI SDK and LangChain) through it against
   scripted upstreams:

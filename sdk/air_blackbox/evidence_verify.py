@@ -43,6 +43,7 @@ import base64
 import hashlib
 import hmac as hmac_mod
 import json
+import os
 import sys
 import zipfile
 from typing import Any, Dict, List
@@ -92,6 +93,69 @@ def _fail(check: int, message: str) -> None:
 def _read(zf: zipfile.ZipFile, name: str) -> bytes:
     with zf.open(name) as f:
         return f.read()
+
+
+class _DuplicateKey(ValueError):
+    def __init__(self, key: str):
+        super().__init__(key)
+        self.key = key
+
+
+def _unique_pairs(pairs):
+    out = {}
+    for key, value in pairs:
+        if key in out:
+            raise _DuplicateKey(key)
+        out[key] = value
+    return out
+
+
+def _loads(data, what: str, check: int):
+    """json.loads that refuses what readers could disagree about.
+
+    A repeated key is legal JSON with no defined meaning: Python keeps the
+    last value, other readers the first. The manifest's signature covers the
+    manifest as parsed, so a forged first value beside a genuine last one
+    would verify here while another tool showed the forgery. Nesting deeper
+    than this interpreter can parse is refused rather than allowed to crash
+    the verifier with a traceback.
+    """
+    try:
+        return json.loads(data, object_pairs_hook=_unique_pairs)
+    except _DuplicateKey as e:
+        _fail(check, f"{what} repeats the key {e.key!r}. JSON readers disagree "
+                     "about which value counts, so what the signature covers "
+                     "and what a reader sees could differ")
+    except RecursionError:
+        _fail(check, f"{what} is nested too deeply to verify")
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        _fail(check, f"{what} is not valid JSON: {e}")
+
+
+def _framing_problem(path: str) -> str | None:
+    """Bytes before or after the archive, which zipfile quietly tolerates.
+
+    A bundle is exactly one ZIP: its first member at offset 0 and its
+    end-of-central-directory record (plus any comment it declares) at the end
+    of the file. Anything else means the file was extended after it was
+    written: an appended payload, or a prepended document that makes the
+    file a polyglot another program opens as something else.
+    """
+    size = os.path.getsize(path)
+    with open(path, "rb") as f:
+        head = f.read(4)
+        f.seek(max(0, size - (65535 + 22)))
+        tail = f.read()
+    if head != b"PK\x03\x04":
+        return "the file does not begin with the archive (bytes were added before it)"
+    at = tail.rfind(b"PK\x05\x06")
+    if at < 0 or len(tail) - at < 22:
+        return "the archive's end record is missing"
+    comment_len = int.from_bytes(tail[at + 20:at + 22], "little")
+    extra = len(tail) - (at + 22 + comment_len)
+    if extra:
+        return f"{extra} bytes follow the end of the archive"
+    return None
 
 
 def _ed25519_verify(public_key_raw: bytes, signature_hex: str,
@@ -163,7 +227,22 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                   rekor_server: str | None = None,
                   out=sys.stdout) -> Dict[str, Any]:
     """Run all six checks. Returns a summary dict; raises
-    VerificationFailure on the first failed check.
+    VerificationFailure on the first failed check."""
+    try:
+        return _verify_bundle(path, hmac_key, tsa_cacert, expect_key,
+                              rekor_verify, rekor_server, out)
+    except RecursionError:
+        # Records nested deeper than this interpreter can re-serialise (the
+        # TypeScript writer allows more depth than Python's default limit).
+        raise VerificationFailure(
+            3, "a record is nested too deeply to verify") from None
+
+
+def _verify_bundle(path: str, hmac_key: str | None,
+                   tsa_cacert: str | None, expect_key: str | None,
+                   rekor_verify: bool, rekor_server: str | None,
+                   out) -> Dict[str, Any]:
+    """The six checks; see verify_bundle.
 
     Check 6 (external anchor) is what defeats an operator rewrite: it
     re-derives the key-free chain head over the records and checks it against
@@ -177,6 +256,13 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         zf = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as e:
         _fail(1, f"cannot open bundle: {e}")
+    framing = _framing_problem(path)
+    # zipfile re-bases member offsets when data precedes the archive, so a
+    # prepended ZIP (which starts with a valid header too) shows up here.
+    if framing is None and min((i.header_offset for i in zf.infolist()), default=0) != 0:
+        framing = "the file does not begin with the archive (bytes were added before it)"
+    if framing:
+        _fail(1, f"not a single archive: {framing}")
     bad = zf.testzip()
     if bad is not None:
         _fail(1, f"corrupt member in ZIP: {bad}")
@@ -209,10 +295,9 @@ def verify_bundle(path: str, hmac_key: str | None = None,
     print("[1/6] ZIP integrity and layout: OK", file=out)
 
     # ---- Check 2: manifest signature + per-file digests -------------------
-    try:
-        manifest = json.loads(_read(zf, "manifest.json"))
-    except json.JSONDecodeError as e:
-        _fail(2, f"manifest.json is not valid JSON: {e}")
+    manifest = _loads(_read(zf, "manifest.json"), "manifest.json", 2)
+    if not isinstance(manifest, dict):
+        _fail(2, "manifest.json is not a JSON object")
     sig = manifest.get("signature") or {}
     digest = hashlib.sha256(canonical_manifest_bytes(manifest)).hexdigest()
     if digest != sig.get("signed_digest"):
@@ -301,6 +386,11 @@ def verify_bundle(path: str, hmac_key: str | None = None,
         _fail(2, "bundle contains file(s) the manifest does not list, so the "
                  "signature does not cover them - added after signing: "
                  f"{', '.join(unsigned)}")
+    # The digests prove these bytes are the ones signed; the bytes must also
+    # mean one thing to every reader. Check 3 parses the records and chain.
+    for fname in sorted(signed_files):
+        if fname.endswith(".json") and fname not in ("verification/chain.json",):
+            _loads(_read(zf, fname), fname, 2)
     # A valid signature proves internal consistency, NOT provenance: the key it
     # is checked against travels inside the bundle, so anyone can mint a key,
     # assemble records of their choosing, and sign them. Pinning the expected
@@ -340,11 +430,9 @@ def verify_bundle(path: str, hmac_key: str | None = None,
             _read(zf, "records/actions.jsonl").decode().splitlines()):
         if not line.strip():
             continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            _fail(3, f"records/actions.jsonl line {i + 1} is not valid JSON")
-    chain_doc = json.loads(_read(zf, "verification/chain.json"))
+        records.append(_loads(line, f"records/actions.jsonl line {i + 1}", 3))
+    chain_doc = _loads(_read(zf, "verification/chain.json"),
+                       "verification/chain.json", 3)
     stamped = chain_doc.get("verification_at_export") or {}
     if stamped.get("intact") is False:
         _fail(3, "the bundle's own chain verification recorded the chain as "
@@ -532,7 +620,8 @@ def verify_bundle(path: str, hmac_key: str | None = None,
                   f"verified ({detail}). Supply --tsa-cacert (or run with "
                   "network access) to check the timestamp.", file=out)
     else:
-        gap = anchor.get("error") or anchor.get("status") or "no anchor recorded"
+        gap = (anchor.get("error") or anchor.get("reason")
+               or anchor.get("status") or "no anchor recorded")
         print("[6/6] External anchor: NONE - this bundle is not anchored "
               f"({gap}), so an operator rewrite of the records cannot be "
               "detected by this verifier. The signature and chain checks above "
