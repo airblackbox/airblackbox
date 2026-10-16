@@ -1,0 +1,97 @@
+{
+  "name": "air-blackbox",
+  "version": "0.1.0",
+  "description": "Record what a TypeScript AI agent does into a signed, tamper-evident chain anyone can verify; enforce a covenant before each action. Hooks for the Vercel AI SDK, OpenAI Agents SDK, LangChain.js and MCP.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/airblackbox/airblackbox",
+    "directory": "js"
+  },
+  "homepage": "https://airblackbox.ai",
+  "keywords": [
+    "ai-agents",
+    "audit-trail",
+    "eu-ai-act",
+    "compliance",
+    "vercel-ai",
+    "openai-agents",
+    "langchain",
+    "mcp",
+    "ed25519"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vercel-ai": {
+      "types": "./dist/hooks/vercel-ai.d.ts",
+      "import": "./dist/hooks/vercel-ai.js"
+    },
+    "./openai-agents": {
+      "types": "./dist/hooks/openai-agents.d.ts",
+      "import": "./dist/hooks/openai-agents.js"
+    },
+    "./langchain": {
+      "types": "./dist/hooks/langchain.d.ts",
+      "import": "./dist/hooks/langchain.js"
+    },
+    "./mcp": {
+      "types": "./dist/hooks/mcp.d.ts",
+      "import": "./dist/hooks/mcp.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/test",
+    "!dist/**/*.map",
+    "mappings",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.2.18",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@openai/agents": "^0.20.0",
+    "@types/node": "^22.0.0",
+    "ai": "^7.0.142",
+    "typescript": "^5.9.3",
+    "zod": "^4.1.8"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=0.3",
+    "@modelcontextprotocol/sdk": ">=1.0",
+    "@openai/agents": ">=0.17",
+    "ai": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/core": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    }
+  }
+}

@@ -8,18 +8,20 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/airblackbox/gateway/pkg/guardrails"
 	"github.com/airblackbox/gateway/pkg/recorder"
 	"github.com/airblackbox/gateway/pkg/trust"
 	"github.com/airblackbox/gateway/pkg/vault"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -27,23 +29,139 @@ import (
 
 var tracer = otel.Tracer("air-blackbox-gateway")
 
-// upstreamClient is an HTTP client with explicit timeouts for LLM provider calls.
-// The default Go http.Client has no timeout, which can hang goroutines forever.
+// upstreamClient has no overall timeout: a streamed answer can run for many
+// minutes, and an overall limit cut such streams off while the client saw a
+// normal end. The caller's own timeout ends a call (the upstream request
+// carries the client's context); the transport bounds the steps that should
+// be quick, and how long an answer may take to start arriving.
 var upstreamClient = &http.Client{
-	Timeout: 120 * time.Second, // LLM calls can be slow; 2 min is generous but safe.
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Minute, // the provider SDKs' own default request timeout
+		ExpectContinueTimeout: time.Second,
+		// Go's default keeps 2 idle connections per host, so concurrent
+		// calls opened a new connection (and TLS handshake) almost every time.
+		MaxIdleConns:        512,
+		MaxIdleConnsPerHost: 256,
+		IdleConnTimeout:     90 * time.Second,
+	},
 }
+
+// streamWriteTimeout bounds each write to the client. The server has no
+// overall write timeout (it would cut long streams); this stops a client that
+// stopped reading from holding the call open indefinitely.
+const streamWriteTimeout = 2 * time.Minute
+
+// hopHeaders are connection-level headers a proxy must not forward (RFC 9110 §7.6.1).
+var hopHeaders = []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization",
+	"Proxy-Connection", "Te", "Trailer", "Transfer-Encoding", "Upgrade"}
+
+func removeHopHeaders(h http.Header) {
+	for _, v := range h.Values("Connection") {
+		for _, name := range strings.Split(v, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				h.Del(name)
+			}
+		}
+	}
+	for _, name := range hopHeaders {
+		h.Del(name)
+	}
+}
+
+// upstreamHeaders is the client's request headers as the provider should
+// see them: everything the SDK sent (organization and project headers, beta
+// flags, its User-Agent) except connection headers and the gateway's own.
+func upstreamHeaders(r *http.Request, cfg Config, endpoint string) http.Header {
+	h := r.Header.Clone()
+	removeHopHeaders(h)
+	for _, name := range []string{"X-Gateway-Key", "X-Air-Config-Hash", "X-Session-Id", "Host",
+		// The body may have been rewritten, and leaving compression to the
+		// transport is what makes it decompress the response we parse.
+		"Content-Length", "Accept-Encoding"} {
+		h.Del(name)
+	}
+	// On the OpenAI-shaped endpoints X-Api-Key is accepted as the gateway key
+	// when X-Gateway-Key is absent; that secret must not reach the provider.
+	if endpoint != "/v1/messages" && cfg.GatewayKey != "" && r.Header.Get("X-Gateway-Key") == "" {
+		h.Del("X-Api-Key")
+	}
+	h.Set("Content-Type", "application/json")
+	return h
+}
+
+// copyResponseHeaders passes the provider's response headers to the client,
+// so SDK retries see retry-after, x-should-retry and the rate-limit headers.
+func copyResponseHeaders(dst, src http.Header) {
+	for name, values := range src {
+		dst[name] = append([]string(nil), values...)
+	}
+	removeHopHeaders(dst)
+	dst.Del("Content-Length") // the response is re-framed here
+}
+
+// extendWriteDeadline gives the next write to the client streamWriteTimeout.
+// Writers without deadline support (tests) are left as they are.
+func extendWriteDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
+}
+
+// writeGatewayError writes an error the gateway itself raises, as JSON in the
+// providers' {"error": {"type", "message"}} shape so SDKs surface it.
+func writeGatewayError(w http.ResponseWriter, status int, errType, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": map[string]interface{}{"type": errType, "message": message},
+	})
+}
+
+// upstreamErrorText describes a provider error for the record: the HTTP
+// status and the provider's error type, never its message, which can quote
+// the request.
+func upstreamErrorText(status int, body []byte) string {
+	var parsed struct {
+		Error *struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	text := fmt.Sprintf("upstream HTTP %d", status)
+	if json.Unmarshal(body, &parsed) == nil && parsed.Error != nil {
+		if t := firstNonEmpty(parsed.Error.Type, parsed.Error.Code); t != "" {
+			text += " " + t
+		}
+	}
+	return text
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// DefaultAnthropicURL is where /v1/messages is forwarded when AnthropicURL is unset.
+const DefaultAnthropicURL = "https://api.anthropic.com"
 
 // Config holds proxy configuration.
 type Config struct {
-	ProviderURL string           // e.g. https://api.openai.com
-	Vault       *vault.Client    // S3 vault for content (nil = disabled)
-	Recorder    *recorder.Writer // AIR file writer (nil = disabled)
-	GatewayKey  string           // optional API key required to use the gateway
-	Guardrails  *guardrails.Config  // guardrails configuration (nil = disabled)
-	Sessions    *guardrails.Manager // session state for guardrails (nil = disabled)
-	Analytics   *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
-	AuditChain  *trust.AuditChain  // cryptographic audit chain (nil = disabled)
-	ConfigHash  string             // agent config bundle hash stamped into records ("" = unset)
+	ProviderURL  string                         // e.g. https://api.openai.com (chat completions, responses)
+	AnthropicURL string                         // upstream for /v1/messages ("" = DefaultAnthropicURL)
+	Vault        *vault.Client                  // S3 vault for content (nil = disabled)
+	Recorder     *recorder.Writer               // AIR file writer (nil = disabled)
+	GatewayKey   string                         // optional API key required to use the gateway
+	Guardrails   *guardrails.Config             // guardrails configuration (nil = disabled)
+	Sessions     *guardrails.Manager            // session state for guardrails (nil = disabled)
+	Analytics    *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
+	AuditChain   *trust.AuditChain              // cryptographic audit chain (nil = disabled)
+	ConfigHash   string                         // agent config bundle hash stamped into records ("" = unset)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -62,6 +180,17 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 		handleProxy(w, r, cfg, "/v1/responses")
+	})
+
+	// Anthropic Messages API. The Anthropic SDK sends its API key as
+	// x-api-key, so the gateway key may only come from X-Gateway-Key here:
+	// accepting x-api-key would compare (and, if it matched, forward) the
+	// wrong secret.
+	mux.HandleFunc("/v1/messages", func(w http.ResponseWriter, r *http.Request) {
+		if !authenticateGatewayHeader(w, r, cfg.GatewayKey, false) {
+			return
+		}
+		handleProxy(w, r, cfg, "/v1/messages")
 	})
 
 	mux.HandleFunc("/v1/analytics", func(w http.ResponseWriter, r *http.Request) {
@@ -96,11 +225,18 @@ func Handler(cfg Config) http.Handler {
 // authenticateGateway checks the x-gateway-key header if a key is configured.
 // Returns true if auth passes (or no key is configured), false if rejected.
 func authenticateGateway(w http.ResponseWriter, r *http.Request, gatewayKey string) bool {
+	return authenticateGatewayHeader(w, r, gatewayKey, true)
+}
+
+// authenticateGatewayHeader is authenticateGateway with control over the
+// X-Api-Key fallback, which must be off for APIs that use x-api-key as the
+// provider credential (Anthropic).
+func authenticateGatewayHeader(w http.ResponseWriter, r *http.Request, gatewayKey string, allowAPIKeyHeader bool) bool {
 	if gatewayKey == "" {
 		return true // no gateway auth configured
 	}
 	provided := r.Header.Get("X-Gateway-Key")
-	if provided == "" {
+	if provided == "" && allowAPIKeyHeader {
 		provided = r.Header.Get("X-Api-Key")
 	}
 	if subtle.ConstantTimeCompare([]byte(provided), []byte(gatewayKey)) != 1 {
@@ -130,13 +266,43 @@ func (r chatRequest) promptText() string {
 
 // chatResponse is the minimal response structure for token extraction.
 type chatResponse struct {
-	ID    string `json:"id"`
-	Model string `json:"model"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
+	ID    string     `json:"id"`
+	Model string     `json:"model"`
+	Usage *usageJSON `json:"usage"`
+}
+
+// usageJSON reads token usage in any of the three API shapes: chat
+// completions (prompt_tokens / completion_tokens / total_tokens), the
+// Responses API (input_tokens / output_tokens / total_tokens) and the
+// Anthropic Messages API (input_tokens / output_tokens, no total; cache
+// reads and writes are counted separately and are part of the input).
+type usageJSON struct {
+	PromptTokens             int `json:"prompt_tokens"`
+	CompletionTokens         int `json:"completion_tokens"`
+	TotalTokens              int `json:"total_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+}
+
+func (u *usageJSON) tokens() recorder.Tokens {
+	if u == nil {
+		return recorder.Tokens{}
+	}
+	prompt := u.PromptTokens
+	if prompt == 0 {
+		prompt = u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
+	}
+	completion := u.CompletionTokens
+	if completion == 0 {
+		completion = u.OutputTokens
+	}
+	total := u.TotalTokens
+	if total == 0 {
+		total = prompt + completion
+	}
+	return recorder.Tokens{Prompt: prompt, Completion: completion, Total: total}
 }
 
 func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint string) {
@@ -180,7 +346,10 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 
 	// Determine provider from model name.
-	provider := inferProvider(req.Model, cfg.ProviderURL)
+	provider := inferProvider(req.Model, upstreamBase(cfg, endpoint))
+	if provider == "unknown" && endpoint == "/v1/messages" {
+		provider = "anthropic" // an alias ("sonnet") or a cloud model id, through an internal proxy
+	}
 	span.SetAttributes(
 		attribute.String("gen_ai.system", provider),
 		attribute.String("gen_ai.provider.name", provider),
@@ -286,24 +455,23 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 		}
 	}
 
-	// Forward to upstream provider.
-	upstream := cfg.ProviderURL + endpoint
+	// Forward to upstream provider, with the client's query string (Azure's
+	// api-version, the Anthropic SDK's beta flag) and headers.
+	upstream := upstreamBase(cfg, endpoint) + endpoint
+	if r.URL.RawQuery != "" {
+		upstream += "?" + r.URL.RawQuery
+	}
 	proxyReq, err := http.NewRequestWithContext(ctx, "POST", upstream, bytes.NewReader(reqBody))
 	if err != nil {
-		http.Error(w, `{"error":"failed to create upstream request"}`, http.StatusInternalServerError)
+		writeGatewayError(w, http.StatusInternalServerError, "gateway_error", "failed to create upstream request")
 		return
 	}
-
-	// Copy relevant headers.
-	proxyReq.Header.Set("Content-Type", "application/json")
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		proxyReq.Header.Set("Authorization", auth)
-	}
+	proxyReq.Header = upstreamHeaders(r, cfg, endpoint)
 
 	resp, err := upstreamClient.Do(proxyReq)
 	if err != nil {
 		span.SetAttributes(attribute.String("error", err.Error()))
-		http.Error(w, fmt.Sprintf(`{"error":"upstream: %s"}`, err), http.StatusBadGateway)
+		writeGatewayError(w, http.StatusBadGateway, "upstream_unreachable", "upstream: "+err.Error())
 
 		// --- Optimization: record upstream failure ---
 		if cfg.Analytics != nil {
@@ -319,18 +487,15 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	}
 	defer resp.Body.Close()
 
+	copyResponseHeaders(w.Header(), resp.Header)
 	// Set run_id header early so the client gets it even for streaming responses.
 	w.Header().Set("x-run-id", runID)
-	for _, h := range []string{"x-request-id", "openai-organization"} {
-		if v := resp.Header.Get(h); v != "" {
-			w.Header().Set(h, v)
-		}
-	}
 
 	// --- Streaming vs non-streaming response handling ---
 	var tokens recorder.Tokens
+	broken := false
 	if req.Stream && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		tokens = handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
+		tokens, broken = handleStreamingResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	} else {
 		tokens = handleBufferedResponse(w, resp, cfg, runID, span, req, provider, endpoint, reqBody, start)
 	}
@@ -338,17 +503,25 @@ func handleProxy(w http.ResponseWriter, r *http.Request, cfg Config, endpoint st
 	// Update guardrails session state after response.
 	if cfg.Guardrails != nil && cfg.Sessions != nil {
 		sessionID := extractSessionID(r)
-		isError := resp.StatusCode >= 400
+		isError := resp.StatusCode >= 400 || broken
 		cfg.Sessions.RecordResponse(sessionID, tokens.Total, isError)
+	}
+
+	// The upstream stream broke while the client was still reading. Ending
+	// the response normally would hand the client a truncated answer as if
+	// it were complete; aborting the connection makes its SDK raise.
+	if broken {
+		panic(http.ErrAbortHandler)
 	}
 }
 
 // handleStreamingResponse forwards SSE chunks to the client in real-time while
 // capturing the full response in the background for vault storage.
-// It returns the token usage extracted from the stream (zero if unavailable).
+// It returns the token usage extracted from the stream (zero if unavailable)
+// and whether the upstream stream broke while the client was still reading.
 func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	cfg Config, runID string, span trace.Span, req chatRequest,
-	provider, endpoint string, reqBody []byte, start time.Time) recorder.Tokens {
+	provider, endpoint string, reqBody []byte, start time.Time) (recorder.Tokens, bool) {
 
 	// Set streaming headers.
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -362,10 +535,12 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 	var fullResponse bytes.Buffer
 	buf := make([]byte, 4096)
 
+	var readErr error
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
 			fullResponse.Write(buf[:n])
+			extendWriteDeadline(w)
 			w.Write(buf[:n])
 			if canFlush {
 				flusher.Flush()
@@ -373,6 +548,7 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 		}
 		if err != nil {
 			if err != io.EOF {
+				readErr = err
 				log.Printf("[%s] stream read error: %v", runID, err)
 			}
 			break
@@ -396,9 +572,22 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 		)
 	}
 
-	status := "success"
-	if resp.StatusCode >= 400 {
-		status = "error"
+	status, errMsg := "success", ""
+	broken := false
+	switch {
+	case resp.StatusCode >= 400:
+		status, errMsg = "error", upstreamErrorText(resp.StatusCode, respBytes)
+	case readErr != nil && errors.Is(readErr, context.Canceled):
+		// The client went away; the request context, and so the upstream
+		// read, was cancelled with it.
+		status, errMsg = "error", "client disconnected before the stream ended"
+	case readErr != nil:
+		status, errMsg = "error", "upstream stream broke: "+readErr.Error()
+		broken = true
+	default:
+		if e := streamErrorEvent(respBytes); e != "" {
+			status, errMsg = "error", "provider error in stream: "+e
+		}
 	}
 
 	log.Printf("[%s] %s model=%s tokens=%d duration=%dms status=%s stream=true",
@@ -416,8 +605,61 @@ func handleStreamingResponse(w http.ResponseWriter, resp *http.Response,
 
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
-		reqBody, respBytes, start, status, "")
-	return tokens
+		reqBody, respBytes, start, status, errMsg)
+	return tokens, broken
+}
+
+// streamErrorEvent finds an error the provider reported inside a stream that
+// began with HTTP 200: Anthropic's "error" event, the Responses API's
+// "error" and "response.failed" events, or a chat completions chunk carrying
+// "error". It returns the error's type (never its message, which can quote
+// the request), or "" when the stream reported none.
+func streamErrorEvent(data []byte) string {
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if !strings.Contains(payload, `"error"`) && !strings.Contains(payload, "response.failed") {
+			continue // the common case, without a parse
+		}
+		var ev struct {
+			Type     string          `json:"type"`
+			Code     string          `json:"code"`
+			Error    json.RawMessage `json:"error"`
+			Response *struct {
+				Error json.RawMessage `json:"error"`
+			} `json:"response"`
+		}
+		if json.Unmarshal([]byte(payload), &ev) != nil {
+			continue
+		}
+		switch {
+		case ev.Type == "error":
+			return firstNonEmpty(errorType(ev.Error), ev.Code, "error")
+		case ev.Type == "response.failed":
+			if ev.Response != nil {
+				return firstNonEmpty(errorType(ev.Response.Error), "response.failed")
+			}
+			return "response.failed"
+		case ev.Type == "" && len(ev.Error) > 0 && string(ev.Error) != "null":
+			return firstNonEmpty(errorType(ev.Error), "error")
+		}
+	}
+	return ""
+}
+
+// errorType reads "type" (or "code") from a provider error object.
+func errorType(raw json.RawMessage) string {
+	var e struct {
+		Type string `json:"type"`
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(raw, &e) != nil {
+		return ""
+	}
+	return firstNonEmpty(e.Type, e.Code)
 }
 
 // handleBufferedResponse handles traditional (non-streaming) responses.
@@ -429,7 +671,9 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	// Read response body.
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		http.Error(w, `{"error":"failed to read upstream response"}`, http.StatusBadGateway)
+		writeGatewayError(w, http.StatusBadGateway, "upstream_read_failed", "failed to read upstream response: "+err.Error())
+		go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
+			reqBody, nil, start, "error", "upstream response broke: "+err.Error())
 		return recorder.Tokens{}
 	}
 
@@ -437,11 +681,7 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	var tokens recorder.Tokens
 	var respParsed chatResponse
 	if err := json.Unmarshal(respBody, &respParsed); err == nil && respParsed.Usage != nil {
-		tokens = recorder.Tokens{
-			Prompt:     respParsed.Usage.PromptTokens,
-			Completion: respParsed.Usage.CompletionTokens,
-			Total:      respParsed.Usage.TotalTokens,
-		}
+		tokens = respParsed.Usage.tokens()
 		span.SetAttributes(
 			attribute.Int("gen_ai.usage.prompt_tokens", tokens.Prompt),
 			attribute.Int("gen_ai.usage.completion_tokens", tokens.Completion),
@@ -454,33 +694,38 @@ func handleBufferedResponse(w http.ResponseWriter, resp *http.Response,
 	duration := time.Since(start)
 	span.SetAttributes(attribute.Int64("gen_ai.duration_ms", duration.Milliseconds()))
 
-	status := "success"
+	status, errMsg := "success", ""
 	if resp.StatusCode >= 400 {
-		status = "error"
+		status, errMsg = "error", upstreamErrorText(resp.StatusCode, respBody)
 	}
 
-	// Return response to caller.
-	w.Header().Set("Content-Type", "application/json")
+	// --- Optimization: classify failures (before the headers are sent) ---
+	errorType := ""
+	if cfg.Analytics != nil && resp.StatusCode >= 400 {
+		errorType = guardrails.ClassifyFailure(resp.StatusCode, string(respBody))
+		w.Header().Set("X-Error-Class", errorType)
+	}
+
+	// Return response to caller, in the content type the provider sent.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/json")
+	}
 	w.WriteHeader(resp.StatusCode)
+	extendWriteDeadline(w)
 	w.Write(respBody)
 
 	log.Printf("[%s] %s model=%s tokens=%d duration=%dms status=%s",
 		runID, endpoint, req.Model, tokens.Total, duration.Milliseconds(), status)
 
-	// --- Optimization: record metrics + classify failures ---
+	// --- Optimization: record metrics ---
 	if cfg.Analytics != nil {
-		errorType := ""
-		if resp.StatusCode >= 400 {
-			errorType = guardrails.ClassifyFailure(resp.StatusCode, string(respBody))
-			w.Header().Set("X-Error-Class", errorType)
-		}
 		cfg.Analytics.RecordCall(req.Model, duration.Milliseconds(),
 			tokens.Prompt, tokens.Completion, tokens.Total, status, errorType)
 	}
 
 	// Fire-and-forget: vault + AIR record in background.
 	go backgroundRecord(cfg, runID, span, req.Model, provider, endpoint,
-		reqBody, respBody, start, status, "")
+		reqBody, respBody, start, status, errMsg)
 	return tokens
 }
 
@@ -513,11 +758,7 @@ func backgroundRecord(cfg Config, runID string, span trace.Span,
 	if respBody != nil {
 		var respParsed chatResponse
 		if err := json.Unmarshal(respBody, &respParsed); err == nil && respParsed.Usage != nil {
-			tokens = recorder.Tokens{
-				Prompt:     respParsed.Usage.PromptTokens,
-				Completion: respParsed.Usage.CompletionTokens,
-				Total:      respParsed.Usage.TotalTokens,
-			}
+			tokens = respParsed.Usage.tokens()
 		} else {
 			// Try extracting from SSE stream.
 			tokens = extractStreamTokens(respBody)
@@ -543,35 +784,86 @@ func backgroundRecord(cfg Config, runID string, span trace.Span,
 	}
 }
 
-// extractStreamTokens attempts to extract token usage from the last SSE data chunk.
-// OpenAI includes usage when the request has stream_options.include_usage=true.
+// extractStreamTokens extracts token usage from an SSE stream in any of the
+// three API shapes:
+//   - chat completions: usage on the last data chunk (when the request set
+//     stream_options.include_usage=true)
+//   - Responses API: response.usage on the response.completed event
+//   - Anthropic Messages: input tokens on message_start's message.usage,
+//     the final output count on the last message_delta's usage
 func extractStreamTokens(data []byte) recorder.Tokens {
-	lines := strings.Split(string(data), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if !strings.HasPrefix(line, "data: ") {
+	var anthropicIn *usageJSON
+	var anthropicOut *usageJSON
+	var last recorder.Tokens
+	found := false
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
-		payload := strings.TrimPrefix(line, "data: ")
-		if payload == "[DONE]" {
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" || payload == "[DONE]" {
 			continue
 		}
 		var chunk struct {
-			Usage *struct {
-				PromptTokens     int `json:"prompt_tokens"`
-				CompletionTokens int `json:"completion_tokens"`
-				TotalTokens      int `json:"total_tokens"`
-			} `json:"usage"`
+			Type    string     `json:"type"`
+			Usage   *usageJSON `json:"usage"`
+			Message *struct {
+				Usage *usageJSON `json:"usage"`
+			} `json:"message"`
+			Response *struct {
+				Usage *usageJSON `json:"usage"`
+			} `json:"response"`
 		}
-		if err := json.Unmarshal([]byte(payload), &chunk); err == nil && chunk.Usage != nil {
-			return recorder.Tokens{
-				Prompt:     chunk.Usage.PromptTokens,
-				Completion: chunk.Usage.CompletionTokens,
-				Total:      chunk.Usage.TotalTokens,
-			}
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			continue
+		}
+		switch {
+		case chunk.Type == "message_start" && chunk.Message != nil && chunk.Message.Usage != nil:
+			anthropicIn = chunk.Message.Usage
+		case chunk.Type == "message_delta" && chunk.Usage != nil:
+			anthropicOut = chunk.Usage
+		case chunk.Response != nil && chunk.Response.Usage != nil:
+			last, found = chunk.Response.Usage.tokens(), true
+		case chunk.Usage != nil:
+			last, found = chunk.Usage.tokens(), true
 		}
 	}
+	if anthropicIn != nil || anthropicOut != nil {
+		merged := &usageJSON{}
+		if anthropicIn != nil {
+			*merged = *anthropicIn
+		}
+		if anthropicOut != nil {
+			// message_delta carries the cumulative output count; when it also
+			// repeats input counts, they match message_start's.
+			merged.OutputTokens = anthropicOut.OutputTokens
+			if anthropicOut.InputTokens > 0 {
+				merged.InputTokens = anthropicOut.InputTokens
+			}
+		}
+		return merged.tokens()
+	}
+	if found {
+		return last
+	}
 	return recorder.Tokens{}
+}
+
+// upstreamBase is where an endpoint is forwarded: /v1/messages to the
+// Anthropic upstream, everything else to ProviderURL.
+func upstreamBase(cfg Config, endpoint string) string {
+	if endpoint == "/v1/messages" {
+		return anthropicURL(cfg)
+	}
+	return cfg.ProviderURL
+}
+
+func anthropicURL(cfg Config) string {
+	if cfg.AnthropicURL != "" {
+		return strings.TrimRight(cfg.AnthropicURL, "/")
+	}
+	return DefaultAnthropicURL
 }
 
 func vaultStore(ctx context.Context, vc *vault.Client, runID, name string, data []byte) (vault.Ref, error) {
@@ -709,23 +1001,20 @@ func extractResponsesInput(input json.RawMessage) string {
 	return ""
 }
 
-// extractToolNames pulls tool/function names from the request body.
+// extractToolNames pulls tool names from the request body. Chat completions
+// nest the name under "function"; the Responses API and the Anthropic
+// Messages API put it at the top level of each tool.
 func extractToolNames(body []byte) []string {
 	var req struct {
-		Tools []struct {
-			Function struct {
-				Name string `json:"name"`
-			} `json:"function"`
-		} `json:"tools"`
-		ToolChoice interface{} `json:"tool_choice"`
+		Tools []json.RawMessage `json:"tools"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil
 	}
 	var names []string
-	for _, t := range req.Tools {
-		if t.Function.Name != "" {
-			names = append(names, t.Function.Name)
+	for _, raw := range req.Tools {
+		if name := guardrails.ToolName(raw); name != "" {
+			names = append(names, name)
 		}
 	}
 	return names
@@ -735,9 +1024,10 @@ func inferProvider(model, providerURL string) string {
 	model = strings.ToLower(model)
 	switch {
 	case strings.HasPrefix(model, "gpt"), strings.HasPrefix(model, "o1"), strings.HasPrefix(model, "o3"),
-		strings.HasPrefix(model, "chatgpt"), strings.HasPrefix(model, "dall-e"):
+		strings.HasPrefix(model, "o4"), strings.HasPrefix(model, "codex"), strings.HasPrefix(model, "chatgpt"),
+		strings.HasPrefix(model, "dall-e"), strings.HasPrefix(model, "text-embedding"):
 		return "openai"
-	case strings.HasPrefix(model, "claude"):
+	case strings.HasPrefix(model, "claude"), strings.Contains(model, "anthropic.claude"):
 		return "anthropic"
 	case strings.HasPrefix(model, "gemini"):
 		return "google"
@@ -769,7 +1059,6 @@ func inferProvider(model, providerURL string) string {
 		return "unknown"
 	}
 }
-
 
 // handleAnalytics returns per-model performance stats as JSON.
 // GET /v1/analytics — returns all models.
@@ -831,8 +1120,8 @@ func handleAudit(w http.ResponseWriter, r *http.Request, cfg Config) {
 	valid, brokenAt, verifyErr := cfg.AuditChain.Verify()
 
 	result := map[string]interface{}{
-		"chain_length":   cfg.AuditChain.Len(),
-		"chain_valid":    valid,
+		"chain_length":    cfg.AuditChain.Len(),
+		"chain_valid":     valid,
 		"chain_broken_at": brokenAt,
 	}
 	if verifyErr != nil {

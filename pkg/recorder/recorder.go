@@ -92,8 +92,37 @@ func (w *Writer) Write(r Record) error {
 	}
 
 	path := filepath.Join(w.dir, r.RunID+".air.json")
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := writeFileAtomic(path, data, 0644); err != nil {
 		return fmt.Errorf("recorder: write %s: %w", path, err)
+	}
+	return nil
+}
+
+// writeFileAtomic writes data under a temporary name in the same directory
+// and renames it into place, so a reader (replay, an export, a verifier)
+// never sees a record half-written, and a crash never leaves a torn one.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(name)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(name)
+		return err
+	}
+	if err := os.Chmod(name, perm); err != nil {
+		os.Remove(name)
+		return err
+	}
+	if err := os.Rename(name, path); err != nil {
+		os.Remove(name)
+		return err
 	}
 	return nil
 }

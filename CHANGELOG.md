@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **TypeScript package** (`js/`, npm `air-blackbox` 0.1.0, not yet
+  published). Records agent actions into the same HMAC chain, Ed25519
+  receipts and `.air-evidence` bundles as the Python SDK, byte for byte;
+  covenants with the same YAML, precedence and hash; a two-phase `Gate`; RFC
+  3161 anchoring on export. Hooks record model calls and tool executions for
+  the Vercel AI SDK (5+), the OpenAI Agents SDK (0.17+), LangChain.js /
+  LangGraph.js (core 0.3+) and the MCP TypeScript SDK, and with
+  `enforce: true` stop a tool the covenant forbids before it runs.
+  Differential tests in CI check that the Python SDK verifies this package's
+  chains, receipts, bundles and anchors, that this package verifies the
+  Python SDK's, and that both can write one chain; a TypeScript bundle also
+  passes the browser verifier. Before release it was run as real agents on
+  each framework and put through a stress and tamper test, which shaped
+  these guarantees: a recording failure never fails the agent's tool call
+  (`onRecordError` hears about it); tool arguments, which the model writes,
+  cannot satisfy a rule's `unless` or `category`; recorders in one process
+  share one chain and a second process is refused rather than forking it;
+  an export with missing or unreadable records fails verification; a
+  timestamp response must be a granted token over the chain head; and
+  covenant YAML is read as PyYAML reads it, so a file has one hash in both
+  SDKs.
+- **Gateway: Anthropic Messages API.** `POST /v1/messages` is forwarded to
+  `ANTHROPIC_URL` (default `https://api.anthropic.com`) with `x-api-key`,
+  `anthropic-version` and `anthropic-beta`, streamed or buffered, recorded
+  and chained like the OpenAI routes, so one gateway serves both providers.
+  On this route the gateway key is read only from `X-Gateway-Key`, never
+  from `x-api-key`, which carries the Anthropic credential.
 - `eval/competitors/`: a head-to-head of AIR Blackbox 1.17.0 against three
   other open-source EU AI Act scanners (ArkForge, Systima Comply, Asqav) on
   the 144-case parity corpus. Each tool is scored only on the practices it
@@ -16,6 +43,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@openai/guardrails` in TypeScript and JavaScript).
 
 ### Fixed
+- Gateway: found by running the provider SDKs (OpenAI and Anthropic, Python
+  and TypeScript, plus the Vercel AI SDK and LangChain) through it against
+  scripted upstreams:
+  - A provider stream that broke partway reached the client as a normal end
+    of stream, so SDKs returned a truncated answer as complete, and was
+    recorded as a success. The client's connection is now broken too (the
+    SDK raises) and the record says `error`, as do an error event inside a
+    200 stream and a client that disconnects early.
+  - A 120-second overall upstream timeout cut longer streams off silently
+    and turned slow non-streamed answers into 502s (which SDKs retry), and
+    the server's 180-second write timeout would have cut streams next. Calls
+    now end on the caller's own timeout, with limits only on connecting and
+    on waiting for a response to start (10 minutes).
+  - Only request ids were passed back: `retry-after`, `x-should-retry` and
+    the rate-limit headers were dropped, so SDK retries ignored the
+    provider's backoff. The provider's response headers now reach the client.
+  - Only `Authorization` (and the Anthropic headers) were forwarded, and no
+    query string: `OpenAI-Organization` and `OpenAI-Project` were lost (the
+    call was billed to the default project), as were `api-version` and the
+    Anthropic SDK's `?beta=true`. The client's headers and query string now
+    reach the provider, except the gateway's own headers and the gateway key.
+  - Concurrent calls opened a new upstream connection almost every time (2
+    idle connections per host); the pool now keeps 256.
+  - Records of failed calls now say why (HTTP status and the provider's
+    error type, never its message), an unreachable upstream returns a JSON
+    error the SDKs can parse, and `/v1/messages` calls are recorded as
+    provider `anthropic` for aliases and cloud model ids.
+- Sandbox: agents using the Anthropic SDK bypassed the sandbox's gateway;
+  `ANTHROPIC_BASE_URL` is now set alongside `OPENAI_BASE_URL`.
+- README: the gateway section said "everything else in your code stays
+  identical", listed Azure and an injection scan the gateway does not have,
+  and did not say which endpoints it serves or where each library expects
+  the base URL. It now does.
+- Gateway recorded zero tokens for every Responses API call, buffered and
+  streamed: it only read chat-completions usage names. Usage is now read in
+  all three shapes (chat completions, Responses, Anthropic, where cache reads
+  and writes count as input).
+- Gateway tool filter ignored Responses API tools, which name a tool at the
+  top level rather than under `function`, so a blocklisted tool passed
+  through unfiltered. Tool extraction and filtering now share one name
+  reader, so they cannot disagree about a name again.
+- `air-blackbox comply` on a project with no Python now points TypeScript
+  and JavaScript at the npm package and gives the Anthropic base URL for the
+  gateway.
 - `air-blackbox test` failed 5 of 25 on a clean install. Two assertions had
   gone stale: the compliance-engine test expected exactly six groups from a
   report that has carried GDPR and US state-law groups for some time, and the

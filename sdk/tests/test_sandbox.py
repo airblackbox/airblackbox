@@ -139,3 +139,17 @@ def test_covenant_token_budget_fails():
     verdict = _run_with_covenant(model="gpt-4", tokens=99)
     assert not verdict.passed
     assert verdict.covenant_violations == 2
+
+
+def test_agent_is_pointed_at_the_gateway_for_both_providers():
+    """OpenAI SDKs take the /v1 base, Anthropic SDKs the gateway root."""
+    with tempfile.TemporaryDirectory() as d:
+        runs = os.path.join(d, "runs")
+        os.makedirs(runs)
+        session = SandboxSession(
+            sandbox_dir=d, gateway_url="http://gw.test:8080", runs_dir=runs)
+        agent = ("import os; print(os.environ['OPENAI_BASE_URL']); "
+                 "print(os.environ['ANTHROPIC_BASE_URL'])")
+        session.run([sys.executable, "-c", agent], timeout=60)
+        with open(os.path.join(d, "agent.stdout")) as f:
+            assert f.read().split() == ["http://gw.test:8080/v1", "http://gw.test:8080"]

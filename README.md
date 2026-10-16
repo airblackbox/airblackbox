@@ -15,9 +15,14 @@ AIR Blackbox is open-source infrastructure for AI agents whose decisions
 someone may later have to answer for. It does three things, and each one
 produces evidence a third party can check without trusting you:
 
-- **Records.** Every agent action goes into a tamper-evident chain, signed
-  with Ed25519, countersigned by an external timestamp authority, and
-  exported as a `.air-evidence` file that anyone can verify in a browser.
+- **Records.** Agent actions go into a tamper-evident chain, signed with
+  Ed25519, countersigned by an external timestamp authority, and exported as
+  a `.air-evidence` file that anyone can verify in a browser. Python agents
+  are recorded by trust layers for seven frameworks; TypeScript agents by the
+  [`air-blackbox` npm package](js/README.md) (Vercel AI SDK, OpenAI Agents
+  SDK, LangChain.js, MCP), which writes the same records. The gateway records
+  every model call from any language. A hook sees what its framework
+  reports: side effects a tool causes outside that are not recorded.
 - **Scans.** `air-blackbox comply` reads a codebase and reports gaps against
   the EU AI Act (Articles 9–15), GDPR and US state AI laws. It reads Python,
   Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, and equivalent
@@ -86,7 +91,7 @@ One proxy swap. Complete coverage. Runs locally.
 # Before
 client = OpenAI(base_url="https://api.openai.com/v1")
 
-# After - everything else in your code stays identical
+# After - the calls you make stay the same
 client = OpenAI(
     base_url="http://localhost:8080/v1",
     default_headers={"X-Gateway-Key": "your-key"}
@@ -94,6 +99,51 @@ client = OpenAI(
 ```
 
 Every LLM call now generates a signed, tamper-evident, replayable audit record. No SDK changes. No refactoring. Measured overhead: ~3 ms per call, under 0.4% of a typical LLM request ([benchmarks](BENCHMARKS.md)).
+
+The gateway serves the OpenAI chat completions and Responses APIs (forwarded
+to `PROVIDER_URL`) and the Anthropic Messages API (forwarded to
+`ANTHROPIC_URL`, default `https://api.anthropic.com`), so one gateway covers
+both providers. For Anthropic, point the SDK at the gateway root and send the
+gateway key in `X-Gateway-Key`; the Anthropic key stays in `x-api-key` and is
+passed through:
+
+```ts
+const anthropic = new Anthropic({
+  baseURL: "http://localhost:8080",
+  defaultHeaders: { "X-Gateway-Key": "your-key" },
+});
+```
+
+Libraries disagree on whether the base URL includes `/v1`:
+
+| Client | Base URL setting | Gateway key header |
+|---|---|---|
+| OpenAI SDK (Python, TS) | `base_url` / `baseURL`: `http://localhost:8080/v1` | `default_headers` / `defaultHeaders` |
+| Anthropic SDK (Python, TS) | `base_url` / `baseURL`: `http://localhost:8080` | `default_headers` / `defaultHeaders` |
+| Vercel AI SDK, `@ai-sdk/openai` and `@ai-sdk/anthropic` | `baseURL`: `http://localhost:8080/v1` | `headers` |
+| LangChain `ChatOpenAI` (Python, JS) | `base_url` / `configuration.baseURL`: `http://localhost:8080/v1` | `default_headers` / `configuration.defaultHeaders` |
+| LangChain `ChatAnthropic` (Python, JS) | `base_url` / `anthropicApiUrl`: `http://localhost:8080` | `default_headers` / `clientOptions.defaultHeaders` |
+
+What to know before you switch:
+
+- The gateway serves `POST /v1/chat/completions`, `/v1/responses` and
+  `/v1/messages`. Other endpoints (embeddings, `models.list`, token counting,
+  retrieving a stored response) return 404, so call those directly.
+- The client's headers and query string are passed to the provider, and the
+  provider's headers (request ids, `retry-after`, rate limits) come back, so
+  SDK retries behave as they would without the gateway. Streams are passed
+  through as they arrive; if the provider's stream breaks, the client's
+  connection is broken too, so the SDK raises instead of returning a partial
+  answer.
+- Streamed chat completions report token usage only when the request sets
+  `stream_options: {"include_usage": true}`; without it the record has zero
+  tokens. The Responses and Messages APIs always report usage.
+
+The gateway sees model calls, never whether a tool then ran or what it did.
+Its records hold the model, provider, token counts and timing; with a vault
+configured, the full request and response (including any tool calls the model
+asked for) are stored there by reference. To record tool executions, use a
+trust layer (Python) or the npm package (TypeScript).
 
 ## Project status
 
@@ -406,12 +456,12 @@ Your Agent
     v
 AIR Gateway          <- swap base_url here
     |
-    |-- PII + injection scan      (before prompt reaches model)
+    |-- guardrails (opt-in)       (PII redaction, tool filter, before the model)
     |-- HMAC audit record         (async, zero latency impact)
     |-- Ed25519 / ML-DSA-65 sign  (keys never leave your machine)
     |
     v
-LLM Provider         <- OpenAI / Anthropic / Azure / local
+LLM Provider         <- OpenAI / Anthropic / OpenAI-compatible
     |
     v
 AIR Record           <- tamper-evident .air.json
@@ -420,7 +470,7 @@ AIR Record           <- tamper-evident .air.json
 Evidence Bundle      <- self-verifying .air-evidence ZIP
 ```
 
-Works with any OpenAI-compatible API. Same format, same integration, regardless of provider.
+Works with any provider that serves the OpenAI chat completions or Responses API under `/v1` (set `PROVIDER_URL`), and with the Anthropic Messages API (`ANTHROPIC_URL`). Azure OpenAI's deployment-style paths are not routed.
 
 ## Why Not Just Log Everything?
 
@@ -539,6 +589,7 @@ Your AI Agent
 |---------|-------------|
 | [air-trust](https://github.com/airblackbox/air-trust) | Tamper-evident audit chain + Ed25519 signed handoffs |
 | [air-gate](https://github.com/airblackbox/air-gate) | Human-in-the-loop tool gating (Article 14) |
+| [air-blackbox (npm)](js/README.md) | TypeScript recorder and gate: hooks for the Vercel AI SDK, OpenAI Agents SDK, LangChain.js and MCP; same records and bundles as the Python SDK |
 | [air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp) | MCP server for Claude Desktop, Cursor, Claude Code; scans all six languages with `[full]` |
 | [air-platform](https://github.com/airblackbox/air-platform) | Docker Compose - full stack in one command |
 | [compliance-action](https://github.com/airblackbox/compliance-action) | GitHub Action - checks on every pull request |

@@ -4,7 +4,8 @@ Two modes:
 
 - Managed gateway: pass gateway_bin and the session spawns an isolated
   gateway on a free port with its own runs directory and generated signing
-  key, points the agent at it via OPENAI_BASE_URL, and tears it down after.
+  key, points the agent at it via OPENAI_BASE_URL and ANTHROPIC_BASE_URL,
+  and tears it down after.
 - External gateway: pass gateway_url + runs_dir for a gateway you already
   run; the session only orchestrates the agent and the analysis.
 
@@ -168,6 +169,9 @@ class SandboxSession:
             env.update({
                 "OPENAI_BASE_URL": f"{url}/v1",
                 "OPENAI_API_BASE": f"{url}/v1",   # legacy openai<1.0 name
+                # The Anthropic SDKs read this, and take the gateway root
+                # (they add /v1/messages themselves).
+                "ANTHROPIC_BASE_URL": url,
                 "AIR_GATEWAY_URL": url,
                 "AIR_SANDBOX": "1",
             })

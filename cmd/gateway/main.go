@@ -28,6 +28,7 @@ import (
 func main() {
 	addr := flag.String("addr", envOr("LISTEN_ADDR", ":8080"), "listen address")
 	providerURL := flag.String("provider", envOr("PROVIDER_URL", "https://api.openai.com"), "upstream LLM provider")
+	anthropicURL := flag.String("anthropic", envOr("ANTHROPIC_URL", proxy.DefaultAnthropicURL), "upstream for the Anthropic Messages API (/v1/messages)")
 	runsDir := flag.String("runs", envOr("RUNS_DIR", "./runs"), "AIR record output directory")
 	flag.Parse()
 
@@ -54,7 +55,7 @@ func main() {
 			UseSSL:    envOr("VAULT_USE_SSL", "false") == "true",
 		})
 		if err != nil {
-			log.Printf("WARN: vault disabled: %v (gateway will proxy without recording)", err)
+			log.Printf("WARN: vault disabled: %v (records are still written; request and response bodies are not stored)", err)
 		} else {
 			log.Printf("Vault connected: %s", vaultEndpoint)
 		}
@@ -171,27 +172,30 @@ func main() {
 
 	// --- Proxy handler ---
 	handler := proxy.Handler(proxy.Config{
-		ProviderURL: *providerURL,
-		Vault:       vc,
-		Recorder:    rec,
-		GatewayKey:  gatewayKey,
-		Guardrails:  grCfg,
-		Sessions:    grMgr,
-		Analytics:   analytics,
-		AuditChain:  auditChain,
-		ConfigHash:  configHash,
+		ProviderURL:  *providerURL,
+		AnthropicURL: *anthropicURL,
+		Vault:        vc,
+		Recorder:     rec,
+		GatewayKey:   gatewayKey,
+		Guardrails:   grCfg,
+		Sessions:     grMgr,
+		Analytics:    analytics,
+		AuditChain:   auditChain,
+		ConfigHash:   configHash,
 	})
 
 	srv := &http.Server{
-		Addr:         *addr,
-		Handler:      handler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 180 * time.Second, // Allow time for slow LLM streaming responses.
+		Addr:        *addr,
+		Handler:     handler,
+		ReadTimeout: 30 * time.Second,
+		// No overall write timeout: a streamed answer can run for many
+		// minutes. The proxy bounds each write to the client instead.
+		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
 
 	go func() {
-		log.Printf("AIR Blackbox Gateway listening on %s → %s", *addr, *providerURL)
+		log.Printf("AIR Blackbox Gateway listening on %s → %s (Anthropic /v1/messages → %s)", *addr, *providerURL, *anthropicURL)
 		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			log.Fatalf("server: %v", err)
 		}
