@@ -116,15 +116,35 @@ def test_a_bundle_exported_with_anchoring_off_says_so(tmp_path, monkeypatch):
     assert "not anchored (anchoring disabled)" in out.getvalue()
 
 
-def test_records_nested_too_deeply_fail_cleanly(tmp_path, monkeypatch):
-    """The TypeScript writer allows deeper nesting than Python's default
-    recursion limit, and the verifier crashed with a RecursionError
-    traceback instead of reporting a failure."""
+def test_json_nested_beyond_any_interpreter_fails_cleanly():
+    """Nesting deeper than the interpreter's JSON parser allows is a check
+    failure, never a RecursionError traceback. A million levels is past the
+    limit of every supported Python."""
+    with pytest.raises(VerificationFailure) as e:
+        _loads("[" * 1_000_000 + "]" * 1_000_000, "a record", 3)
+    assert e.value.check == 3
+    assert e.value.message == "a record is nested too deeply to verify"
+
+
+def _round_trips(value):
+    try:
+        json.loads(json.dumps(value, sort_keys=True))
+        return True
+    except RecursionError:
+        return False
+
+
+def test_a_deeply_nested_record_verifies_or_fails_cleanly(tmp_path, monkeypatch):
+    """The TypeScript writer allows deeper nesting than Python 3.11's default
+    recursion limit, and the verifier crashed with a RecursionError traceback
+    instead of reporting a failure. From 3.12 the json module has its own,
+    higher limit, so the same genuine record verifies there."""
     deep = {}
     node = deep
     for _ in range(3000):
         node["x"] = {}
         node = node["x"]
+    readable_here = _round_trips(deep)
     limit = sys.getrecursionlimit()
     sys.setrecursionlimit(20000)
     try:
@@ -133,6 +153,9 @@ def test_records_nested_too_deeply_fail_cleanly(tmp_path, monkeypatch):
         path = export_air_evidence(runs, output_dir=str(tmp_path / "out"), anchor=False).path
     finally:
         sys.setrecursionlimit(limit)
+    if readable_here:
+        assert _verify(path)["records"] == 1
+        return
     with pytest.raises(VerificationFailure) as e:
         _verify(path)
     assert e.value.check == 3
