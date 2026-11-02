@@ -510,7 +510,13 @@ rules:
   - forbid: modify_credit_score
 ```
 
-Precedence: `forbid` > `require_approval` > `permit` > default deny.
+Precedence: `forbid` > `require_approval` > `permit` > default deny. A guard
+that cannot be evaluated (a missing field, `"$5,000"` compared with `>`)
+never loosens a decision: a forbid stays in force, a permit does not apply,
+and an approval rule applies wherever it makes the decision stricter.
+Loading is strict: a misspelled key, a rule with two actions, an unquoted
+`yes` or number as a target, or a condition that is not `field op value`
+raises `CovenantError` naming the rule.
 
 ### Bilateral Receipts - Two-Phase Proof
 

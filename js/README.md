@@ -147,19 +147,25 @@ rules:
 
 Precedence is forbid, then require_approval, then permit, and anything not
 named is forbidden. A guard that cannot be evaluated (a missing field, a
-non-number compared with `>`) never grants and never lifts a forbid.
+non-number compared with `>`) never loosens a decision: a forbid with such a
+guard stays in force, a permit does not apply, and a `require_approval`
+applies wherever it would make the decision stricter. So with an
+unconditional `permit: issue_refund` beside `require_approval: issue_refund`
+when `amount > 100`, an amount written as "$5,000" requires approval; with
+no permit it stays forbidden.
+
+Loading is strict, in both SDKs and with the same messages: an unknown key
+(a misspelled `wehn:`), a rule with two actions or none, a target YAML reads
+as a number or yes/no, or a `when:` that is not `field op value` (an
+ordering against a non-number, a nested `order.amount`) throws
+`CovenantError` naming the rule.
 
 A `when:` guard in a hook can test the tool's arguments (`amount > 100`
 above). The model writes those arguments, so they never count for what only
 your application can vouch for: an argument named like a rule's `unless`
 field (`human_approved`) or `category` is ignored. Pass such values yourself,
 as `guard` to `recorder.action`, and write approvals as `unless:`, never as a
-`when:` test, which would read the model's arguments. Since a guard that cannot be evaluated
-never grants, it never requires approval either: with an unconditional
-`permit: issue_refund` beside `require_approval: issue_refund` when
-`amount > 100`, an amount written as "$5,000" leaves only the permit. Give
-the permit its own guard, as above, and such an amount matches neither rule
-and is forbidden.
+`when:` test, which would read the model's arguments.
 
 The framework hooks have no one to ask, so with `enforce` they block a
 `require_approval` action the same way as a forbidden one. To put a person
@@ -207,6 +213,11 @@ if (receipt.authorized) {
 - An export checks the directory against what this process wrote: a missing
   or unreadable record file makes the bundle say the chain is not intact,
   so it fails verification instead of attesting what is left.
+- An export streams from the runs directory one record at a time and gives
+  the event loop a turn every 20 ms or so, so the agent in the same process
+  keeps running. At 100,000 records it peaks near 200 MB and takes about
+  25 seconds. It covers the records on disk when it starts; anything
+  recorded meanwhile goes in the next export.
 - The chain's HMAC key defaults to a public development value, so on its own
   the chain proves order and internal consistency, not who wrote it. Set
   `hmacKey` or `TRUST_SIGNING_KEY` for a secret chain key; the Ed25519

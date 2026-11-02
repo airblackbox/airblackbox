@@ -15,7 +15,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { pythonJsonCompact } from "./canonical.js";
-import { loadRecords } from "./chain.js";
+import { indexRecords, type RecordIndexEntry } from "./chain.js";
 
 export const DEFAULT_TSA_URLS = [
   "https://freetsa.org/tsr",
@@ -41,13 +41,16 @@ export function headOverEntries(entries: Array<[number, string]>): string {
 
 /** The key-free head of a runs directory, optionally bounded by chain_seq. */
 export function computeHead(runsDir: string, upToSeq?: number): string {
+  return headOfIndex(indexRecords(runsDir).entries, upToSeq);
+}
+
+/** computeHead over a directory already indexed (indexRecords). */
+export function headOfIndex(index: RecordIndexEntry[], upToSeq?: number): string {
   const entries: Array<[number, string]> = [];
-  for (const rec of loadRecords(runsDir)) {
-    const ch = rec.chain_hash;
-    if (!ch) continue;
-    const seq = Number(rec.chain_seq ?? 0);
-    if (upToSeq !== undefined && seq > upToSeq) continue;
-    entries.push([seq, String(ch)]);
+  for (const e of index) {
+    if (!e.chainHash) continue;
+    if (upToSeq !== undefined && e.seq > upToSeq) continue;
+    entries.push([e.seq, e.chainHash]);
   }
   return headOverEntries(entries);
 }

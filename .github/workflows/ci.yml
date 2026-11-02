@@ -96,6 +96,9 @@ jobs:
           AIR_PYTHON: python
           AIR_REQUIRE_PYTHON: "1"
           PYTHONPATH: ${{ github.workspace }}/sdk
+          # Enough records that an export holding them all would run out of
+          # the scale test's 160 MB heap.
+          AIR_SCALE_TEST: "20000"
         run: npm test
 
   # The oldest framework majors the peer ranges claim, run through the hooks.

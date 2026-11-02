@@ -16,15 +16,15 @@
  * signature removed, serialised compactly with sorted keys; every other
  * member is digested in the manifest, so one signature covers the bundle.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, type Hash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { zipSync } from "fflate";
+import { Zip, ZipDeflate, zipSync } from "fflate";
 
-import { pythonJson, pythonJsonCompact, pythonJsonPretty } from "./canonical.js";
-import type { ChainRecord, ChainVerification } from "./chain.js";
+import { parsePreserving, pythonJson, pythonJsonCompact, pythonJsonPretty } from "./canonical.js";
+import { chainStep, GENESIS_DIGEST, Pacer, type ChainRecord, type ChainVerification, type RecordIndexEntry } from "./chain.js";
 import type { AnchorResult } from "./anchor.js";
 import { publicKeyPem, type ReceiptSigner } from "./receipt.js";
 
@@ -103,11 +103,129 @@ export function anchorManifestFrom(result: AnchorResult, seqMax: number): Anchor
   return { anchored: false, head: result.head, seq_max: seqMax, error: result.error ?? "unknown" };
 }
 
-/** Write a v1 bundle; returns its path and the signed manifest. */
+const CHAIN_ALGORITHM = "HMAC-SHA256(key, prev_hash || json.dumps(record_without_chain_hash, sort_keys=True)); prev_hash starts at b'genesis' and advances to the raw digest each step";
+const RECEIPTS_NOTE = "Each receipt's authorization_sig covers the canonical authorization payload (receipt_id, agent_id, action_name, action_category, payload_hash, covenant_hash, decision, authorized, parent_receipt_id, created_at) serialized with sort_keys=True. Verifiable with the public key alone.";
+
+/** The manifest's counts, accumulated one record at a time. */
+class Counts {
+  private actions = 0;
+  private screening = 0;
+  private blocked = 0;
+  private approvals = 0;
+  private adverse = 0;
+  private adverseNoReviewer = 0;
+  private engineNoReviewer = 0;
+  private screeningNoReviewer = 0;
+  private first = "";
+  private last = "";
+
+  add(r: Rec): void {
+    this.actions++;
+    const cat = categorizeRecord(r);
+    if (cat === "blocked_action") this.blocked++;
+    else if (cat === "human_approval") this.approvals++;
+    else if (cat === "screening_decision") {
+      this.screening++;
+      const named = !!reviewer(r);
+      if (!named) this.screeningNoReviewer++;
+      if (isAdverseDecision(r)) {
+        this.adverse++;
+        if (!named) this.adverseNoReviewer++;
+      } else if (!named) this.engineNoReviewer++;
+    }
+    const ts = String(r["timestamp"] ?? "");
+    if (ts) {
+      if (!this.first || ts < this.first) this.first = ts;
+      if (!this.last || ts > this.last) this.last = ts;
+    }
+  }
+
+  get counts(): Rec {
+    return {
+      actions: this.actions,
+      screening_decisions: this.screening,
+      blocked_actions: this.blocked,
+      human_approvals: this.approvals,
+      adverse_decisions: this.adverse,
+      adverse_decisions_missing_reviewer: this.adverseNoReviewer,
+      engine_outputs_without_reviewer: this.engineNoReviewer,
+      screening_decisions_missing_reviewer: this.screeningNoReviewer,
+    };
+  }
+
+  get period(): { from: string; to: string } {
+    return { from: this.first, to: this.last };
+  }
+}
+
+function pemFor(signer: ReceiptSigner): string {
+  return signer.publicKeyHex
+    ? publicKeyPem(signer.publicKeyHex)
+    : "-----BEGIN AIR PUBLIC KEY HEX-----\n\n-----END AIR PUBLIC KEY HEX-----\n";
+}
+
+/** The manifest, signed: everything but the member digests is fixed by the format. */
+function signedManifest(args: {
+  now: Date; tenant: string; system: BundleOptions["system"]; counts: Rec; period: { from: string; to: string };
+  anchor?: AnchorManifest; files: Record<string, string>; signer: ReceiptSigner;
+}): Rec {
+  const system = args.system ?? {};
+  const manifest: Rec = {
+    bundle_version: "1.0",
+    bundle_id: randomUUID(),
+    created_at: args.now.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    tenant: args.tenant,
+    system: {
+      name: system.name || "deployer-supplied",
+      high_risk_rationale: system.high_risk_rationale || "deployer-supplied",
+      deployer: system.deployer || "deployer-supplied",
+      period_covered: args.period,
+    },
+    counts: args.counts,
+    retention_until: retentionUntil(args.now),
+    retention_note: "4-year floor per California FEHA automated-decision-system record-keeping rules (SB 26-189, which replaced the repealed SB 24-205, sets no explicit retention period); computed from export time.",
+    frameworks: ["CO-SB26-189"],
+    review_note: "adverse_decisions_missing_reviewer is the compliance-relevant count: decisions that ended a candidacy with no named human reviewer. engine_outputs_without_reviewer counts scoring and ranking, which are inputs to a decision rather than the decision, and are legitimately reviewer-less. screening_decisions_missing_reviewer is the coarse total of both, kept for compatibility with bundles exported before the split.",
+    outcome_monitoring: "deployer-supplied",
+    anchor: args.anchor ?? { status: "absent" },
+    files: args.files,
+  };
+  const digest = sha256(canonicalManifestBytes(manifest));
+  manifest["signature"] = {
+    alg: args.signer.method,
+    upgrade_path: "ML-DSA-65",
+    signed_digest: digest,
+    encoding: "hex",
+    value: args.signer.sign(Buffer.from(digest, "hex")),
+    public_key_hex: args.signer.publicKeyHex ?? "",
+  };
+  return manifest;
+}
+
+function bundleFileName(now: Date, tenant: string, bundleId: string): string {
+  const stamp = now.toISOString().replace(/[:T]/g, (c) => (c === "T" ? "-" : "")).slice(0, 17);
+  // The tenant is a recorder name ("acme/support" is a fine name): keep it
+  // to file-name characters so it cannot point the bundle somewhere else.
+  const safeTenant = tenant.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "agent";
+  return `bundle-${stamp}-${safeTenant}-${bundleId.slice(0, 8)}.air-evidence`;
+}
+
+/**
+ * JSON.stringify(value, null, 2) as it would appear nested `depth` levels
+ * deep inside another JSON.stringify(_, null, 2) document.
+ */
+function nestedJson(value: unknown, depth: number): string {
+  return JSON.stringify(value, null, 2).replace(/\n/g, "\n" + "  ".repeat(depth));
+}
+
+/**
+ * Write a v1 bundle from records already in memory; returns its path and the
+ * signed manifest. Recorder.export streams from the runs directory instead
+ * (streamEvidenceBundleV1); the two write the same members byte for byte.
+ */
 export function generateEvidenceBundleV1(options: BundleOptions): { path: string; manifest: Rec } {
   const { chainEntries, tenant, signer } = options;
   const now = new Date();
-  const createdAt = now.toISOString().replace(/\.\d{3}Z$/, "Z");
 
   // records/actions.jsonl: canonical lines, chain order. Python writes
   // json.dumps(r, sort_keys=True, default=str) and the browser verifier
@@ -115,23 +233,11 @@ export function generateEvidenceBundleV1(options: BundleOptions): { path: string
   let actionsJsonl = chainEntries.map((r) => pythonJson(r)).join("\n");
   if (actionsJsonl) actionsJsonl += "\n";
 
-  const cats = chainEntries.map((r) => categorizeRecord(r as Rec));
-  const screeningRecords = chainEntries.filter((_, i) => cats[i] === "screening_decision") as Rec[];
-  const adverse = screeningRecords.filter(isAdverseDecision);
-  const counts = {
-    actions: chainEntries.length,
-    screening_decisions: screeningRecords.length,
-    blocked_actions: cats.filter((c) => c === "blocked_action").length,
-    human_approvals: cats.filter((c) => c === "human_approval").length,
-    adverse_decisions: adverse.length,
-    adverse_decisions_missing_reviewer: adverse.filter((r) => !reviewer(r)).length,
-    engine_outputs_without_reviewer: screeningRecords.filter((r) => !isAdverseDecision(r) && !reviewer(r)).length,
-    screening_decisions_missing_reviewer: screeningRecords.filter((r) => !reviewer(r)).length,
-  };
+  const tally = new Counts();
+  for (const r of chainEntries) tally.add(r as Rec);
 
-  const timestamps = chainEntries.map((r) => String(r.timestamp ?? "")).filter(Boolean).sort();
   const chainDoc = JSON.stringify({
-    algorithm: "HMAC-SHA256(key, prev_hash || json.dumps(record_without_chain_hash, sort_keys=True)); prev_hash starts at b'genesis' and advances to the raw digest each step",
+    algorithm: CHAIN_ALGORITHM,
     head_hash: chainEntries.length ? String(chainEntries[chainEntries.length - 1]!.chain_hash ?? "") : "",
     records: chainEntries.map((r) => ({ run_id: String(r.run_id ?? ""), chain_hash: String(r.chain_hash ?? "") })),
     verification_at_export: options.chainVerification,
@@ -140,13 +246,11 @@ export function generateEvidenceBundleV1(options: BundleOptions): { path: string
   const receiptsDoc = JSON.stringify({
     signing_method: signer.method,
     public_key_hex: signer.publicKeyHex ?? "",
-    note: "Each receipt's authorization_sig covers the canonical authorization payload (receipt_id, agent_id, action_name, action_category, payload_hash, covenant_hash, decision, authorized, parent_receipt_id, created_at) serialized with sort_keys=True. Verifiable with the public key alone.",
+    note: RECEIPTS_NOTE,
     receipts: chainEntries.filter((r) => r["receipt"]).map((r) => ({ run_id: String(r.run_id ?? ""), ...(r["receipt"] as Rec) })),
   }, null, 2);
 
-  const pem = signer.publicKeyHex
-    ? publicKeyPem(signer.publicKeyHex)
-    : "-----BEGIN AIR PUBLIC KEY HEX-----\n\n-----END AIR PUBLIC KEY HEX-----\n";
+  const pem = pemFor(signer);
   const mappingDoc = loadMapping();
 
   const files: Record<string, string> = {
@@ -157,46 +261,11 @@ export function generateEvidenceBundleV1(options: BundleOptions): { path: string
     "mapping/sb26-189.json": sha256(mappingDoc),
   };
 
-  const system = options.system ?? {};
-  const manifest: Rec = {
-    bundle_version: "1.0",
-    bundle_id: randomUUID(),
-    created_at: createdAt,
-    tenant,
-    system: {
-      name: system.name || "deployer-supplied",
-      high_risk_rationale: system.high_risk_rationale || "deployer-supplied",
-      deployer: system.deployer || "deployer-supplied",
-      period_covered: { from: timestamps[0] ?? "", to: timestamps[timestamps.length - 1] ?? "" },
-    },
-    counts,
-    retention_until: retentionUntil(now),
-    retention_note: "4-year floor per California FEHA automated-decision-system record-keeping rules (SB 26-189, which replaced the repealed SB 24-205, sets no explicit retention period); computed from export time.",
-    frameworks: ["CO-SB26-189"],
-    review_note: "adverse_decisions_missing_reviewer is the compliance-relevant count: decisions that ended a candidacy with no named human reviewer. engine_outputs_without_reviewer counts scoring and ranking, which are inputs to a decision rather than the decision, and are legitimately reviewer-less. screening_decisions_missing_reviewer is the coarse total of both, kept for compatibility with bundles exported before the split.",
-    outcome_monitoring: "deployer-supplied",
-    anchor: options.anchor ?? { status: "absent" },
-    files,
-  };
+  const manifest = signedManifest({ now, tenant, system: options.system, counts: tally.counts, period: tally.period, anchor: options.anchor, files, signer });
 
-  const digest = sha256(canonicalManifestBytes(manifest));
-  manifest["signature"] = {
-    alg: signer.method,
-    upgrade_path: "ML-DSA-65",
-    signed_digest: digest,
-    encoding: "hex",
-    value: signer.sign(Buffer.from(digest, "hex")),
-    public_key_hex: signer.publicKeyHex ?? "",
-  };
-
-  const stamp = now.toISOString().replace(/[:T]/g, (c) => (c === "T" ? "-" : "")).slice(0, 17);
-  // The tenant is a recorder name ("acme/support" is a fine name): keep it
-  // to file-name characters so it cannot point the bundle somewhere else.
-  const safeTenant = tenant.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "agent";
-  const name = `bundle-${stamp}-${safeTenant}-${String(manifest["bundle_id"]).slice(0, 8)}.air-evidence`;
   const outDir = options.outputDir ?? ".";
   fs.mkdirSync(outDir, { recursive: true });
-  const outPath = path.join(outDir, name);
+  const outPath = path.join(outDir, bundleFileName(now, tenant, String(manifest["bundle_id"])));
   const enc = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, "utf8"));
   const zip = zipSync({
     // Canonical scalars, so the verifier's re-serialisation matches the signed digest.
@@ -209,4 +278,257 @@ export function generateEvidenceBundleV1(options: BundleOptions): { path: string
   }, { level: 6 });
   fs.writeFileSync(outPath, zip);
   return { path: path.resolve(outPath), manifest };
+}
+
+export interface StreamBundleOptions {
+  runsDir: string;
+  /** The directory's index in verification order (indexRecords). */
+  entries: RecordIndexEntry[];
+  /** Record files the index could not read; reported, and the bundle marked not intact. */
+  unreadable: string[];
+  /** HMAC key for the chain, to verify while writing. */
+  signingKey: string;
+  tenant: string;
+  signer: ReceiptSigner;
+  system?: BundleOptions["system"];
+  anchor?: AnchorManifest;
+  outputDir?: string;
+  /** Further reasons the history is incomplete (the recorder's own head check). */
+  problems?: string[];
+  /**
+   * The export gives the event loop a turn whenever about 20 ms of work has
+   * gone by; this also caps the records between turns. Default: no cap.
+   */
+  yieldEvery?: number;
+}
+
+const CHUNK = 1 << 16;
+
+/** One zip member, written through a streaming deflater with a running SHA-256. */
+class StreamMember {
+  private readonly file: ZipDeflate;
+  private readonly hash: Hash = createHash("sha256");
+  private pending: string[] = [];
+  private pendingLength = 0;
+
+  constructor(zip: Zip, name: string) {
+    this.file = new ZipDeflate(name, { level: 6 });
+    zip.add(this.file);
+  }
+
+  write(text: string): void {
+    this.pending.push(text);
+    this.pendingLength += text.length;
+    if (this.pendingLength >= CHUNK) this.flush(false);
+  }
+
+  writeBytes(bytes: Buffer): void {
+    this.flush(false);
+    this.hash.update(bytes);
+    this.file.push(new Uint8Array(bytes), false);
+  }
+
+  private flush(final: boolean): void {
+    const bytes = Buffer.from(this.pending.join(""), "utf8");
+    this.pending = [];
+    this.pendingLength = 0;
+    this.hash.update(bytes);
+    if (bytes.length || final) this.file.push(new Uint8Array(bytes), final);
+  }
+
+  end(): string {
+    this.flush(true);
+    return this.hash.digest("hex");
+  }
+}
+
+/**
+ * Write a v1 bundle straight from a runs directory, one record at a time:
+ * memory stays proportional to the index (a run id and hash per record), not
+ * the records, and the event loop gets a turn every 20 ms or so.
+ * The chain is verified while it is written, and the result stamped into
+ * chain.json. Members are byte for byte what generateEvidenceBundleV1 writes
+ * for the same records; manifest.json comes last in the archive, since it
+ * signs the others' digests.
+ */
+export async function streamEvidenceBundleV1(options: StreamBundleOptions): Promise<{ path: string; manifest: Rec; verification: ChainVerification & { fully_intact: boolean; problems?: string[] } }> {
+  const { runsDir, entries, signer, tenant } = options;
+  const unreadable = [...options.unreadable];
+  const pacer = new Pacer(options.yieldEvery);
+  const now = new Date();
+  const outDir = options.outputDir ?? ".";
+  fs.mkdirSync(outDir, { recursive: true });
+  const work = fs.mkdtempSync(path.join(outDir, ".air-export-"));
+  const partial = path.join(work, "bundle.partial");
+  const receiptsTmp = path.join(work, "receipts.part");
+  // Each descriptor is closed exactly once: the export pauses, and a number
+  // closed twice may by then belong to a file the agent has opened.
+  const open = new Set<number>();
+  const openFile = (file: string, flags: string): number => {
+    const fd = fs.openSync(file, flags);
+    open.add(fd);
+    return fd;
+  };
+  const closeFile = (fd: number): void => {
+    if (open.delete(fd)) fs.closeSync(fd);
+  };
+  const out = openFile(partial, "w");
+  const receiptsOut = openFile(receiptsTmp, "w");
+  try {
+    let zipError: unknown;
+    let zipDone = false;
+    const zip = new Zip((err, chunk, final) => {
+      if (err) zipError = err;
+      else fs.writeSync(out, chunk);
+      if (final) zipDone = true;
+    });
+
+    // records/actions.jsonl, verifying the chain as it goes.
+    const actions = new StreamMember(zip, "records/actions.jsonl");
+    const key = Buffer.from(options.signingKey, "utf8");
+    let prev: Buffer = GENESIS_DIGEST;
+    let verified = 0;
+    let withHash = 0;
+    let firstBreak: { at: number; runId: string } | undefined;
+    const tally = new Counts();
+    const written: Array<[string, string]> = [];
+    let receipts = 0;
+    // Receipts go to a side file in 64 KB writes, and into the archive after
+    // chain.json, as the in-memory export orders the members.
+    let receiptsPending: string[] = [];
+    let receiptsPendingLength = 0;
+    const flushReceipts = (): void => {
+      fs.writeSync(receiptsOut, receiptsPending.join(""));
+      receiptsPending = [];
+      receiptsPendingLength = 0;
+    };
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]!;
+      if (pacer.due()) await pacer.pause();
+      if (!e.chainHash) continue;
+      let rec: ChainRecord;
+      try {
+        rec = parsePreserving(fs.readFileSync(path.join(runsDir, e.file), "utf8")) as ChainRecord;
+      } catch {
+        unreadable.push(e.file); // changed or removed since it was indexed
+        continue;
+      }
+      if (!rec || typeof rec !== "object" || Array.isArray(rec)) {
+        unreadable.push(e.file);
+        continue;
+      }
+      if (!rec.chain_hash) continue; // rewritten outside the chain since it was indexed
+      if (!firstBreak) {
+        const step = chainStep(key, prev, rec);
+        withHash++;
+        if (step.ok) {
+          verified++;
+          prev = step.digest;
+        } else {
+          firstBreak = { at: i, runId: String(rec.run_id ?? "") };
+        }
+      }
+      actions.write(pythonJson(rec) + "\n");
+      tally.add(rec as Rec);
+      written.push([String(rec.run_id ?? ""), String(rec.chain_hash ?? "")]);
+      if (rec["receipt"]) {
+        const item = { run_id: String(rec.run_id ?? ""), ...(rec["receipt"] as Rec) };
+        const text = (receipts++ ? ",\n" : "") + "    " + nestedJson(item, 2);
+        receiptsPending.push(text);
+        receiptsPendingLength += text.length;
+        if (receiptsPendingLength >= CHUNK) flushReceipts();
+      }
+    }
+    flushReceipts();
+    const actionsDigest = actions.end();
+    closeFile(receiptsOut);
+
+    const problems = [...(options.problems ?? [])];
+    if (unreadable.length) problems.unshift(`${unreadable.length} record file(s) could not be read: ${unreadable.slice(0, 3).join(", ")}`);
+    // Key order as the in-memory export writes it: fully_intact first.
+    const verification: ChainVerification & { fully_intact: boolean; problems?: string[] } = {
+      fully_intact: !firstBreak && verified === entries.length && problems.length === 0,
+      intact: !firstBreak,
+      total_records: entries.length,
+      verified_records: verified,
+      records_with_hash: withHash,
+      ...(firstBreak ? { first_break_at: firstBreak.at, first_break_run_id: firstBreak.runId } : {}),
+    };
+    if (problems.length) {
+      // Stamped as a break, so verifiers fail the bundle and say why.
+      verification.intact = false;
+      verification.first_break_at ??= written.length;
+      verification.problems = problems;
+    }
+
+    // verification/chain.json, as JSON.stringify(doc, null, 2) would write it.
+    const chain = new StreamMember(zip, "verification/chain.json");
+    chain.write(`{\n  "algorithm": ${JSON.stringify(CHAIN_ALGORITHM)},\n  "head_hash": ${JSON.stringify(written.length ? written[written.length - 1]![1] : "")},\n  "records": `);
+    if (!written.length) chain.write("[]");
+    else {
+      chain.write("[\n");
+      for (let i = 0; i < written.length; i++) {
+        if (pacer.due()) await pacer.pause();
+        const [runId, hash] = written[i]!;
+        chain.write(`${i ? ",\n" : ""}    {\n      "run_id": ${JSON.stringify(runId)},\n      "chain_hash": ${JSON.stringify(hash)}\n    }`);
+      }
+      chain.write("\n  ]");
+    }
+    chain.write(`,\n  "verification_at_export": ${nestedJson(verification, 1)}\n}`);
+    const chainDigest = chain.end();
+
+    // verification/receipts.json, from the receipts gathered on the way.
+    const receiptsMember = new StreamMember(zip, "verification/receipts.json");
+    receiptsMember.write(`{\n  "signing_method": ${JSON.stringify(signer.method)},\n  "public_key_hex": ${JSON.stringify(signer.publicKeyHex ?? "")},\n  "note": ${JSON.stringify(RECEIPTS_NOTE)},\n  "receipts": `);
+    if (!receipts) receiptsMember.write("[]");
+    else {
+      receiptsMember.write("[\n");
+      const fd = openFile(receiptsTmp, "r");
+      try {
+        const buf = Buffer.alloc(CHUNK);
+        for (let n; (n = fs.readSync(fd, buf, 0, CHUNK, null)) > 0; ) {
+          receiptsMember.writeBytes(Buffer.from(buf.subarray(0, n)));
+          if (pacer.due()) await pacer.pause();
+        }
+      } finally {
+        closeFile(fd);
+      }
+      receiptsMember.write("\n  ]");
+    }
+    receiptsMember.write("\n}");
+    const receiptsDigest = receiptsMember.end();
+
+    const small = (name: string, text: string): string => {
+      const m = new StreamMember(zip, name);
+      m.write(text);
+      return m.end();
+    };
+    const files: Record<string, string> = {
+      "records/actions.jsonl": actionsDigest,
+      "verification/chain.json": chainDigest,
+      "verification/receipts.json": receiptsDigest,
+      "verification/public_key.pem": small("verification/public_key.pem", pemFor(signer)),
+      "mapping/sb26-189.json": small("mapping/sb26-189.json", loadMapping()),
+    };
+    const manifest = signedManifest({ now, tenant, system: options.system, counts: tally.counts, period: tally.period, anchor: options.anchor, files, signer });
+    // Canonical scalars, so the verifier's re-serialisation matches the signed digest.
+    small("manifest.json", pythonJsonPretty(manifest));
+    zip.end();
+    if (zipError) throw zipError;
+    if (!zipDone) throw new Error("the archive did not finish writing");
+    closeFile(out);
+
+    const outPath = path.resolve(outDir, bundleFileName(now, tenant, String(manifest["bundle_id"])));
+    fs.renameSync(partial, outPath);
+    return { path: outPath, manifest, verification };
+  } finally {
+    for (const fd of [...open]) {
+      try {
+        closeFile(fd);
+      } catch {
+        /* already gone; the work directory is removed below */
+      }
+    }
+    fs.rmSync(work, { recursive: true, force: true });
+  }
 }

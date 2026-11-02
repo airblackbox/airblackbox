@@ -42,7 +42,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   found two gaps in AIR's own framework detection (LangGraph-only Python, and
   `@openai/guardrails` in TypeScript and JavaScript).
 
+### Changed
+- **Covenants: an approval rule whose guard cannot be read now fails
+  closed, in both SDKs.** With `permit: issue_refund` beside
+  `require_approval: issue_refund` when `amount > 1000`, a missing or
+  unreadable amount (`"$5,000"`) used to leave only the permit, so the
+  refund went through; it now requires approval. Such a rule only ever
+  makes a decision stricter: with no permit, the default forbid stands.
+  Decisions change only where a `require_approval` guard is indeterminate.
+- **Covenant loading is strict, in both SDKs, with the same messages.**
+  Mistakes used to load silently: a misspelled `wehn:` dropped the guard and
+  left an unconditional permit, a rule with both `forbid:` and `permit:`
+  became a permit, `amount >> 5` and `order.amount > 5` loaded and were
+  never true, and a target YAML reads as a number or boolean (`on`, `no`,
+  `123`) never matched. Unknown keys, a rule with no action or two, a
+  non-string target, `when`, `unless` or `category`, a condition that is
+  not `field op value` (or orders against a non-number, or reads a nested
+  field), a key repeated in one mapping and unknown top-level keys now raise
+  `CovenantError` naming the rule. The four example covenants load
+  unchanged, with the same hashes.
+- **TypeScript: `export()` streams from the runs directory.** It used to load
+  every record into memory and write the bundle in one synchronous step: at
+  100,000 records that took 2 GB and froze the event loop (and with it the
+  agent) for most of a minute. It now reads, verifies and writes one record
+  at a time and gives the event loop a turn every 20 ms or so. At 100,000
+  records it peaks near 200 MB, finishes in 25 s instead of 53 s, and never
+  stalls the loop for more than about 0.1 s; opening a recorder on such a
+  directory takes 1.3 s instead of 37 s, since it continues from the stored
+  head. Bundles are byte for byte what the in-memory export wrote, which
+  the tests check across intact, broken, holed and mixed-writer directories.
+  CI exports 20,000 records under a 160 MB heap, where the old export ran
+  out of memory.
+
 ### Fixed
+- `air-evidence verify` accepted, or crashed on, malformed bundles found by a
+  tamper test of TypeScript-written bundles: a manifest repeating a key (the
+  signature covers the manifest as parsed, and readers disagree on which
+  value counts), bytes before or after the archive (`zipfile` re-bases or
+  ignores them), and records nested too deeply to parse (a `RecursionError`
+  traceback). Each now fails cleanly at the check concerned, and a bundle
+  exported with anchoring turned off shows the recorded reason instead of
+  "no anchor recorded". See findings 9-12 in the red-team review.
 - Gateway: found by running the provider SDKs (OpenAI and Anthropic, Python
   and TypeScript, plus the Vercel AI SDK and LangChain) through it against
   scripted upstreams:

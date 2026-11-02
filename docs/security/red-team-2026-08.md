@@ -40,6 +40,10 @@ not a break — the operator holds that by design.
 | 6 | Public transparency-log anchor is forgeable | High | **Fixed** |
 | 7 | Empty record set degenerates the anchor check | Medium | **Fixed** |
 | 8 | `signature` sub-object excluded from the signed digest | Low | **Fixed** |
+| 9 | Repeated JSON keys in the manifest | High | **Fixed** (found 2026-10) |
+| 10 | Bytes before or after the archive | Medium | **Fixed** (found 2026-10) |
+| 11 | Browser verifier ignored a chain stamped broken at export | Medium | **Fixed** (found 2026-10) |
+| 12 | Deeply nested records crash the verifier | Low | **Fixed** (found 2026-10) |
 
 ---
 
@@ -150,6 +154,47 @@ nothing had been checked. Gateway and trust-layer records legitimately carry no
 receipts today, so this is reported rather than failed — the verifier now says
 `0/N records carry a receipt - NOTHING was checked here`, and the CLI verdict
 adds `authorship unevidenced`.
+
+---
+
+## Found later (2026-10)
+
+A stress and tamper test of bundles written by the TypeScript package (27
+variants) found four more. Each now has a test built from a genuine bundle,
+in `sdk/tests/test_evidence_verify_malformed.py` and, for the browser
+verifier, the site's `tests/test_verify_malformed.py`.
+
+### 9. Repeated JSON keys in the manifest (High)
+
+The manifest's signature covers the manifest *as parsed*, and a repeated key is
+legal JSON with no defined meaning: Python and the browser keep the last value,
+other readers the first. Putting a forged `counts` or `bundle_id` first and the
+genuine one last left the signature valid while a first-value reader showed
+the forgery: finding 1 again, one level down. Both verifiers now refuse a key
+repeated anywhere in any JSON member (check 2 for the manifest and other
+members, check 3 for records and the chain listing).
+
+### 10. Bytes before or after the archive (Medium)
+
+`zipfile` re-bases offsets when data precedes an archive and ignores data
+after it, so a bundle with a document prepended (a polyglot another program
+opens as something else) or a payload appended verified unchanged. A bundle
+must now be exactly one archive: its first member at offset 0 and its end
+record, with any comment it declares, ending the file.
+
+### 11. Browser verifier ignored a chain stamped broken at export (Medium)
+
+The exporter checks the chain and signs the result into
+`verification/chain.json`; `air-evidence verify` fails a bundle that says
+`intact: false`, but the browser verifier never read that file, so a bundle
+exported with records missing showed as authentic there. It now fails it, and
+checks that the chain listing and the records agree in number.
+
+### 12. Deeply nested records crash the verifier (Low)
+
+The TypeScript writer accepts deeper nesting than Python's default recursion
+limit, and the verifier stopped with a `RecursionError` traceback instead of a
+result. It now fails at check 3: "a record is nested too deeply to verify".
 
 ---
 

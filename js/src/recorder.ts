@@ -22,9 +22,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
-import { computeHead, timestampHead, type AnchorResult } from "./anchor.js";
-import { anchorManifestFrom, generateEvidenceBundleV1, type AnchorManifest } from "./bundle.js";
-import { AuditChain, loadRecords, loadRecordsReport, resolveSigningKey, verifyRecords, type ChainRecord } from "./chain.js";
+import { headOfIndex, timestampHead, type AnchorResult } from "./anchor.js";
+import { anchorManifestFrom, streamEvidenceBundleV1, type AnchorManifest } from "./bundle.js";
+import { AuditChain, indexRecordsPaced, resolveSigningKey, verifyChain, type ChainRecord, type ChainVerification } from "./chain.js";
 import { Covenant, type Context, type RuleAction } from "./covenant.js";
 import { ActionReceipt, ReceiptSigner, hashPayload } from "./receipt.js";
 
@@ -404,61 +404,64 @@ export class Recorder {
   }
 
   /** Verify the chain this recorder writes to, as the Python verifier would. */
-  verify(): ReturnType<typeof verifyRecords> {
-    return verifyRecords(loadRecords(this.runsDir), resolveSigningKey(this.runsDir, this.#hmacKey));
+  verify(): ChainVerification {
+    return verifyChain(this.runsDir, resolveSigningKey(this.runsDir, this.#hmacKey));
   }
 
   /**
    * Write a signed `.air-evidence` bundle and return its path. The chain is
-   * verified first and the result is stamped into the signed manifest, so a
-   * bundle never quietly attests a broken history.
+   * verified as the bundle is written and the result is stamped into the
+   * signed manifest, so a bundle never quietly attests a broken history.
+   *
+   * The export streams from the runs directory a record at a time, so a long
+   * history costs an index entry per record in memory rather than the
+   * records, and the agent keeps running while it is written. It covers the
+   * records on disk when it starts; anything recorded meanwhile goes in the
+   * next export.
    */
   async export(outputDir?: string): Promise<string> {
-    const { records, unreadable } = loadRecordsReport(this.runsDir);
-    const verification = verifyRecords(records, resolveSigningKey(this.runsDir, this.#hmacKey));
-    const chained = records.filter((r) => r.chain_hash);
+    const { entries, unreadable } = await indexRecordsPaced(this.runsDir);
+    const chained = entries.filter((e) => e.chainHash);
     // This process knows the head it wrote. If the newest record on disk is
     // not it, records were removed after they were written; and a record
     // file that cannot be read is a hole. Either way the export says the
     // history is not intact rather than attesting what is left.
     const problems: string[] = [];
-    if (unreadable.length) problems.push(`${unreadable.length} record file(s) could not be read: ${unreadable.slice(0, 3).join(", ")}`);
-    const head = chained.length ? String(chained[chained.length - 1]!.chain_hash) : "genesis";
+    const head = chained.length ? chained[chained.length - 1]!.chainHash : "genesis";
     if (this.chain.writesSinceLoad > 0 && head !== this.chain.currentHash) problems.push("the newest record this process wrote is missing from the directory");
-    const fullyIntact = verification.intact && verification.verified_records === records.length && problems.length === 0;
-    this.lastExportNote = problems.length ? `chain not intact: ${problems.join("; ")}` : "";
-    if (problems.length) console.warn(`AIR Blackbox (${this.name}): ${this.lastExportNote}`);
-    const seqMax = chained.reduce((m, r) => Math.max(m, Number(r.chain_seq ?? 0)), 0);
+    const seqMax = chained.reduce((m, e) => Math.max(m, e.seq), 0);
 
     let anchor: AnchorManifest;
+    let anchorNote = "";
     if (!this.anchor) {
       anchor = { anchored: false, reason: "anchoring disabled" };
     } else {
-      const head = computeHead(this.runsDir);
-      if (!head) {
+      const anchorHead = headOfIndex(entries);
+      if (!anchorHead) {
         anchor = { anchored: false, reason: "no records" };
       } else {
-        const result: AnchorResult = await timestampHead(head, this.tsaUrls, this.anchorTimeout);
-        const note = result.ok ? `timestamped by ${result.tsa_url}` : `no external timestamp: ${result.error}`;
-        this.lastExportNote = this.lastExportNote.startsWith("chain not intact") ? `${this.lastExportNote}; ${note}` : note;
+        const result: AnchorResult = await timestampHead(anchorHead, this.tsaUrls, this.anchorTimeout);
+        anchorNote = result.ok ? `timestamped by ${result.tsa_url}` : `no external timestamp: ${result.error}`;
         anchor = anchorManifestFrom(result, seqMax);
       }
     }
 
-    const { path: bundlePath } = generateEvidenceBundleV1({
-      chainEntries: chained,
+    const { path: bundlePath, verification } = await streamEvidenceBundleV1({
+      runsDir: this.runsDir,
+      entries,
+      unreadable,
+      signingKey: resolveSigningKey(this.runsDir, this.#hmacKey),
       tenant: this.name,
       signer: this.signer,
-      chainVerification: {
-        fully_intact: fullyIntact,
-        ...verification,
-        // Stamped as a break, so verifiers fail the bundle and say why.
-        ...(problems.length ? { intact: false, first_break_at: verification.first_break_at ?? chained.length, problems } : {}),
-      },
       system: { name: this.name, high_risk_rationale: "", deployer: "" },
       anchor,
       outputDir: outputDir ?? this.runsDir,
+      problems,
     });
+    const found = verification.problems ?? [];
+    const notIntact = found.length ? `chain not intact: ${found.join("; ")}` : "";
+    if (notIntact) console.warn(`AIR Blackbox (${this.name}): ${notIntact}`);
+    this.lastExportNote = [notIntact, anchorNote].filter(Boolean).join("; ");
     this.bundlePath = bundlePath;
     return bundlePath;
   }

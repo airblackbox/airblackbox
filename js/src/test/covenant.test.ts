@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Covenant, Rule, evalCondition } from "../covenant.js";
+import { Covenant, CovenantError, Rule, evalCondition } from "../covenant.js";
 import { hasAirSdk, python } from "./helpers.js";
 
 const YAML = `
@@ -121,36 +121,87 @@ print(json.dumps({"hash": c.hash, "decisions": [c.evaluate(a, ctx).value for a, 
   assert.deepEqual(ours, theirs.decisions);
 });
 
-// YAML corners where a 1.2 parser and PyYAML (1.1) disagree. The covenant
-// hash is what a receipt pins, so it must match the Python SDK's exactly.
-const YAML_CORNERS = [
+// Both SDKs must load, refuse and decide alike. Valid files include YAML
+// corners where a 1.2 parser and PyYAML (1.1) disagree (the hash is what a
+// receipt pins); invalid ones must be refused with the same message.
+const PARITY_CASES = [
   "agent: a\nversion: 1.0\nrules:\n  - permit: x\n",
   "agent: a\nversion: 2\nrules:\n  - permit: x\n",
   "agent: a\nversion: '1.0'\nrules:\n  - permit: x\n",
   "agent: a\nversion: 1.10\nrules:\n  - permit: x\n",
   "agent: a\nversion: on\nrules:\n  - permit: x\n",
-  "agent: a\nrules:\n  - permit: 123\n  - forbid: 1.5\n  - permit: on\n  - permit: no\n  - permit: y\n  - permit: 1e3\n  - permit: 010\n  - permit: 0x1F\n  - permit: 1_000\n  - permit: 1:30\n  - permit: .5\n  - permit: ~\n",
-  "agent: 007\ndescription: 3.0\nrules:\n  - forbid: send_email\n    unless: 1\n  - require_approval: pay\n    when: amount > 10\n    category: 2.0\n",
+  "agent: 007\ndescription: 3.0\nrules:\n  - forbid: send_email\n    unless: human_approved\n  - require_approval: pay\n    when: amount > 10\n    category: payments\n",
   "agent: a\nrules:\n  - permit: '*'\n  - forbid: \"on\"\n",
+  "agent: a\nrules:\n  - permit: issue_refund\n  - require_approval: issue_refund\n    when: \"amount > 1000\"\n",
+  "agent: a\nrules:\n  - require_approval: pay\n    when: \"amount > 1000\"\n",
+  "agent: a\nrules:\n  - permit: pay\n    when: \"amount <= 1000\"\n  - require_approval: pay\n    when: \"amount > 1000\"\n",
+  "agent: a\nrules:\n  - permit: x\n    when: café > 5\n",
+  // Refused, same message in both:
+  "agent: a\nrules:\n  - permit: 123\n",
+  "agent: a\nrules:\n  - forbid: 1.5\n",
+  "agent: a\nrules:\n  - permit: on\n",
+  "agent: a\nrules:\n  - permit: y\n  - permit: no\n",
+  "agent: a\nrules:\n  - permit:\n",
+  "agent: a\nrules:\n  - forbid: x\n    unless: 1\n",
+  "agent: a\nrules:\n  - permit: x\n    category: 2.0\n",
+  "agent: a\nrules:\n  - permit: x\n    wehn: \"amount > 1\"\n",
+  "agent: a\nrules:\n  - permit: y\n  - forbid: x\n    permit: x\n",
+  "agent: a\nrules:\n  - when: \"a > 1\"\n",
+  "agent: a\nrules:\n  - permit: x\n    when: amount >> 5\n",
+  "agent: a\nrules:\n  - permit: x\n    when: order.amount > 5\n",
+  "agent: a\nrules:\n  - permit: x\n    when: amount is big\n",
+  "agent: a\nrules:\n  - permit: x\n    when: 5\n",
+  "agent: a\nrules:\n  - forbid: x\n    unless: human approved\n",
+  "agent: a\nrules:\n  - just_a_string\n",
+  "agent: a\nrules:\n  permit: x\n",
+  "agent: a\nowner: me\nrules: []\n",
+  "",
+  "- permit: x\n",
+  "agent: a\nrules:\n  - permit: x\n    when: a > 1\n    when: a > 2\n",
+  "agent: [unclosed\n",
+];
+const PROBES: [string, Record<string, unknown>][] = [
+  ["x", {}], ["*", {}], ["send_email", {}], ["pay", {}], ["pay", { amount: 5000 }], ["pay", { amount: "$5,000" }],
+  ["issue_refund", {}], ["issue_refund", { amount: 500 }], ["issue_refund", { amount: 5000 }], ["x", { "café": 9 }],
 ];
 
-test("differential: YAML scalars load as PyYAML loads them, so hashes match", { skip: !hasAirSdk() && "air_blackbox SDK not importable" }, () => {
+type Outcome = { hash: string; version: string; decisions: string[] } | { error: string };
+
+function tsOutcome(y: string): Outcome {
+  try {
+    const c = Covenant.fromYamlString(y);
+    return { hash: c.hash, version: c.version, decisions: PROBES.map(([a, ctx]) => c.evaluate(a, ctx)) };
+  } catch (e) {
+    assert.ok(e instanceof CovenantError, `a CovenantError, not ${String(e)}`);
+    return { error: (e as Error).message };
+  }
+}
+
+test("differential: both SDKs load, refuse and decide alike", { skip: !hasAirSdk() && "air_blackbox SDK not importable" }, () => {
   const out = python(`
 import json, sys
-from air_blackbox.gate.covenant import Covenant
+from air_blackbox.gate.covenant import Covenant, CovenantError
+cases, probes = json.load(sys.stdin)
 res = []
-for y in json.load(sys.stdin):
-    c = Covenant.from_yaml_string(y)
-    res.append({"hash": c.hash, "version": c.version,
-                "decisions": [c.evaluate(a).value for a in ["x", "123", "on", "no", "y", "1e3", "send_email", "*"]]})
-print(json.dumps(res))`, JSON.stringify(YAML_CORNERS));
-  const theirs = JSON.parse(out) as { hash: string; version: string; decisions: string[] }[];
-  YAML_CORNERS.forEach((y, i) => {
-    const c = Covenant.fromYamlString(y);
-    assert.equal(c.version, theirs[i]!.version, `version of ${JSON.stringify(y)}`);
-    assert.equal(c.hash, theirs[i]!.hash, `hash of ${JSON.stringify(y)}`);
-    assert.deepEqual(["x", "123", "on", "no", "y", "1e3", "send_email", "*"].map((a) => c.evaluate(a)), theirs[i]!.decisions, `decisions of ${JSON.stringify(y)}`);
+for y in cases:
+    try:
+        c = Covenant.from_yaml_string(y)
+        res.append({"hash": c.hash, "version": c.version,
+                    "decisions": [c.evaluate(a, ctx).value for a, ctx in probes]})
+    except CovenantError as e:
+        res.append({"error": str(e)})
+print(json.dumps(res))`, JSON.stringify([PARITY_CASES, PROBES]));
+  const theirs = JSON.parse(out) as Outcome[];
+  PARITY_CASES.forEach((y, i) => {
+    const ours = tsOutcome(y);
+    const want = theirs[i]!;
+    if ("error" in want && want.error.startsWith("not valid YAML") && "error" in ours) {
+      assert.match(ours.error, /^not valid YAML/, JSON.stringify(y)); // the parsers word syntax errors differently
+    } else {
+      assert.deepEqual(ours, want, JSON.stringify(y));
+    }
   });
+  assert.ok(theirs.filter((t) => "error" in t).length >= 20, "the refusals were exercised");
 });
 
 test("guards read a context's own fields, never inherited members", () => {
