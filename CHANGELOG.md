@@ -99,6 +99,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command now exits 1 on a real failure; it exited 0 regardless before, so it
   could not gate anything.
 
+### Security
+- **Dependencies updated to patched releases.** A `pip-audit` of every version
+  pinned in `uv.lock` found 95 known vulnerabilities in 15 packages; 6 remain.
+  The packages: aiohttp, authlib, certifi, chromadb (through crewai), filelock,
+  joserfc, mcp, multidict, oauthlib, pillow, pyasn1, pyjwt, urllib3 and uv. The
+  OpenAI trust package's lockfile is clean, and so is the TypeScript package
+  (`npm audit`: body-parser and fast-uri, both dev tools). The gateway moves
+  to gRPC 1.84.0, which carries the 1.83.2 fix, plus `golang.org/x/net`
+  0.58.0, `x/crypto` 0.55.0 and OpenTelemetry 1.46.0, the newest releases
+  that still build with Go 1.25. None of this changes what `pip install
+  air-blackbox` resolves: CI, the release workflow and the Docker images
+  install with pip, not from the lockfile. What remains is blocked upstream:
+  chromadb's five advisories have no fixed release, and every google-adk
+  release caps opentelemetry-api below the fixed 1.45.1. Two `[tool.uv]`
+  settings make the rest possible. The lockfile now covers Python 3.11 and
+  later (3.10 reached end of life in October 2026, and the patched pillow and
+  filelock dropped it; the package still installs and is release-tested on
+  3.10). The `crewai` and `adk` extras are locked separately, so
+  `uv sync --all-extras` now asks you to choose one.
+
 ## [1.17.0] - 2026-10-15
 
 ### Added
