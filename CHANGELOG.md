@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `demo/agent_checkout_demo.py`: the gate in front of a shopping agent's
+  checkout, with fictional orders. An ordinary order goes through. A large
+  total, an odd quantity or a new shipping address waits for the customer,
+  who sees the actual order. A prompt-injected gift-card order is declined,
+  and so is a garbled total. A receipt edited after the fact fails
+  verification. It also says what the gate does not stop: an approver who
+  says yes to a bad order, or one whose device is compromised.
 - **TypeScript package** (`js/`, npm `air-blackbox` 0.1.0, not yet
   published). Records agent actions into the same HMAC chain, Ed25519
   receipts and `.air-evidence` bundles as the Python SDK, byte for byte;
