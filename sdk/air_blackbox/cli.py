@@ -139,7 +139,7 @@ def setup():
 
 
 @main.command()
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--gateway", default="http://localhost:8080", envvar="AIR_GATEWAY_URL", help="Gateway URL (or AIR_GATEWAY_URL)")
 @click.option("--scan", default=".", help="Path to scan for code-level checks")
 @click.option("--runs-dir", default=None, help="Path to .air.json records directory")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
@@ -147,9 +147,12 @@ def setup():
 @click.option("--deep", is_flag=True, default=False, hidden=True, help="(deprecated, now default) Run LLM deep analysis")
 @click.option("--no-llm", is_flag=True, help="Skip LLM analysis, regex-only scan")
 @click.option("--model", default="air-compliance", help="Ollama model for deep scan")
+@click.option("--model-server", default=None, envvar="AIR_MODEL_SERVER",
+              help="Run the deep scan on this server's model (your AIR server's URL) instead of "
+                   "local Ollama; sends AIR_GATEWAY_KEY. Or set AIR_MODEL_SERVER.")
 @click.option("--no-save", is_flag=True, help="Don't save results to compliance history")
 @click.option("--standard", default="all", type=click.Choice(["eu", "us", "all"]), help="Jurisdiction: eu, us, or all")
-def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, standard):
+def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, model_server, no_save, standard):
     """Check AI compliance across EU and US jurisdictions."""
     from air_blackbox.gateway_client import GatewayClient
     from air_blackbox.compliance.engine import run_all_checks
@@ -162,8 +165,13 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
         console.print(f"  [green]●[/] Gateway connected at [bold]{gateway}[/]")
     else:
         console.print(f"  [dim]○ Gateway not running at {gateway} (optional - enables runtime checks)[/]")
+    if status.auth_failed:
+        console.print("  [red]●[/] The gateway refused the key. Set AIR_GATEWAY_KEY to the server's GATEWAY_KEY.")
     if status.total_runs > 0:
-        src = "gateway" if status.reachable else "trust layer records"
+        if status.records_source == "server":
+            src = "the gateway's records"
+        else:
+            src = "gateway" if status.reachable else "trust layer records"
         console.print(f"  [green]●[/] [bold]{status.total_runs:,}[/] logged events from {src} ({', '.join(status.models_observed[:3])})")
     else:
         console.print(f"  [yellow]●[/] No traffic data found")
@@ -179,8 +187,9 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
     if not no_llm:
         from air_blackbox.compliance.deep_scan import deep_scan, _ollama_available, _model_available
         import os
-        if _ollama_available() and _model_available(model):
-            console.print(f"[bold]Running hybrid analysis (regex + AI model)...[/]\n")
+        if model_server or (_ollama_available() and _model_available(model)):
+            where = f" on {model_server}" if model_server else ""
+            console.print(f"[bold]Running hybrid analysis (regex + AI model{where})...[/]\n")
             # Collect all Python files (supports single-file and directory scanning).
             # The model has only been validated on Python files, so other
             # languages and notebooks stay with the pattern checks and the
@@ -347,7 +356,8 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
                 result = deep_scan(merged_code, model=model,
                                   sample_context=sample_desc,
                                   total_files=total_files,
-                                  rule_context=rule_context)
+                                  rule_context=rule_context,
+                                  model_server=model_server)
                 if verbose:
                     os.environ.pop("AIR_VERBOSE", None)
             if result.get("available") and not result.get("error"):
@@ -411,7 +421,7 @@ def comply(gateway, scan, runs_dir, fmt, verbose, deep, no_llm, model, no_save, 
     if not no_save:
         try:
             from air_blackbox.compliance.history import save_scan
-            scan_id = save_scan(articles, scan_path=scan, version="1.6.3",
+            scan_id = save_scan(articles, scan_path=scan, version=_ab_version,
                                 deep_findings=deep_findings if deep_findings else None)
             if verbose:
                 console.print(f"  [dim]Saved to compliance history (scan #{scan_id})[/]\n")
@@ -780,7 +790,7 @@ def _render_discover_table(status, inventory, approved, metadata) -> None:
 
 
 @main.command()
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--gateway", default="http://localhost:8080", envvar="AIR_GATEWAY_URL", help="Gateway URL (or AIR_GATEWAY_URL)")
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
 @click.option("--approved", default=None, help="Path to approved models JSON or YAML")
 @click.option(
@@ -859,7 +869,7 @@ def discover(gateway, runs_dir, approved, fmt, output, scan_path, ai_libraries, 
 
 
 @main.command()
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--gateway", default="http://localhost:8080", envvar="AIR_GATEWAY_URL", help="Gateway URL (or AIR_GATEWAY_URL)")
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
 @click.option("--episode", default=None, help="Episode ID to replay")
 @click.option("--last", default=10, help="Show last N runs")
@@ -989,7 +999,7 @@ def replay(gateway, runs_dir, episode, last, verify):
 
 
 @main.command()
-@click.option("--gateway",  default="http://localhost:8080", help="Gateway URL")
+@click.option("--gateway",  default="http://localhost:8080", envvar="AIR_GATEWAY_URL", help="Gateway URL (or AIR_GATEWAY_URL)")
 @click.option("--runs-dir", default=None, help="Path to .air.json records")
 @click.option("--scan",     default=".", help="Path to scan for code-level checks")
 @click.option("--range",    "time_range", default="30d", help="Time range")
@@ -1153,7 +1163,7 @@ def export(gateway, runs_dir, scan, time_range, fmt, signing_key, no_anchor,
     if fmt == "pdf":
         from air_blackbox.export.pdf_report import generate_pdf, REPORTLAB_OK
         if not REPORTLAB_OK:
-            console.print("[red]reportlab not installed.[/] Run: [bold]pip install reportlab[/]")
+            console.print("[red]PDF reports need the pdf extra.[/] Run: [bold]pip install \"air-blackbox\\[pdf]\"[/]")
             raise SystemExit(1)
 
         out_path = output or f"AIR_Blackbox_Compliance_Report_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
@@ -1506,7 +1516,7 @@ def history(path, compare, export_path, limit):
 
 
 @main.command()
-@click.option("--gateway", default="http://localhost:8080", help="Gateway URL")
+@click.option("--gateway", default="http://localhost:8080", envvar="AIR_GATEWAY_URL", help="Gateway URL (or AIR_GATEWAY_URL)")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed output for each test")
 def test(gateway, verbose):
     """Run end-to-end validation of the AIR Blackbox stack.

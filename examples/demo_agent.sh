@@ -50,7 +50,7 @@ if [ -n "$RUN_ID" ]; then
   echo ""
   echo "Next steps:"
   echo "  1. View traces: open http://localhost:16686 (Jaeger)"
-  echo "  2. View vault:  open http://localhost:9001 (MinIO Console)"
+  echo "  2. View vault:  open http://localhost:9001 (vault console)"
   echo "  3. Replay run:  go run ./cmd/replayctl replay runs/${RUN_ID}.air.json"
 else
   echo "WARNING: no x-run-id header found — is the gateway running?"

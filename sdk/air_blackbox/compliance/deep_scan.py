@@ -11,13 +11,25 @@ Usage:
     air-blackbox comply --scan .               # hybrid: regex + LLM (auto-detects Ollama)
     air-blackbox comply --scan . --no-llm      # regex-only (skip LLM)
     air-blackbox comply --scan . --model air-compliance  # specify model
+    air-blackbox comply --scan . --model-server https://air.example.com  # the model on your AIR server
 
-Falls back gracefully to regex-only if Ollama is not available.
+With a model server (or AIR_MODEL_SERVER), the prompt goes to that server's
+OpenAI-compatible /v1/chat/completions, with AIR_GATEWAY_KEY as the
+X-Gateway-Key header, instead of to a local Ollama. An AIR server's gateway
+records the call like any other.
+
+Falls back gracefully to regex-only if no model is available.
 """
 import json
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
+
+# Generation settings from model/Modelfile, sent explicitly to a model
+# server: Ollama's OpenAI-compatible API does not apply the Modelfile's.
+MODEL_TEMPERATURE = 0.1
+MODEL_TOP_P = 0.9
+MODEL_SERVER_TIMEOUT = 300
 
 
 @dataclass
@@ -87,10 +99,56 @@ For each of Articles 9, 10, 11, 12, 14, and 15: report status, cite SPECIFIC evi
 """
 
 
+class ModelServerError(Exception):
+    """The model server could not produce a completion."""
+
+
+def _model_server_generate(prompt: str, model: str, server: str,
+                           gateway_key: Optional[str] = None,
+                           timeout: float = MODEL_SERVER_TIMEOUT) -> str:
+    """One completion from an OpenAI-compatible server (an AIR gateway)."""
+    import httpx
+
+    if not server.startswith(("http://", "https://")):
+        raise ModelServerError(f"Model server must be an http(s) URL, got {server!r}")
+    if gateway_key is None:
+        from air_blackbox.gateway_client import gateway_key_from_env
+        gateway_key = gateway_key_from_env()
+    headers = {"X-Gateway-Key": gateway_key} if gateway_key else {}
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": MODEL_TEMPERATURE,
+        "top_p": MODEL_TOP_P,
+        "stream": False,
+    }
+    url = server.rstrip("/") + "/v1/chat/completions"
+    try:
+        r = httpx.post(url, json=body, headers=headers, timeout=timeout)
+    except httpx.TimeoutException:
+        raise ModelServerError(f"Model server timed out after {timeout:.0f}s")
+    except httpx.HTTPError as e:
+        raise ModelServerError(f"Could not reach the model server at {server}: {e}")
+    if r.status_code == 401:
+        raise ModelServerError("The model server refused the key. Set AIR_GATEWAY_KEY "
+                               "to the server's GATEWAY_KEY.")
+    if r.status_code != 200:
+        raise ModelServerError(f"Model server returned HTTP {r.status_code}: {r.text[:200]}")
+    try:
+        content = r.json()["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise ModelServerError("Model server response is not a chat completion")
+    if not isinstance(content, str):
+        raise ModelServerError("Model server response has no text")
+    return content
+
+
 def deep_scan(code: str, model: str = "air-compliance",
               sample_context: str = "code sample",
               total_files: int = 0,
-              rule_context: str = "") -> dict:
+              rule_context: str = "",
+              model_server: Optional[str] = None,
+              gateway_key: Optional[str] = None) -> dict:
     """Run deep LLM analysis on code.
 
     Args:
@@ -99,12 +157,15 @@ def deep_scan(code: str, model: str = "air-compliance",
         sample_context: Description of what the sample contains (e.g., "core pipeline files")
         total_files: Total number of Python files in the project (for context)
         rule_context: Summary of rule-based scanner findings to guide the model
+        model_server: URL of an OpenAI-compatible server to use instead of
+            local Ollama (an AIR server's gateway)
+        gateway_key: key for that server; defaults to AIR_GATEWAY_KEY
 
     Returns:
         dict with 'available' (bool), 'findings' (list), 'model' (str), 'error' (str or None)
     """
     # Check if Ollama is available
-    if not _ollama_available():
+    if not model_server and not _ollama_available():
         return {
             "available": False,
             "findings": [],
@@ -113,7 +174,7 @@ def deep_scan(code: str, model: str = "air-compliance",
         }
 
     # Check if model exists - auto-pull from registry if missing
-    if not _model_available(model):
+    if not model_server and not _model_available(model):
         pulled = _auto_pull_model(model)
         if not pulled:
             return {
@@ -149,19 +210,29 @@ def deep_scan(code: str, model: str = "air-compliance",
         prompt = DEEP_PROMPT_JSON.format(code=code)
 
     try:
-        result = subprocess.run(
-            ["ollama", "run", model, prompt],
-            capture_output=True, text=True, timeout=180,
-        )
-        if result.returncode != 0:
-            return {
-                "available": True,
-                "findings": [],
-                "model": model,
-                "error": f"Ollama returned error: {result.stderr[:200]}",
-            }
-
-        raw_output = result.stdout
+        if model_server:
+            try:
+                raw_output = _model_server_generate(prompt, model, model_server, gateway_key)
+            except ModelServerError as e:
+                return {
+                    "available": True,
+                    "findings": [],
+                    "model": model,
+                    "error": str(e),
+                }
+        else:
+            result = subprocess.run(
+                ["ollama", "run", model, prompt],
+                capture_output=True, text=True, timeout=180,
+            )
+            if result.returncode != 0:
+                return {
+                    "available": True,
+                    "findings": [],
+                    "model": model,
+                    "error": f"Ollama returned error: {result.stderr[:200]}",
+                }
+            raw_output = result.stdout
 
         # Sanitize known model hallucinations from fine-tuning
         raw_output = _sanitize_model_output(raw_output)
@@ -251,17 +322,21 @@ def hybrid_merge(rule_findings: list, llm_findings: list) -> list:
     return merged
 
 
-def deep_scan_project(file_contents: dict, model: str = "air-compliance") -> dict:
+def deep_scan_project(file_contents: dict, model: str = "air-compliance",
+                      model_server: Optional[str] = None,
+                      gateway_key: Optional[str] = None) -> dict:
     """Run deep scan across multiple files, merging findings.
 
     Args:
         file_contents: dict of {filepath: code_string}
         model: Ollama model name
+        model_server: URL of an OpenAI-compatible server to use instead of local Ollama
+        gateway_key: key for that server; defaults to AIR_GATEWAY_KEY
 
     Returns:
         dict with merged findings and per-file analysis
     """
-    if not _ollama_available() or not _model_available(model):
+    if not model_server and (not _ollama_available() or not _model_available(model)):
         return deep_scan("", model)
 
     all_findings = []
@@ -270,7 +345,7 @@ def deep_scan_project(file_contents: dict, model: str = "air-compliance") -> dic
     for filepath, code in file_contents.items():
         if len(code.strip()) < 50:  # Skip tiny files
             continue
-        result = deep_scan(code, model)
+        result = deep_scan(code, model, model_server=model_server, gateway_key=gateway_key)
         for f in result.get("findings", []):
             f["file"] = filepath
         all_findings.extend(result.get("findings", []))

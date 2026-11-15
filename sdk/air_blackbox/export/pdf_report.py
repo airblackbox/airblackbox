@@ -77,7 +77,7 @@ def _c(h):
 def generate_pdf(bundle: dict, output_path: str = "AIR_Blackbox_Compliance_Report.pdf") -> str:
     """Generate a formatted PDF compliance report from an evidence bundle."""
     if not REPORTLAB_OK:
-        raise ImportError("pip install reportlab")
+        raise ImportError('PDF reports need the pdf extra: pip install "air-blackbox[pdf]"')
 
     from reportlab.lib import colors
 

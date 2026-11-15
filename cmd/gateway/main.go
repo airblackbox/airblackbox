@@ -182,6 +182,7 @@ func main() {
 		Analytics:    analytics,
 		AuditChain:   auditChain,
 		ConfigHash:   configHash,
+		OTelEnabled:  tp != nil,
 	})
 
 	srv := &http.Server{

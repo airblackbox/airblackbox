@@ -12,6 +12,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
+from air_blackbox import __version__
 from air_blackbox.gateway_client import GatewayClient
 from air_blackbox.compliance.engine import run_all_checks
 from air_blackbox.aibom.generator import generate_aibom
@@ -50,7 +51,7 @@ def generate_evidence_bundle(gateway_url="http://localhost:8080",
         "air_blackbox_evidence_bundle": {
             "version": "1.0.0",
             "generated_at": now,
-            "generator": "air-blackbox v1.0.0",
+            "generator": f"air-blackbox v{__version__}",
         },
         "gateway": {
             "url": gateway_url,

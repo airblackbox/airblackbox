@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A dedicated AIR server your team can use.** `deploy-enterprise.sh` with
+  `AIR_DOMAIN` adds Caddy (compose profile `remote`): HTTPS with a Let's
+  Encrypt certificate, the gateway at `https://AIR_DOMAIN/v1/...` behind
+  `GATEWAY_KEY`, and Jaeger at `/jaeger` behind a generated password.
+  Ollama, the collector and the vault stay unexposed. A teammate sets
+  `AIR_GATEWAY_URL`, `AIR_MODEL_SERVER` and `AIR_GATEWAY_KEY` and runs
+  `air-blackbox comply --scan .`: runtime checks read the server's records,
+  and the deep scan runs on the server's fine-tuned model.
+- Gateway `GET /v1/records` (requires `GATEWAY_KEY` when set): the newest
+  AIR records (metadata, checksums and vault references, never prompts) and
+  which runtime features are on, so a CLI on another machine sees what one
+  beside the gateway sees. The signing key and chain journal in the same
+  directory are never served.
+- `air-blackbox comply --model-server URL` (or `AIR_MODEL_SERVER`): the deep
+  scan sends its prompt to that server's `/v1/chat/completions` with the
+  gateway key instead of running local Ollama. Every `--gateway` option also
+  reads `AIR_GATEWAY_URL`.
+- `deploy-enterprise.sh` can fetch the model: `AIR_GGUF_URL` with
+  `AIR_GGUF_SHA256` (required, checked before use) and an optional
+  `AIR_GGUF_TOKEN`.
 - `demo/agent_checkout_demo.py`: the gate in front of a shopping agent's
   checkout, with fictional orders. An ordinary order goes through. A large
   total, an odd quantity or a new shipping address waits for the customer,
@@ -50,6 +70,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@openai/guardrails` in TypeScript and JavaScript).
 
 ### Changed
+- **ISO 27001 controls use the 2022 Annex A.** Certification against
+  ISO/IEC 27001:2013 ended on 31 October 2025. The ten controls are now
+  A.8.15, A.8.16, A.8.32, A.5.33, A.5.15, A.8.24, A.5.37, A.6.8, A.8.8 and
+  A.8.17 (ISO/IEC 27002:2022 Annex B maps the old numbers; 2013's A.12.4.1
+  and A.12.4.3 both became A.8.15, and A.8.16 "Monitoring activities" covers
+  the detection layer). Clock synchronization is reported as partial: the
+  gateway stamps UTC from the host clock but cannot vouch for it.
+- **The default collector no longer sends anything off the host.**
+  `collector/collector.yaml` had a second pipeline exporting scrubbed trace
+  metadata to `telemetry.airblackbox.ai`, always on, and not controlled by
+  `AIR_BLACKBOX_TELEMETRY` (the host does not resolve, so nothing arrived).
+  It is removed, along with the `telemetry:` section of `guardrails.yaml`,
+  which no code read.
 - **Covenants: an approval rule whose guard cannot be read now fails
   closed, in both SDKs.** With `permit: issue_refund` beside
   `require_approval: issue_refund` when `amount > 1000`, a missing or
@@ -82,6 +115,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out of memory.
 
 ### Fixed
+- **The server stack starts on a fresh machine again.** MinIO deleted
+  `minio/minio` from Docker Hub, so every compose file failed to pull its
+  vault. They now run Silo (`pgsty/silo`, pinned), a maintained MinIO fork
+  with the same command, variables and API; `VAULT_IMAGE` swaps in another
+  S3-compatible image. The gateway's vault writes were checked against it.
+- The model image could not build: the root `.dockerignore` leaves `model/`
+  out, so `COPY` found no GGUF. It now builds with `model/` as its context.
+  Its tag is `localhost/air-blackbox/ollama-compliance:v3` with
+  `pull_policy: build`, because the `airblackbox` namespace on Docker Hub
+  belongs to someone else and an unprefixed tag could pull their image. The
+  bench images had the same `.dockerignore` problem and get their own.
+- `deploy-enterprise.sh`: running it again no longer appends a new
+  `TRUST_SIGNING_KEY` (which left the existing chain unverifiable) or new
+  vault credentials; secrets are generated once into `.env`, mode 600. A
+  second run from curl updates `/opt/air-blackbox` instead of failing on
+  the existing clone. It generates a `GATEWAY_KEY`, waits for the stack to be
+  healthy, and prints `/health`, not the nonexistent `/healthz`.
+- `docker-compose.enterprise.yaml` no longer falls back to the fixed
+  signing key `air-blackbox-enterprise`; unset, the gateway generates one.
+- The CLI read `/v1/audit` as `audit_chain.intact`, but the gateway serves
+  `chain_valid` and `chain_length`, so a gateway's chain status never
+  reached the runtime checks. Both shapes are read now. The CLI also sends
+  `AIR_GATEWAY_KEY` as `X-Gateway-Key`; before, a gateway with
+  `GATEWAY_KEY` set answered every call with 401 and the checks read that
+  as no traffic. A refused key is now reported as such.
+- SOC 2 CC6.1 and ISO 27001 access control passed even with `GATEWAY_KEY`
+  unset, saying every request was authenticated. The gateway now reports
+  them as failing when it accepts unauthenticated requests
+  (`EvaluateComplianceWithAuth`; `EvaluateCompliance` keeps its behavior).
+- PDF reports and evidence bundles said `air-blackbox v1.0.0`, and scan
+  history recorded 1.6.3, whatever the installed version. The missing
+  reportlab message now names the `pdf` extra.
 - `air-evidence verify` accepted, or crashed on, malformed bundles found by a
   tamper test of TypeScript-written bundles: a manifest repeating a key (the
   signature covers the manifest as parsed, and readers disagree on which

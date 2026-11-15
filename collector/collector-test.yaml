@@ -75,7 +75,7 @@ exporters:
     verbosity: detailed
 
   # Crowd: In test mode, just log what WOULD be sent.
-  # In production, this points to telemetry.airblackbox.ai:4317
+  # Nothing is sent anywhere: this only logs what such a pipeline would see.
   debug/crowd:
     verbosity: normal
 
