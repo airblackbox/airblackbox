@@ -2,16 +2,22 @@
 ## Custom Ollama image with AIR Blackbox compliance model pre-loaded.
 ## No internet required at runtime — the model ships inside the image.
 ##
-## Build:
-##   cp ~/Desktop/untitled\ folder/air-compliance-v3.gguf model/air-compliance-v3.gguf
-##   docker build -f model/Dockerfile.ollama -t airblackbox/ollama-compliance:v3 .
+## The build context is this directory (model/), not the repository root:
+## the root .dockerignore leaves model/ out of every root-context build.
+##
+## Build (docker-compose.enterprise.yaml and deploy-enterprise.sh do this):
+##   place the fine-tuned GGUF at model/air-compliance-v3.gguf, then
+##   docker build -f model/Dockerfile.ollama -t localhost/air-blackbox/ollama-compliance:v3 model
+##
+## The localhost/ prefix keeps the tag local: Docker never pulls it from
+## Docker Hub, where the "airblackbox" namespace belongs to someone else.
 ##
 
 FROM ollama/ollama:latest
 
 # Copy the fine-tuned GGUF model into the image
-COPY model/air-compliance-v3.gguf /model/air-compliance-v3.gguf
-COPY model/Modelfile /model/Modelfile
+COPY air-compliance-v3.gguf /model/air-compliance-v3.gguf
+COPY Modelfile /model/Modelfile
 
 # Pre-load the model into Ollama on build
 # This starts Ollama temporarily, creates the model, then stops.

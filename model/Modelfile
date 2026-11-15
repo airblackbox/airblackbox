@@ -1,4 +1,4 @@
-FROM /model/air-compliance-v3.gguf
+FROM ./air-compliance-v3.gguf
 
 TEMPLATE """<|start_header_id|>system<|end_header_id|>
 {{ .System }}<|eot_id|><|start_header_id|>user<|end_header_id|>

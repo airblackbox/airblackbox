@@ -2,6 +2,7 @@ package trust
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -200,9 +201,9 @@ func TestComplianceISO27001Controls(t *testing.T) {
 	report := EvaluateCompliance(cfg, 1, true, true, true)
 
 	isoIDs := map[string]bool{
-		"A.12.4.1": false, "A.12.4.3": false, "A.14.2.2": false, "A.18.1.3": false,
-		"A.9.1.1": false, "A.10.1.1": false, "A.12.1.1": false, "A.16.1.2": false,
-		"A.12.6.1": false, "A.12.4.4": false,
+		"A.8.15": false, "A.8.16": false, "A.8.32": false, "A.5.33": false,
+		"A.5.15": false, "A.8.24": false, "A.5.37": false, "A.6.8": false,
+		"A.8.8": false, "A.8.17": false,
 	}
 	for _, c := range report.Controls {
 		if c.Framework != "ISO27001" {
@@ -213,6 +214,49 @@ func TestComplianceISO27001Controls(t *testing.T) {
 	for id, found := range isoIDs {
 		if !found {
 			t.Errorf("expected ISO27001 control %s not found", id)
+		}
+	}
+}
+
+// The 2013 edition's Annex A numbering is gone from the report: audits
+// since 31 October 2025 are against ISO/IEC 27001:2022.
+func TestComplianceISO27001UsesThe2022Numbering(t *testing.T) {
+	report := EvaluateCompliance(ComplianceConfig{Frameworks: []string{"ISO27001"}}, 1, true, true, true)
+	seen := map[string]bool{}
+	for _, c := range report.Controls {
+		for _, old := range []string{"A.9.", "A.10.", "A.12.", "A.14.", "A.16.", "A.18."} {
+			if strings.HasPrefix(c.ID, old) {
+				t.Errorf("control %s uses ISO 27001:2013 numbering", c.ID)
+			}
+		}
+		if seen[c.ID] {
+			t.Errorf("control %s listed twice", c.ID)
+		}
+		seen[c.ID] = true
+	}
+}
+
+// Without GATEWAY_KEY the gateway is open, and the report must not say
+// requests are authenticated.
+func TestComplianceAccessControlFollowsGatewayAuth(t *testing.T) {
+	cfg := ComplianceConfig{Frameworks: []string{"SOC2", "ISO27001"}}
+	status := func(r *ComplianceReport, id string) ControlStatus {
+		for _, c := range r.Controls {
+			if c.ID == id {
+				return c.Status
+			}
+		}
+		t.Fatalf("control %s missing", id)
+		return ""
+	}
+	open := EvaluateComplianceWithAuth(cfg, 10, true, true, true, false)
+	locked := EvaluateComplianceWithAuth(cfg, 10, true, true, true, true)
+	for _, id := range []string{"CC6.1", "A.5.15"} {
+		if got := status(open, id); got != ControlFail {
+			t.Errorf("%s without GATEWAY_KEY = %s, want fail", id, got)
+		}
+		if got := status(locked, id); got != ControlPass {
+			t.Errorf("%s with GATEWAY_KEY = %s, want pass", id, got)
 		}
 	}
 }

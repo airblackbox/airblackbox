@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -70,6 +72,58 @@ func NewWriter(dir string) (*Writer, error) {
 		return nil, fmt.Errorf("recorder: create dir: %w", err)
 	}
 	return &Writer{dir: dir}, nil
+}
+
+// Chained reports whether records are linked with an HMAC chain hash.
+func (w *Writer) Chained() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.key != nil
+}
+
+// Recent returns up to limit records, newest first by file modification
+// time, as the JSON stored on disk, and the number of records in the
+// directory. Only *.air.json files are read: the signing key and the chain
+// journal live in the same directory and are never returned. A file that is
+// unreadable or not valid JSON is counted but skipped.
+func (w *Writer) Recent(limit int) (total int, records []json.RawMessage, err error) {
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		return 0, nil, fmt.Errorf("recorder: list dir: %w", err)
+	}
+	type entry struct {
+		name string
+		mod  time.Time
+	}
+	var files []entry
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".air.json") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, entry{e.Name(), info.ModTime()})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].mod.Equal(files[j].mod) {
+			return files[i].name > files[j].name
+		}
+		return files[i].mod.After(files[j].mod)
+	})
+	records = []json.RawMessage{} // no capacity from limit: it comes from the request
+	for _, f := range files {
+		if len(records) >= limit {
+			break
+		}
+		data, err := os.ReadFile(filepath.Join(w.dir, f.name))
+		if err != nil || !json.Valid(data) {
+			continue
+		}
+		records = append(records, json.RawMessage(data))
+	}
+	return len(files), records, nil
 }
 
 // Write persists an AIR record as <run_id>.air.json.

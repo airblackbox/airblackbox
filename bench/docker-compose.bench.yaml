@@ -48,8 +48,9 @@ services:
       - gateway
       - mockllm
 
+  # Silo: a maintained MinIO fork (minio/minio is gone from Docker Hub).
   minio:
-    image: minio/minio:latest
+    image: ${VAULT_IMAGE:-pgsty/silo:RELEASE.2026-11-12T00-00-00Z}
     command: server /data
     environment:
       - MINIO_ROOT_USER=minioadmin

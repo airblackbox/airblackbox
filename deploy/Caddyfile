@@ -1,0 +1,29 @@
+# Remote access to an AIR server: docker-compose.enterprise.yaml, profile "remote".
+#
+# Caddy gets a Let's Encrypt certificate for AIR_DOMAIN, so the domain's DNS
+# must point at this server and ports 80 and 443 must be open. Nothing else
+# on the server is reachable from outside: Ollama, the collector and the
+# vault stay on the compose network.
+
+{$AIR_DOMAIN} {
+	# The gateway: OpenAI-compatible API, audit status and records. The
+	# gateway requires the X-Gateway-Key header (GATEWAY_KEY) on every one
+	# of these but /health.
+	@gateway path /v1/* /health
+	handle @gateway {
+		reverse_proxy gateway:8080
+	}
+
+	# Jaeger has no login of its own, so it sits behind a password. With no
+	# JAEGER_PASSWORD_HASH set, Caddy refuses to start rather than serve it open.
+	handle /jaeger* {
+		basic_auth {
+			{$JAEGER_USER} {$JAEGER_PASSWORD_HASH}
+		}
+		reverse_proxy jaeger:16686
+	}
+
+	handle {
+		respond "Not found" 404
+	}
+}
