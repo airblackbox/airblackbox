@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `model/publish.sh v3` publishes the fine-tuned model to ollama.com as
+  `airblackbox/air-compliance:v3` and `:latest` from `model/Modelfile`, and
+  prints the GGUF's SHA-256 for `AIR_GGUF_SHA256`. `model/README.md` says how
+  to install, update, pin and publish it.
+- `AIR_COMPLIANCE_MODEL` pins the registry name `air-blackbox setup` and the
+  deep scan pull (for example `airblackbox/air-compliance:v3`). Running setup
+  again updates the model and repoints the local `air-compliance` alias.
 - **A dedicated AIR server your team can use.** `deploy-enterprise.sh` with
   `AIR_DOMAIN` adds Caddy (compose profile `remote`): HTTPS with a Let's
   Encrypt certificate, the gateway at `https://AIR_DOMAIN/v1/...` behind
@@ -115,6 +122,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out of memory.
 
 ### Fixed
+- The deep scan read nothing from answers in the format `model/Modelfile`'s
+  system prompt asks for (`FINDING` / `ARTICLE` / `SEVERITY` blocks), so
+  they added no findings. It reads them now; `SEVERITY: HIGH` fails, `NONE`
+  or a `COMPLIANT` finding passes, anything else warns.
+- `air-blackbox setup` said the model was an 8 GB download; it no longer
+  states a size. The registry name lives in one place instead of two.
+- `model/Modelfile` names the GGUF by a relative path, so the same file
+  builds the server image and the model published to ollama.com.
 - **The server stack starts on a fresh machine again.** MinIO deleted
   `minio/minio` from Docker Hub, so every compose file failed to pull its
   vault. They now run Silo (`pgsty/silo`, pinned), a maintained MinIO fork

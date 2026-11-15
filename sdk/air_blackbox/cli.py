@@ -92,28 +92,31 @@ def setup():
         console.print("\n  Then run [cyan]air-blackbox setup[/cyan] again.")
         return
 
-    # Step 2: Pull model
-    console.print("\n[bold]Step 2/3:[/bold] Pulling air-compliance model from registry...")
-    console.print("  This downloads ~8GB (one-time). Grab a coffee.\n")
+    # Step 2: Pull model. Running setup again pulls the newest published
+    # version and points the local air-compliance alias at it.
+    from air_blackbox.compliance.deep_scan import registry_model
+    source = registry_model()
+    console.print(f"\n[bold]Step 2/3:[/bold] Pulling {source} from the Ollama registry...")
+    console.print("  A one-time download; running setup again updates it.\n")
 
     try:
         result = subprocess.run(
-            ["ollama", "pull", "airblackbox/air-compliance"],
+            ["ollama", "pull", source],
             timeout=600,
         )
         if result.returncode == 0:
             # Create local alias
             subprocess.run(
-                ["ollama", "cp", "airblackbox/air-compliance", "air-compliance"],
+                ["ollama", "cp", source, "air-compliance"],
                 capture_output=True, timeout=30,
             )
             console.print("  [green]✓[/green] Model pulled and ready")
         else:
             console.print("  [red]✗[/red] Failed to pull model")
-            console.print("  Try manually: [cyan]ollama pull airblackbox/air-compliance[/cyan]")
+            console.print(f"  Try manually: [cyan]ollama pull {source}[/cyan]")
             return
     except subprocess.TimeoutExpired:
-        console.print("  [red]✗[/red] Download timed out. Try: [cyan]ollama pull airblackbox/air-compliance[/cyan]")
+        console.print(f"  [red]✗[/red] Download timed out. Try: [cyan]ollama pull {source}[/cyan]")
         return
 
     # Step 3: Verify

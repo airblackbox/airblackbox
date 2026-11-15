@@ -1,7 +1,8 @@
 """
 Deep scan - uses local fine-tuned LLM (Ollama) to analyze code beyond regex.
 
-The air-compliance model (fine-tuned Llama 3.1 8B) catches compliance issues that patterns miss:
+The air-compliance model (published on ollama.com as airblackbox/air-compliance;
+model/ builds the current version) catches compliance issues that patterns miss:
 - Understanding *intent* behind code, not just keywords
 - Context-aware analysis (e.g., is this logging for compliance or debugging?)
 - Cross-file relationship detection
@@ -21,9 +22,20 @@ records the call like any other.
 Falls back gracefully to regex-only if no model is available.
 """
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
+
+# Where `air-blackbox setup` and the deep scan pull the model from. Publishing
+# a new version to this name updates every install that runs setup again;
+# AIR_COMPLIANCE_MODEL pins a tag (airblackbox/air-compliance:v3) or a mirror.
+DEFAULT_REGISTRY_MODEL = "airblackbox/air-compliance"
+
+
+def registry_model() -> str:
+    """The registry name to pull the compliance model from."""
+    return os.environ.get("AIR_COMPLIANCE_MODEL") or DEFAULT_REGISTRY_MODEL
 
 # Generation settings from model/Modelfile, sent explicitly to a model
 # server: Ollama's OpenAI-compatible API does not apply the Modelfile's.
@@ -181,7 +193,7 @@ def deep_scan(code: str, model: str = "air-compliance",
                 "available": False,
                 "findings": [],
                 "model": model,
-                "error": f"Model '{model}' not found. Install it: ollama pull airblackbox/air-compliance",
+                "error": f"Model '{model}' not found. Install it: air-blackbox setup",
             }
 
     # Guard: skip if no actual code provided
@@ -389,27 +401,25 @@ def _model_available(model: str) -> bool:
         return False
 
 
-# Map of short model names to their Ollama registry paths
-REGISTRY_MODELS = {
-    "air-compliance": "airblackbox/air-compliance",
-}
+# Short model names that are pulled from the registry (see registry_model()).
+REGISTRY_MODELS = {"air-compliance"}
 
 
 def _auto_pull_model(model: str) -> bool:
     """Try to auto-pull the model from Ollama registry.
 
     When a user runs the scanner for the first time, they may not have
-    the model yet. This pulls it automatically from ollama.com/airblackbox/air-compliance
+    the model yet. This pulls it automatically from ollama.com (registry_model())
     so they don't have to do it manually.
 
     Returns True if model is now available, False otherwise.
     """
     import sys
 
-    registry_name = REGISTRY_MODELS.get(model, model)
+    registry_name = registry_model() if model in REGISTRY_MODELS else model
     print(f"\n  Model '{model}' not found locally.", file=sys.stderr)
     print(f"  Pulling from Ollama registry: {registry_name} ...", file=sys.stderr)
-    print(f"  (This is a one-time ~8GB download)\n", file=sys.stderr)
+    print("  (a one-time download)\n", file=sys.stderr)
 
     try:
         # Stream the pull so user sees progress
@@ -496,7 +506,13 @@ def _parse_llm_output(raw: str) -> list:
     if findings:
         return findings
 
-    # Strategy 4: parse markdown-style output from fine-tuned model
+    # Strategy 4: FINDING/ARTICLE/SEVERITY blocks, the format the system
+    # prompt in model/Modelfile asks for.
+    findings = _parse_finding_blocks(raw)
+    if findings:
+        return findings
+
+    # Strategy 5: parse markdown-style output from fine-tuned model
     # Handles two formats:
     #   Format A: **Article 9 - Risk Management**: FAIL (status on same line)
     #   Format B: ### Article 9 - Risk Management \n **Status**: FAIL (status on next line)
@@ -590,6 +606,62 @@ def _parse_llm_output(raw: str) -> list:
             "fix_hint": " ".join(current_fix).strip(),
         }))
 
+    return [f for f in findings if f is not None]
+
+
+_FINDING_FIELD = None
+
+
+def _parse_finding_blocks(raw: str) -> list:
+    """Parse blocks of FINDING / ARTICLE / SEVERITY / EVIDENCE / RECOMMENDATION.
+
+    A block starts at FINDING, or wherever a field repeats. SEVERITY maps to
+    a status: NONE (or a COMPLIANT finding) passes, HIGH fails, MEDIUM and LOW
+    warn. A block without an article number is dropped.
+    """
+    import re
+    global _FINDING_FIELD
+    if _FINDING_FIELD is None:
+        _FINDING_FIELD = re.compile(
+            r'^[\s*#-]*(FINDING|ARTICLE|SEVERITY|EVIDENCE|RECOMMENDATION)\**\s*:\s*(.*)$',
+            re.IGNORECASE)
+    blocks, cur = [], {}
+    for line in raw.split("\n"):
+        m = _FINDING_FIELD.match(line.strip())
+        if not m:
+            continue
+        key, value = m.group(1).lower(), m.group(2).strip().strip("*").strip()
+        if cur and (key == "finding" or key in cur):
+            blocks.append(cur)
+            cur = {}
+        cur[key] = value
+    if cur:
+        blocks.append(cur)
+
+    findings = []
+    for b in blocks:
+        article = re.search(r"\d+", b.get("article", ""))
+        if not article:
+            continue
+        finding = b.get("finding", "")
+        severity = b.get("severity", "").upper()
+        compliant = finding.upper().startswith("COMPLIANT")
+        if compliant or severity.startswith("NONE"):
+            status = "pass"
+        elif severity.startswith("HIGH"):
+            status = "fail"
+        else:
+            status = "warn"
+        recommendation = b.get("recommendation", "")
+        if recommendation.lower().startswith("no action"):
+            recommendation = ""
+        findings.append(_validate_finding({
+            "article": int(article.group()),
+            "name": finding if finding and not compliant else f"Article {article.group()} analysis",
+            "status": status,
+            "evidence": b.get("evidence", ""),
+            "fix_hint": recommendation,
+        }))
     return [f for f in findings if f is not None]
 
 
