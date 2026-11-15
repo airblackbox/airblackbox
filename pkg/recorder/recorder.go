@@ -112,7 +112,7 @@ func (w *Writer) Recent(limit int) (total int, records []json.RawMessage, err er
 		}
 		return files[i].mod.After(files[j].mod)
 	})
-	records = make([]json.RawMessage, 0, min(limit, len(files)))
+	records = []json.RawMessage{} // no capacity from limit: it comes from the request
 	for _, f := range files {
 		if len(records) >= limit {
 			break

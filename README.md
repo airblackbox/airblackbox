@@ -210,7 +210,7 @@ before you believe any of the above.
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
-**EU AI Act gap analysis**: 50+ checks on a typical project, about 40 of them across Articles 9, 10, 11, 12, 14 and 15 and the rest for GDPR and US state AI laws (the count depends on what the project contains). Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report. Reads Python, Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, with the same verdict for equivalent code in each ([measured](SCANNER_EVAL.md)).
+**EU AI Act gap analysis**: 50+ checks on a typical project (the count depends on what it contains), about 40 of them across Articles 9, 10, 11, 12, 14, 15. The rest cover GDPR and US state AI laws. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report. Reads Python, Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, with the same verdict for equivalent code in each ([measured](SCANNER_EVAL.md)).
 
 **Replay**: load any past episode from the audit chain, verify the HMAC signature, and replay every step with timestamps. Incident reconstruction without guesswork.
 
