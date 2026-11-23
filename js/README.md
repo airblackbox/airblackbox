@@ -11,8 +11,12 @@ browser verifier at <https://airblackbox.ai/verify> read bundles from either
 language, and a Node process and a Python process can take turns writing one
 chain.
 
+The package is not published to npm. Build it from this repository and
+install the tarball in your project:
+
 ```bash
-npm install air-blackbox
+cd js && npm ci && npm run build && npm pack
+npm install /path/to/air-blackbox-0.1.0.tgz   # in your project
 ```
 
 Node 20 or later. Signing keys are generated in your process and never leave

@@ -3,8 +3,10 @@
 [![PyPI](https://img.shields.io/pypi/v/air-blackbox)](https://pypi.org/project/air-blackbox/)
 [![Downloads](https://img.shields.io/pypi/dm/air-blackbox?label=PyPI%20installs)](https://pypi.org/project/air-blackbox/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-Art.%2012%20Ready-green)](https://airblackbox.ai)
-[![Status](https://img.shields.io/badge/status-production-brightgreen)](https://github.com/airblackbox/airblackbox)
+[![Scans](https://img.shields.io/badge/scans-Python%20%C2%B7%20TypeScript%20%C2%B7%20JavaScript%20%C2%B7%20Java%20%C2%B7%20Kotlin%20%C2%B7%20notebooks-blue)](#languages)
+[![SDKs](https://img.shields.io/badge/SDKs-Python%20%C2%B7%20TypeScript-blue)](#languages)
+[![Gateway](https://img.shields.io/badge/gateway-Go-00ADD8)](#languages)
+[![Status](https://img.shields.io/badge/status-final%20release%201.18.0-lightgrey)](#project-status)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-published-blue)](BENCHMARKS.md)
 
 **The flight recorder for autonomous AI agents. Record, replay, enforce, audit.**
@@ -18,9 +20,10 @@ produces evidence a third party can check without trusting you:
 - **Records.** Agent actions go into a tamper-evident chain, signed with
   Ed25519, countersigned by an external timestamp authority, and exported as
   a `.air-evidence` file that anyone can verify in a browser. Python agents
-  are recorded by trust layers for seven frameworks; TypeScript agents by the
-  [`air-blackbox` npm package](js/README.md) (Vercel AI SDK, OpenAI Agents
-  SDK, LangChain.js, MCP), which writes the same records. The gateway records
+  are recorded by trust layers for seven frameworks; TypeScript and
+  JavaScript agents by the [TypeScript package in `js/`](js/README.md)
+  (Vercel AI SDK, OpenAI Agents SDK, LangChain.js, MCP), which writes the same
+  records. The gateway records
   every model call from any language. A hook sees what its framework
   reports: side effects a tool causes outside that are not recorded.
 - **Scans.** `air-blackbox comply` reads a codebase and reports gaps against
@@ -30,11 +33,28 @@ produces evidence a third party can check without trusting you:
 - **Enforces.** A covenant declares what an agent may do; the gate decides
   before each action runs and records the decision in the same chain.
 
-It runs locally, sends code nowhere, and is Apache 2.0. The newest release,
-**1.17.0**, added the five non-Python languages, notebooks, and a single
-scanning engine shared by the CLI, the [web console](https://airblackbox.ai/console/scan)
-and the [MCP server](https://github.com/airblackbox/air-blackbox-mcp)
-([changelog](CHANGELOG.md)).
+It runs locally, sends code nowhere, and is Apache 2.0. **1.18.0 is the final
+release** ([changelog](CHANGELOG.md)). It adds the TypeScript SDK beside the
+Python one, Anthropic's Messages API in the gateway, a stricter evidence
+verifier, and a dedicated server you can stand up with one script. 1.17.0
+taught the scanner the five non-Python languages and notebooks.
+
+### Languages
+
+| Language | Scanner (`comply`) | Records actions | Framework hooks | Covenants and gate |
+| --- | --- | --- | --- | --- |
+| Python | yes | `air_blackbox` SDK | LangChain, CrewAI, OpenAI Agents SDK, Claude Agent SDK, AutoGen, Google ADK, Haystack | yes |
+| Jupyter notebooks | yes | through the Python SDK | as Python | yes |
+| TypeScript | yes | [`js/` package](js/README.md) | Vercel AI SDK, OpenAI Agents SDK, LangChain.js and LangGraph.js, MCP SDK | yes |
+| JavaScript | yes | [`js/` package](js/README.md) (Node 20+) | as TypeScript | yes |
+| Java | yes | through the gateway | | |
+| Kotlin | yes | through the gateway | | |
+| Any language | | [Go gateway](deploy/README.md): every model call (OpenAI chat and Responses, Anthropic Messages) | | |
+
+The scanner gives equivalent code the same verdict in every language it reads:
+144 of 144 cases in the [parity corpus](SCANNER_EVAL.md). Python and
+TypeScript write byte-identical records, receipts and `.air-evidence` bundles,
+and CI checks each against the other's verifier.
 
 **How it compares.** We ran AIR and three other open-source EU AI Act
 scanners (ArkForge, Systima Comply and Asqav) on the same 144 hand-labelled
@@ -143,40 +163,22 @@ The gateway sees model calls, never whether a tool then ran or what it did.
 Its records hold the model, provider, token counts and timing; with a vault
 configured, the full request and response (including any tool calls the model
 asked for) are stored there by reference. To record tool executions, use a
-trust layer (Python) or the npm package (TypeScript).
+trust layer (Python) or the [TypeScript package](js/README.md).
 
 ## Project status
 
-**Stable and maintained. Features land when they close a gap the project
-already claims to cover; there is no speculative roadmap.**
+**1.18.0 is the final release.** AIR Blackbox is no longer developed in
+public: there will be no further releases here, and issues and pull requests
+won't be answered. Every release, this one included, stays under Apache 2.0,
+so you can keep using it and fork it.
 
-AIR Blackbox does what this README says it does, and the claims here are the
-ones the code can back. It runs in production in a live hiring system, where it
-has recorded 450 consequential AI decisions across two weeks — 93 of them
-candidacy-ending, none without a named human reviewer — in a chain anchored by
-an external timestamp authority and verifiable by a third party
+It runs in production in a live hiring system, where it has recorded 450
+consequential AI decisions across two weeks, 93 of them candidacy-ending and
+none without a named human reviewer, in a chain anchored by an external
+timestamp authority and verifiable by a third party
 ([case study](https://airblackbox.ai/blog/ai-recruiting-compliance-case-study)).
 
-An earlier version of this section said no new features were planned. That
-was written when the scanner read Python only, and it stopped being true the
-moment a TypeScript or Java team could install the tool and get an empty
-report. 1.17.0 fixed that gap; the posture is otherwise unchanged:
-
-- **Security and correctness fixes still land.** Report issues to
-  jason@airblackbox.ai, subject `[SECURITY]`.
-- **No roadmap backlog.** Roadmap issues were closed rather than left open to
-  rot; an empty backlog here means "finished," not "abandoned." Work that
-  closes a real gap (a language the scanner could not read, a check that gave
-  wrong answers) still happens, and ships with the evidence that it is right:
-  the [cross-language parity corpus](eval/scanner/run_parity.py) is the
-  example.
-- **Pull requests are welcome and will get an actual answer.** Historically some
-  did not, which was a failure of maintenance rather than a judgement on the
-  work.
-- **Apache 2.0, with no relicensing planned**, so it is safe to build on and
-  safe to fork.
-
-Known limits are written down rather than marketed around — see the
+Known limits are written down rather than marketed around: see the
 [red-team review](docs/security/red-team-2026-08.md), which documents 17
 confirmed breaks found against this project's own verifier and what was done
 about each.
@@ -210,7 +212,7 @@ before you believe any of the above.
 
 **PII and injection scanning**: 20 weighted patterns across 5 attack categories detected before the prompt reaches the model. Configurable sensitivity. Auto-blocking.
 
-**EU AI Act gap analysis**: 51+ checks across Articles 9, 10, 11, 12, 14, 15. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report. Reads Python, Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, with the same verdict for equivalent code in each ([measured](SCANNER_EVAL.md)).
+**EU AI Act gap analysis**: 50+ checks on a typical project (the count depends on what it contains), about 40 of them across Articles 9, 10, 11, 12, 14, 15. The rest cover GDPR and US state AI laws. Maps to ISO 42001, NIST AI RMF, and US state AI laws (Colorado SB 26-189, Illinois HB 3773, California FEHA ADS/SB 942/ADMT, Texas TRAIGA). One scan, four frameworks, one report. Reads Python, Jupyter notebooks, TypeScript, JavaScript, Java and Kotlin, with the same verdict for equivalent code in each ([measured](SCANNER_EVAL.md)).
 
 **Replay**: load any past episode from the audit chain, verify the HMAC signature, and replay every step with timestamps. Incident reconstruction without guesswork.
 
@@ -578,6 +580,13 @@ chain = gate.walk_delegation_chain(child_receipt)
 pip install air-blackbox[gate]   # includes Ed25519 via cryptography
 ```
 
+The TypeScript package is not on npm. Build it from this repository:
+
+```bash
+cd js && npm ci && npm run build && npm pack
+npm install /path/to/air-blackbox-0.1.0.tgz   # in your project
+```
+
 ## Ecosystem
 
 `air-blackbox` is the scanner (six languages) and the recorder. `air-trust` is the cryptographic proof layer. `gate` is pre-execution policy enforcement.
@@ -595,7 +604,7 @@ Your AI Agent
 |---------|-------------|
 | [air-trust](https://github.com/airblackbox/air-trust) | Tamper-evident audit chain + Ed25519 signed handoffs |
 | [air-gate](https://github.com/airblackbox/air-gate) | Human-in-the-loop tool gating (Article 14) |
-| [air-blackbox (npm)](js/README.md) | TypeScript recorder and gate: hooks for the Vercel AI SDK, OpenAI Agents SDK, LangChain.js and MCP; same records and bundles as the Python SDK |
+| [air-blackbox (TypeScript)](js/README.md) | TypeScript recorder and gate: hooks for the Vercel AI SDK, OpenAI Agents SDK, LangChain.js and MCP; same records and bundles as the Python SDK. Built from `js/`, not published to npm |
 | [air-blackbox-mcp](https://github.com/airblackbox/air-blackbox-mcp) | MCP server for Claude Desktop, Cursor, Claude Code; scans all six languages with `[full]` |
 | [air-platform](https://github.com/airblackbox/air-platform) | Docker Compose - full stack in one command |
 | [compliance-action](https://github.com/airblackbox/compliance-action) | GitHub Action - checks on every pull request |
@@ -609,11 +618,8 @@ Your AI Agent
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-False positive on a compliance check? Correct it - your correction flows into training data for the fine-tuned scanner model. The scanner gets smarter with every fix your team submits.
-
-Good first issues: labeled `good first issue` - mostly new compliance checks and framework integrations.
+This project no longer takes contributions. Thank you to everyone who sent
+fixes, integrations and bug reports along the way.
 
 ## License
 

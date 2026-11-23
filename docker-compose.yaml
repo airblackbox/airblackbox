@@ -28,8 +28,11 @@ services:
       collector:
         condition: service_started
 
+  # S3-compatible vault. MinIO deleted minio/minio from Docker Hub, so this
+  # is Silo, a maintained MinIO fork with the same command, environment
+  # variables and API. Set VAULT_IMAGE to use another S3-compatible image.
   minio:
-    image: minio/minio:latest
+    image: ${VAULT_IMAGE:-pgsty/silo:RELEASE.2026-11-12T00-00-00Z}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -40,7 +43,7 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "silo", "healthcheck"]
       interval: 2s
       timeout: 5s
       retries: 10

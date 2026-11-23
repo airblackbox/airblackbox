@@ -1,0 +1,5 @@
+# The root .dockerignore leaves bench/ out; this build needs only these.
+*
+!go.mod
+!go.sum
+!bench/loadgen

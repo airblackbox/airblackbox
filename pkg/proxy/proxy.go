@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,6 +163,7 @@ type Config struct {
 	Analytics    *guardrails.PerformanceTracker // optimization analytics (nil = disabled)
 	AuditChain   *trust.AuditChain              // cryptographic audit chain (nil = disabled)
 	ConfigHash   string                         // agent config bundle hash stamped into records ("" = unset)
+	OTelEnabled  bool                           // traces are exported (reported by /v1/records)
 }
 
 // Handler returns an http.Handler that proxies OpenAI-compatible requests.
@@ -212,6 +214,13 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 		handleAuditExport(w, r, cfg)
+	})
+
+	mux.HandleFunc("/v1/records", func(w http.ResponseWriter, r *http.Request) {
+		if !authenticateGateway(w, r, cfg.GatewayKey) {
+			return
+		}
+		handleRecords(w, r, cfg)
 	})
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -1101,6 +1110,55 @@ func handleAnalytics(w http.ResponseWriter, r *http.Request, cfg Config) {
 	json.NewEncoder(w).Encode(result)
 }
 
+const (
+	defaultRecordsLimit = 1000
+	maxRecordsLimit     = 10000
+)
+
+// handleRecords serves what the CLI's runtime checks read, so a CLI on
+// another machine sees what one beside the gateway sees: the newest AIR
+// records (metadata, checksums and vault references; prompts and responses
+// stay in the vault) and which runtime features are on.
+// GET /v1/records?limit=N (default 1000, at most 10000).
+func handleRecords(w http.ResponseWriter, r *http.Request, cfg Config) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	if cfg.Recorder == nil {
+		http.Error(w, `{"error":"recording not enabled"}`, http.StatusNotFound)
+		return
+	}
+	limit := defaultRecordsLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			http.Error(w, `{"error":"limit must be a non-negative integer"}`, http.StatusBadRequest)
+			return
+		}
+		limit = n
+	}
+	if limit > maxRecordsLimit {
+		limit = maxRecordsLimit
+	}
+	total, records, err := cfg.Recorder.Recent(limit)
+	if err != nil {
+		http.Error(w, `{"error":"could not read records"}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"total":   total,
+		"records": records,
+		"features": map[string]bool{
+			"vault":      cfg.Vault != nil,
+			"guardrails": cfg.Guardrails != nil,
+			"otel":       cfg.OTelEnabled,
+			"chain":      cfg.Recorder.Chained(),
+		},
+	})
+}
+
 // handleAudit returns the audit chain status and compliance report.
 // GET /v1/audit — chain integrity + compliance evaluation.
 func handleAudit(w http.ResponseWriter, r *http.Request, cfg Config) {
@@ -1136,7 +1194,7 @@ func handleAudit(w http.ResponseWriter, r *http.Request, cfg Config) {
 		hasVault := cfg.Vault != nil
 		hasGuardrails := cfg.Guardrails != nil
 		hasAnalytics := cfg.Analytics != nil
-		report := trust.EvaluateCompliance(compCfg, cfg.AuditChain.Len(), hasVault, hasGuardrails, hasAnalytics)
+		report := trust.EvaluateComplianceWithAuth(compCfg, cfg.AuditChain.Len(), hasVault, hasGuardrails, hasAnalytics, cfg.GatewayKey != "")
 		result["compliance"] = report
 	}
 
@@ -1167,7 +1225,7 @@ func handleAuditExport(w http.ResponseWriter, r *http.Request, cfg Config) {
 		hasVault := cfg.Vault != nil
 		hasGuardrails := cfg.Guardrails != nil
 		hasAnalytics := cfg.Analytics != nil
-		compliance = trust.EvaluateCompliance(compCfg, cfg.AuditChain.Len(), hasVault, hasGuardrails, hasAnalytics)
+		compliance = trust.EvaluateComplianceWithAuth(compCfg, cfg.AuditChain.Len(), hasVault, hasGuardrails, hasAnalytics, cfg.GatewayKey != "")
 	}
 
 	// Get signing key from guardrails config.

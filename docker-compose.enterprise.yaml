@@ -1,27 +1,33 @@
 ##
 ## AIR Blackbox Enterprise — Air-Gapped Deployment
 ##
-## Self-contained compliance scanner. Everything runs locally:
+## Self-contained compliance server. Everything runs locally:
 ##   - Ollama + fine-tuned air-compliance model (baked into image)
 ##   - Gateway (OpenAI-compatible proxy with audit recording)
 ##   - OTel Collector (single local pipeline — no crowd export)
 ##   - Jaeger (trace observability dashboard)
-##   - MinIO (object storage for prompt vault / audit artifacts)
+##   - Silo (S3-compatible object storage for the prompt vault)
+##   - Caddy (optional, profile "remote": HTTPS access for your team)
 ##
 ## Zero data leaves this machine. Deploy on client VPS or on-prem.
 ##
-## Build (first time only — bakes the fine-tuned model into the image):
-##   cp ~/Desktop/untitled\ folder/air-compliance-v3.gguf model/air-compliance-v3.gguf
-##   docker build -f model/Dockerfile.ollama -t airblackbox/ollama-compliance:v3 .
+## deploy-enterprise.sh does all of this. By hand:
+##   1. Put the fine-tuned GGUF at model/air-compliance-v3.gguf
+##   2. docker compose -f docker-compose.enterprise.yaml up -d --build
+##   3. air-blackbox comply --scan .   (on this machine)
 ##
-## Run:
-##   docker compose -f docker-compose.enterprise.yaml up -d
-##   air-blackbox comply --scan  (from any project directory)
-##
-## Ports exposed (bind to localhost only in production):
+## Ports, all bound to 127.0.0.1 unless the "remote" profile is on:
 ##   8080  — Gateway API (OpenAI-compatible)
-##   16686 — Jaeger UI (trace dashboard)
-##   9001  — MinIO Console (object storage admin)
+##   16686 — Jaeger UI (trace dashboard), at /jaeger
+##   9001  — Silo console (object storage admin)
+##
+## Remote access for your team (profile "remote"): set AIR_DOMAIN (a DNS
+## name pointing at this server), GATEWAY_KEY and JAEGER_PASSWORD_HASH in
+## .env, open ports 80 and 443, then
+##   docker compose -f docker-compose.enterprise.yaml --profile remote up -d
+## Caddy serves https://AIR_DOMAIN/v1/... (the gateway, which requires the
+## X-Gateway-Key header) and https://AIR_DOMAIN/jaeger (password-protected).
+## Ollama, the collector and the vault are never exposed.
 ##
 
 services:
@@ -29,7 +35,14 @@ services:
   # Fine-tuned air-compliance model baked into image.
   # No internet required. No model download at runtime.
   ollama:
-    image: airblackbox/ollama-compliance:v3
+    # localhost/ keeps this tag local: with pull_policy build, Compose builds
+    # it and never pulls it. The "airblackbox" namespace on Docker Hub
+    # belongs to someone else, so an unprefixed name could pull their image.
+    image: localhost/air-blackbox/ollama-compliance:v3
+    build:
+      context: ./model
+      dockerfile: Dockerfile.ollama
+    pull_policy: build
     deploy:
       resources:
         reservations:
@@ -58,7 +71,13 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=collector:4317
       - RUNS_DIR=/data/runs
       - GUARDRAILS_CONFIG=/etc/gateway/guardrails.yaml
-      - TRUST_SIGNING_KEY=${TRUST_SIGNING_KEY:-air-blackbox-enterprise}
+      # When unset, the gateway generates a random key and keeps it in
+      # runs/.air-signing-key. Never a fixed default: anyone who knows the
+      # key can rewrite the chain.
+      - TRUST_SIGNING_KEY=${TRUST_SIGNING_KEY:-}
+      # Required on every endpoint but /health when set. Set it whenever the
+      # "remote" profile is on.
+      - GATEWAY_KEY=${GATEWAY_KEY:-}
     volumes:
       - ./runs:/data/runs
       - ./guardrails.enterprise.yaml:/etc/gateway/guardrails.yaml:ro
@@ -89,11 +108,15 @@ services:
       - "127.0.0.1:16686:16686"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
+      # Served under /jaeger so the remote proxy can share one domain.
+      - QUERY_BASE_PATH=/jaeger
 
-  # ── MinIO ───────────────────────────────────────────────────
-  # Object storage for prompt vault and audit artifacts.
+  # ── Vault ───────────────────────────────────────────────────
+  # Object storage for prompt vault and audit artifacts. MinIO deleted
+  # minio/minio from Docker Hub; Silo is a maintained MinIO fork with the
+  # same command, variables and API. VAULT_IMAGE swaps in another image.
   minio:
-    image: minio/minio:latest
+    image: ${VAULT_IMAGE:-pgsty/silo:RELEASE.2026-11-12T00-00-00Z}
     command: server /data --console-address ":9001"
     ports:
       - "127.0.0.1:9000:9000"
@@ -104,5 +127,28 @@ services:
     volumes:
       - minio-data:/data
 
+  # ── Remote access (profile "remote") ────────────────────────
+  # HTTPS for your team, with a Let's Encrypt certificate for AIR_DOMAIN.
+  proxy:
+    image: caddy:2.11-alpine
+    profiles: ["remote"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - AIR_DOMAIN=${AIR_DOMAIN:-}
+      - JAEGER_USER=${JAEGER_USER:-air}
+      - JAEGER_PASSWORD_HASH=${JAEGER_PASSWORD_HASH:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - gateway
+      - jaeger
+
 volumes:
   minio-data:
+  caddy-data:
+  caddy-config:

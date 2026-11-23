@@ -162,7 +162,10 @@ jobs:
 
   publish:
     needs: [verify-base, verify-full]
-    if: github.event_name == 'release'
+    # A GitHub release still builds and tests the wheel, but uploads it to
+    # PyPI only when the repository variable PUBLISH_TO_PYPI is "true".
+    # 1.18.0 is a GitHub-only final release, so the variable stays unset.
+    if: github.event_name == 'release' && vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
