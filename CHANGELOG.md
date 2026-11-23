@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.18.0] - 2026-11-23
+
+The final release. The TypeScript SDK joins the Python one, the gateway
+speaks Anthropic's Messages API, the evidence verifier refuses ambiguous
+bundles, covenants load strictly in both SDKs, a dedicated server stands up
+with one script, and dependencies move to patched releases. The TypeScript
+package is built from `js/`, not published to npm.
 
 ### Added
 - `model/publish.sh v3` publishes the fine-tuned model to ollama.com as
@@ -42,8 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and so is a garbled total. A receipt edited after the fact fails
   verification. It also says what the gate does not stop: an approver who
   says yes to a bad order, or one whose device is compromised.
-- **TypeScript package** (`js/`, npm `air-blackbox` 0.1.0, not yet
-  published). Records agent actions into the same HMAC chain, Ed25519
+- **TypeScript package** (`js/`, `air-blackbox` 0.1.0, built from the
+  repository; not published to npm). Records agent actions into the same HMAC chain, Ed25519
   receipts and `.air-evidence` bundles as the Python SDK, byte for byte;
   covenants with the same YAML, precedence and hash; a two-phase `Gate`; RFC
   3161 anchoring on export. Hooks record model calls and tool executions for
